@@ -1,0 +1,307 @@
+package config
+
+import (
+	"os"
+	"strings"
+	"time"
+
+	"github.com/bornholm/tezcatl/internal/core/correlate"
+	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/drain"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
+)
+
+// Duration parses human-readable durations ("30s", "5m") from YAML.
+type Duration time.Duration
+
+func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
+	var raw string
+	if err := value.Decode(&raw); err != nil {
+		return errors.WithStack(err)
+	}
+
+	parsed, err := time.ParseDuration(raw)
+	if err != nil {
+		return errors.Wrapf(err, "malformed duration %q", raw)
+	}
+
+	*d = Duration(parsed)
+
+	return nil
+}
+
+func (d Duration) AsDuration() time.Duration {
+	return time.Duration(d)
+}
+
+type Config struct {
+	Server      Server      `yaml:"server"`
+	Pipeline    Pipeline    `yaml:"pipeline"`
+	Logs        Logs        `yaml:"logs"`
+	Metrics     Metrics     `yaml:"metrics"`
+	Correlation Correlation `yaml:"correlation"`
+	State       State       `yaml:"state"`
+	Sinks       Sinks       `yaml:"sinks"`
+	Logging     Logging     `yaml:"logging"`
+}
+
+type Server struct {
+	// Listen targets, e.g. unix:///run/tezcatl.sock or tcp://127.0.0.1:4242.
+	Listen []string `yaml:"listen"`
+}
+
+type Pipeline struct {
+	Workers               int      `yaml:"workers"`
+	ObservationBufferSize int      `yaml:"observation_buffer_size"`
+	EventBufferSize       int      `yaml:"event_buffer_size"`
+	FlushInterval         Duration `yaml:"flush_interval"`
+	MaxLogLength          int      `yaml:"max_log_length"`
+	// DebugEvents emits one debug.observation event per observation.
+	DebugEvents bool `yaml:"debug_events"`
+}
+
+type Logs struct {
+	Drain     drain.Config `yaml:"drain"`
+	Detection LogDetection `yaml:"detection"`
+}
+
+type LogDetection struct {
+	Enabled                   *bool                     `yaml:"enabled"`
+	LearningPeriod            Duration                  `yaml:"learning_period"`
+	RareThreshold             int64                     `yaml:"rare_threshold"`
+	RareMinObservations       int64                     `yaml:"rare_min_observations"`
+	SpikeBucket               Duration                  `yaml:"spike_bucket"`
+	SpikeFactor               float64                   `yaml:"spike_factor"`
+	SpikeMinCount             int64                     `yaml:"spike_min_count"`
+	DisappearanceFactor       float64                   `yaml:"disappearance_factor"`
+	DisappearanceMinCount     int64                     `yaml:"disappearance_min_count"`
+	DisappearanceScanInterval Duration                  `yaml:"disappearance_scan_interval"`
+	Markings                  map[string]detect.Marking `yaml:"markings"`
+}
+
+type Metrics struct {
+	Detection MetricDetection `yaml:"detection"`
+}
+
+type MetricDetection struct {
+	Enabled        *bool                  `yaml:"enabled"`
+	WarmupSamples  int64                  `yaml:"warmup_samples"`
+	Alpha          float64                `yaml:"alpha"`
+	ZThreshold     float64                `yaml:"z_threshold"`
+	TrendFastAlpha float64                `yaml:"trend_fast_alpha"`
+	TrendSlowAlpha float64                `yaml:"trend_slow_alpha"`
+	TrendThreshold float64                `yaml:"trend_threshold"`
+	Thresholds     []detect.ThresholdRule `yaml:"thresholds"`
+}
+
+type Correlation struct {
+	Window        Duration `yaml:"window"`
+	ContextBefore int      `yaml:"context_before"`
+	ContextAfter  int      `yaml:"context_after"`
+}
+
+type State struct {
+	// Dir is where learned state (templates, baselines) is persisted.
+	// Empty disables persistence.
+	Dir          string   `yaml:"dir"`
+	SaveInterval Duration `yaml:"save_interval"`
+}
+
+type Sinks struct {
+	Stdout   StdoutSink   `yaml:"stdout"`
+	Postgres PostgresSink `yaml:"postgres"`
+}
+
+type StdoutSink struct {
+	Enabled *bool `yaml:"enabled"`
+}
+
+type PostgresSink struct {
+	Enabled bool `yaml:"enabled"`
+	// DSN supports environment expansion, e.g. ${TEZCATL_POSTGRES_DSN}.
+	DSN         string `yaml:"dsn"`
+	QueueSize   int    `yaml:"queue_size"`
+	MaxAttempts int    `yaml:"max_attempts"`
+}
+
+type Logging struct {
+	// Level is one of debug, info, warn, error.
+	Level string `yaml:"level"`
+	// Format is one of text, json.
+	Format string `yaml:"format"`
+}
+
+func Default() *Config {
+	enabled := true
+
+	return &Config{
+		Server: Server{
+			Listen: []string{"tcp://127.0.0.1:4242"},
+		},
+		Pipeline: Pipeline{
+			ObservationBufferSize: 1024,
+			EventBufferSize:       256,
+			FlushInterval:         Duration(time.Second),
+			MaxLogLength:          8192,
+		},
+		Logs: Logs{
+			Drain: *drain.DefaultConfig(),
+			Detection: LogDetection{
+				Enabled:                   &enabled,
+				LearningPeriod:            Duration(5 * time.Minute),
+				RareThreshold:             3,
+				RareMinObservations:       500,
+				SpikeBucket:               Duration(time.Minute),
+				SpikeFactor:               3,
+				SpikeMinCount:             10,
+				DisappearanceFactor:       3,
+				DisappearanceMinCount:     10,
+				DisappearanceScanInterval: Duration(30 * time.Second),
+			},
+		},
+		Metrics: Metrics{
+			Detection: MetricDetection{
+				Enabled:        &enabled,
+				WarmupSamples:  30,
+				Alpha:          0.05,
+				ZThreshold:     3,
+				TrendFastAlpha: 0.3,
+				TrendSlowAlpha: 0.05,
+				TrendThreshold: 0.5,
+			},
+		},
+		Correlation: Correlation{
+			Window:        Duration(30 * time.Second),
+			ContextBefore: 10,
+			ContextAfter:  10,
+		},
+		State: State{
+			SaveInterval: Duration(30 * time.Second),
+		},
+		Sinks: Sinks{
+			Stdout: StdoutSink{Enabled: &enabled},
+			Postgres: PostgresSink{
+				QueueSize:   1024,
+				MaxAttempts: 5,
+			},
+		},
+		Logging: Logging{
+			Level:  "info",
+			Format: "text",
+		},
+	}
+}
+
+// Load reads a YAML configuration file over the defaults, with strict
+// key checking and ${VAR} environment expansion.
+func Load(path string) (*Config, error) {
+	config := Default()
+
+	if path == "" {
+		return config, nil
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	expanded := os.Expand(string(raw), func(name string) string {
+		return os.Getenv(name)
+	})
+
+	decoder := yaml.NewDecoder(strings.NewReader(expanded))
+	decoder.KnownFields(true)
+
+	if err := decoder.Decode(config); err != nil {
+		return nil, errors.Wrapf(err, "could not parse configuration %q", path)
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, errors.Wrapf(err, "invalid configuration %q", path)
+	}
+
+	return config, nil
+}
+
+func (c *Config) Validate() error {
+	if c.Pipeline.ObservationBufferSize <= 0 || c.Pipeline.EventBufferSize <= 0 {
+		return errors.New("pipeline buffer sizes must be positive")
+	}
+
+	if c.Pipeline.Workers < 0 {
+		return errors.New("pipeline.workers must not be negative")
+	}
+
+	if c.Correlation.Window <= 0 {
+		return errors.New("correlation.window must be positive")
+	}
+
+	if c.Correlation.ContextBefore < 0 || c.Correlation.ContextAfter < 0 {
+		return errors.New("correlation context sizes must not be negative")
+	}
+
+	if c.Sinks.Postgres.Enabled && c.Sinks.Postgres.DSN == "" {
+		return errors.New("sinks.postgres.dsn is required when the postgres sink is enabled")
+	}
+
+	switch c.Logging.Level {
+	case "debug", "info", "warn", "error":
+	default:
+		return errors.Errorf("unsupported logging.level %q", c.Logging.Level)
+	}
+
+	switch c.Logging.Format {
+	case "text", "json":
+	default:
+		return errors.Errorf("unsupported logging.format %q", c.Logging.Format)
+	}
+
+	if _, err := drain.NewTemplateMiner(&c.Logs.Drain); err != nil {
+		return errors.Wrap(err, "invalid logs.drain configuration")
+	}
+
+	return nil
+}
+
+// LogDetectionConfig maps the configuration to the detector's own
+// configuration type.
+func (c *Config) LogDetectionConfig() *detect.LogConfig {
+	detection := c.Logs.Detection
+
+	return &detect.LogConfig{
+		LearningPeriod:            detection.LearningPeriod.AsDuration(),
+		RareThreshold:             detection.RareThreshold,
+		RareMinObservations:       detection.RareMinObservations,
+		SpikeBucket:               detection.SpikeBucket.AsDuration(),
+		SpikeFactor:               detection.SpikeFactor,
+		SpikeMinCount:             detection.SpikeMinCount,
+		DisappearanceFactor:       detection.DisappearanceFactor,
+		DisappearanceMinCount:     detection.DisappearanceMinCount,
+		DisappearanceScanInterval: detection.DisappearanceScanInterval.AsDuration(),
+		Markings:                  detection.Markings,
+	}
+}
+
+func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
+	detection := c.Metrics.Detection
+
+	return &detect.MetricConfig{
+		WarmupSamples:  detection.WarmupSamples,
+		Alpha:          detection.Alpha,
+		ZThreshold:     detection.ZThreshold,
+		TrendFastAlpha: detection.TrendFastAlpha,
+		TrendSlowAlpha: detection.TrendSlowAlpha,
+		TrendThreshold: detection.TrendThreshold,
+		Thresholds:     detection.Thresholds,
+	}
+}
+
+func (c *Config) CorrelationConfig() *correlate.Config {
+	return &correlate.Config{
+		Window:        c.Correlation.Window.AsDuration(),
+		ContextBefore: c.Correlation.ContextBefore,
+		ContextAfter:  c.Correlation.ContextAfter,
+	}
+}
