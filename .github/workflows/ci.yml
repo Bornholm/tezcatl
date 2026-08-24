@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+          cache: true
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  # Compatibilité Drain3 : régénère les fixtures avec l'implémentation
+  # Python officielle (volontairement non épinglée : une nouvelle version
+  # de drain3 qui change le clustering doit faire échouer ce job) puis
+  # vérifie qu'elles sont identiques à celles committées — que le port Go
+  # rejoue ensuite ligne à ligne dans les tests golden.
+  drain-golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - run: pip install drain3
+      - name: Regenerate golden fixtures
+        run: |
+          python3 misc/drain3-golden/generate.py internal/core/drain/testdata/corpus.log \
+            > internal/core/drain/testdata/golden.json
+          python3 misc/drain3-golden/generate.py internal/core/drain/testdata/corpus.log 4 \
+            > internal/core/drain/testdata/golden_lru.json
+      - name: Fail on fixture drift
+        run: git diff --exit-code internal/core/drain/testdata/
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+          cache: true
+      - name: Replay fixtures with the Go port
+        run: go test -race -run TestGolden -v ./internal/core/drain/
