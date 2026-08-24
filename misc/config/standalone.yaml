@@ -43,6 +43,12 @@ logs:
     disappearance_factor: 3
     disappearance_min_count: 10
     disappearance_scan_interval: 30s
+    # hourly learns hour-of-day baselines (crons, daily traffic); none
+    # keeps flat baselines.
+    seasonality: hourly
+    seasonal_min_observations: 50
+    # Markings seed the runtime feedback loop; use 'tezcatl mark' to
+    # adjust them without restarting.
     # markings:
     #   "connection reset by peer": ignore
     #   "disk failure on <*>": symptomatic
@@ -103,3 +109,5 @@ sinks:
 logging:
   level: info
   format: text
+  # Internal pipeline counters; 0s disables periodic logging.
+  stats_interval: 1m

@@ -70,8 +70,8 @@ Processor de normalisation (validation, troncature, timestamps), parseur Prometh
 
 Restes à faire (hors périmètre MVP) :
 
-- [ ] métriques de santé exposées (compteurs internes → endpoint ou logs périodiques)
-- [ ] TLS/mTLS sur les listeners
+- [x] métriques de santé : compteurs internes du moteur (ingérées/traitées/rejetées/événements) loggés périodiquement (`logging.stats_interval`) et en résumé final
+- [x] TLS sur les listeners : cibles `tls://host:port` servies avec `server.tls.{cert_file,key_file}`, clients avec `--tls-ca` (mTLS non couvert)
 - [ ] `StateStore` PostgreSQL (aujourd'hui fichiers uniquement)
 - [ ] job CI exécutant `misc/drain3-golden/generate.py` pour détecter les dérives de compatibilité
 
@@ -116,6 +116,16 @@ Objectif de validation (à faire avec de vrais incidents) : rejouer trois incide
 - [x] Sink webhook (`sinks.webhook` : POST JSON par événement, headers configurables pour les secrets, derrière le sink résilient)
 - [ ] Sink SQLite (alternative légère à PostgreSQL pour le mode personnel)
 
-## Après le MVP
+## Post-MVP réalisé
 
-Voir [PLAN.md](../PLAN.md) : boucle de feedback dynamique (marquage au runtime), génération de stimuli LLM, nouvelles modalités (traces OTel, événements Kubernetes), détection avancée (saisonnalité, ruptures, multivarié), industrialisation (authn/z, multi-tenant, HA).
+- **Boucle de feedback dynamique** ✅ : marquages de templates modifiables au runtime, persistés avec l'état du détecteur (les marquages de la config restent la base, les marquages runtime les surchargent). `AdminService` gRPC servi sur les mêmes listeners que l'ingestion ; CLI `tezcatl templates` (liste partition/id/taille/marquage) et `tezcatl mark --template … --as normal|ignore|symptomatic` (`--clear` pour retirer), en live (`--target`) ou hors-ligne sur un état persisté (`--state-dir`).
+- **Saisonnalité horaire** ✅ (`logs.detection.seasonality: hourly`, défaut) : baselines de fréquence par heure de la journée (un pic quotidien à 9 h n'est plus un faux positif après une nuit calme, le même burst à 3 h l'est) ; un template jamais vu à une heure connue-active n'est pas attendu (cron nocturne non signalé « missing » à midi, seuil `seasonal_min_observations`).
+- **Flux de changements** ✅ : `tezcatl ingest changes` (JSONL sur stdin, pour hooks CI / `docker events` transformés) en plus du one-shot `ingest change` et de `--changes-from`.
+
+## Après (non réalisé, dans l'ordre recommandé)
+
+1. Validation sur 2-3 incidents réels rejoués (`--replay --changes-from`) → calibrer C4/C5
+2. C4 corrélation multi-sources, C5 artefact d'incident enrichi (trigger/evidence/hypothèses)
+3. Watcher de déploiements Kubernetes/Dokku (alimente la modalité change automatiquement)
+4. Export/stimulus LLM (le format d'événement actuel en est déjà proche)
+5. Voir [PLAN.md](../PLAN.md) pour le reste : traces OTel, détection avancée (ruptures, multivarié), industrialisation (mTLS, multi-tenant, HA) — non pertinents à l'échelle actuelle.
