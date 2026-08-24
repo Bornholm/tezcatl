@@ -20,17 +20,22 @@ import (
 type ServerIngester struct {
 	tezcatlv1.UnimplementedIngestServiceServer
 
-	targets []string
-	now     func() time.Time
+	targets  []string
+	register []func(server *grpc.Server)
+	now      func() time.Time
 
 	out chan<- model.Observation
 	ctx context.Context
 }
 
-func NewServerIngester(targets ...string) *ServerIngester {
+// NewServerIngester serves the ingestion service on the given targets;
+// register functions attach additional services (e.g. the admin service)
+// to the same listeners.
+func NewServerIngester(targets []string, register ...func(server *grpc.Server)) *ServerIngester {
 	return &ServerIngester{
-		targets: targets,
-		now:     time.Now,
+		targets:  targets,
+		register: register,
+		now:      time.Now,
 	}
 }
 
@@ -57,6 +62,10 @@ func (s *ServerIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 
 	server := grpc.NewServer()
 	tezcatlv1.RegisterIngestServiceServer(server, s)
+
+	for _, register := range s.register {
+		register(server)
+	}
 
 	g, gctx := errgroup.WithContext(ctx)
 
