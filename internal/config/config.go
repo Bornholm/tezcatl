@@ -136,6 +136,18 @@ type State struct {
 type Sinks struct {
 	Stdout   StdoutSink   `yaml:"stdout"`
 	Postgres PostgresSink `yaml:"postgres"`
+	Webhook  WebhookSink  `yaml:"webhook"`
+}
+
+type WebhookSink struct {
+	Enabled bool `yaml:"enabled"`
+	// URL receives one POST per event, with the event as JSON body.
+	URL string `yaml:"url"`
+	// Headers are added to every request (e.g. Authorization, with the
+	// value coming from the environment).
+	Headers     map[string]string `yaml:"headers"`
+	QueueSize   int               `yaml:"queue_size"`
+	MaxAttempts int               `yaml:"max_attempts"`
 }
 
 type StdoutSink struct {
@@ -215,6 +227,10 @@ func Default() *Config {
 				QueueSize:   1024,
 				MaxAttempts: 5,
 			},
+			Webhook: WebhookSink{
+				QueueSize:   256,
+				MaxAttempts: 5,
+			},
 		},
 		Logging: Logging{
 			Level:  "info",
@@ -280,6 +296,10 @@ func (c *Config) Validate() error {
 
 	if c.Sinks.Postgres.Enabled && c.Sinks.Postgres.DSN == "" {
 		return errors.New("sinks.postgres.dsn is required when the postgres sink is enabled")
+	}
+
+	if c.Sinks.Webhook.Enabled && c.Sinks.Webhook.URL == "" {
+		return errors.New("sinks.webhook.url is required when the webhook sink is enabled")
 	}
 
 	switch c.Logging.Level {
