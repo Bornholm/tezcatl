@@ -1,0 +1,112 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: tezcatl
+    # Aucun cgo (postgres via pgx pur Go) : la cross-compilation vers
+    # toutes les cibles first-class fonctionne sans toolchain natif.
+    env:
+      - CGO_ENABLED=0
+    targets: [go_first_class]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./cmd/tezcatl
+    binary: tezcatl
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s -X 'github.com/bornholm/tezcatl/internal/build.ShortVersion={{ .Version }}' -X 'github.com/bornholm/tezcatl/internal/build.LongVersion={{ .Version }} ({{ .Commit }})'
+
+archives:
+  - id: tezcatl
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - docs/ROADMAP.md
+      - misc/config/standalone.yaml
+      - misc/config/server.yaml
+
+nfpms:
+  # Paquet client : le binaire seul. Suffit pour les hôtes qui envoient
+  # leurs logs vers un serveur central (ingest), le mode standalone et
+  # les commandes de feedback (mark, templates).
+  - id: tezcatl
+    package_name: tezcatl
+    ids: [tezcatl]
+    # deb -> Debian/Ubuntu (Dokku), archlinux -> .pkg.tar.zst installable
+    # avec pacman (Arch/Manjaro).
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - observabilité intelligente et multimodale.
+      Découverte de templates de logs (Drain3), détection d'anomalies
+      explicables, corrélation logs/métriques/déploiements.
+    bindir: /usr/bin
+    contents:
+      - src: README.md
+        dst: /usr/share/doc/tezcatl/README.md
+      - src: misc/config/standalone.yaml
+        dst: /usr/share/doc/tezcatl/standalone.yaml
+      - src: misc/config/server.yaml
+        dst: /usr/share/doc/tezcatl/server.yaml
+
+  # Paquet serveur : méta-paquet sans binaire qui dépend du paquet
+  # client (le binaire est unique) et ajoute l'intégration système :
+  # unité systemd, configuration /etc/tezcatl, utilisateur dédié.
+  - id: tezcatl-server
+    package_name: tezcatl-server
+    meta: true
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - serveur d'ingestion centralisé.
+      Unité systemd, configuration par défaut et utilisateur système
+      pour le mode serveur de tezcatl.
+    dependencies:
+      - tezcatl
+    contents:
+      - src: misc/packaging/tezcatl-server.service
+        dst: /usr/lib/systemd/system/tezcatl-server.service
+        file_info: { mode: 0644 }
+      - src: misc/packaging/server.yaml
+        dst: /etc/tezcatl/server.yaml
+        type: config|noreplace
+        file_info: { mode: 0644 }
+      - src: misc/packaging/server.env
+        dst: /etc/tezcatl/server.env
+        type: config|noreplace
+        file_info: { mode: 0640 }
+    scripts:
+      postinstall: misc/packaging/postinstall.sh
+      preremove: misc/packaging/preremove.sh
+      postremove: misc/packaging/postremove.sh
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  name_template: "v{{ .Version }}"

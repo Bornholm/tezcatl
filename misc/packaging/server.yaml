@@ -1,0 +1,49 @@
+# Configuration du serveur tezcatl installée par le paquet tezcatl-server.
+# Documentation complète : /usr/share/doc/tezcatl/server.yaml (profil commenté).
+
+server:
+  listen:
+    - unix:///run/tezcatl/tezcatl.sock
+    - tcp://127.0.0.1:4242
+  # Pour exposer en TLS sur le réseau :
+  # listen:
+  #   - tls://0.0.0.0:4243
+  # tls:
+  #   cert_file: /etc/tezcatl/tls/cert.pem
+  #   key_file: /etc/tezcatl/tls/key.pem
+
+logs:
+  parsing:
+    enabled: true
+  drain:
+    masking:
+      - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+        mask_with: IP
+      - pattern: '\b[0-9a-fA-F]{8,}\b'
+        mask_with: HEX
+      - pattern: '\b\d+\b'
+        mask_with: NUM
+  detection:
+    learning_period: 15m
+
+correlation:
+  window: 30s
+
+state:
+  dir: /var/lib/tezcatl/state
+  save_interval: 30s
+
+sinks:
+  # Les événements partent dans le journal systemd (stdout).
+  stdout:
+    enabled: true
+  # Pour PostgreSQL, définir TEZCATL_POSTGRES_DSN dans
+  # /etc/tezcatl/server.env puis activer :
+  postgres:
+    enabled: false
+    dsn: ${TEZCATL_POSTGRES_DSN}
+
+logging:
+  level: info
+  format: json
+  stats_interval: 1m

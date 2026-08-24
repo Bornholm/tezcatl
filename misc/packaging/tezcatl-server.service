@@ -1,0 +1,31 @@
+[Unit]
+Description=Tezcatl observability server
+Documentation=https://github.com/bornholm/tezcatl
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=tezcatl
+Group=tezcatl
+EnvironmentFile=-/etc/tezcatl/server.env
+ExecStart=/usr/bin/tezcatl server --config /etc/tezcatl/server.yaml
+Restart=on-failure
+RestartSec=5s
+
+# /run/tezcatl (socket unix) et /var/lib/tezcatl (état appris).
+RuntimeDirectory=tezcatl
+StateDirectory=tezcatl
+
+# Durcissement.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
