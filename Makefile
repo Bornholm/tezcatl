@@ -19,4 +19,17 @@ bench:
 tidy:
 	go mod tidy
 
-.PHONY: build test bench tidy
+tools/bin/protoc-gen-go:
+	GOBIN=$(PWD)/tools/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
+tools/bin/protoc-gen-go-grpc:
+	GOBIN=$(PWD)/tools/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+generate: tools/bin/protoc-gen-go tools/bin/protoc-gen-go-grpc
+	PATH="$(PWD)/tools/bin:$(PATH)" protoc \
+		-I api/proto \
+		--go_out=. --go_opt=module=github.com/bornholm/tezcatl \
+		--go-grpc_out=. --go-grpc_opt=module=github.com/bornholm/tezcatl \
+		api/proto/tezcatl/v1/*.proto
+
+.PHONY: build test bench tidy generate
