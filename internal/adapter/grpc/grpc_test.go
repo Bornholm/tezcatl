@@ -118,7 +118,7 @@ func TestParseTarget(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		network, address, err := parseTarget(tc.target)
+		network, address, _, err := parseTarget(tc.target)
 
 		if tc.invalid {
 			if err == nil {

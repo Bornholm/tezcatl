@@ -34,7 +34,20 @@ func NewServerCommand() *cli.Command {
 
 			adminServer := grpc.NewAdminServer(runtime.AdminService())
 
-			ingester := grpc.NewServerIngester(cfg.Server.Listen, adminServer.Register)
+			serverOpts := []grpc.ServerIngesterOption{
+				grpc.WithServices(adminServer.Register),
+			}
+
+			if cfg.Server.TLS.CertFile != "" || cfg.Server.TLS.KeyFile != "" {
+				withTLS, err := grpc.WithTLS(cfg.Server.TLS.CertFile, cfg.Server.TLS.KeyFile)
+				if err != nil {
+					return errors.WithStack(err)
+				}
+
+				serverOpts = append(serverOpts, withTLS)
+			}
+
+			ingester := grpc.NewServerIngester(cfg.Server.Listen, serverOpts...)
 
 			if err := runtime.Run(ctx.Context, ingester); err != nil {
 				return errors.WithStack(err)

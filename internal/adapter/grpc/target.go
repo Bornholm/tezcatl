@@ -1,19 +1,20 @@
 package grpc
 
 import (
+	"crypto/tls"
 	"net"
 	"net/url"
 
 	"github.com/pkg/errors"
 )
 
-// parseTarget maps a tezcatl target URL (unix:///path or tcp://host:port)
-// to a network/address pair usable with net.Listen, and to a dial target
-// usable with grpc.NewClient.
-func parseTarget(target string) (network string, address string, err error) {
+// parseTarget maps a tezcatl target URL (unix:///path, tcp://host:port
+// or tls://host:port) to a network/address pair usable with net.Listen,
+// plus whether the transport must be TLS-encrypted.
+func parseTarget(target string) (network string, address string, secure bool, err error) {
 	u, err := url.Parse(target)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "malformed target %q", target)
+		return "", "", false, errors.Wrapf(err, "malformed target %q", target)
 	}
 
 	switch u.Scheme {
@@ -25,26 +26,28 @@ func parseTarget(target string) (network string, address string, err error) {
 		}
 
 		if path == "" {
-			return "", "", errors.Errorf("missing socket path in %q", target)
+			return "", "", false, errors.Errorf("missing socket path in %q", target)
 		}
 
-		return "unix", path, nil
+		return "unix", path, false, nil
 
-	case "tcp":
+	case "tcp", "tls":
 		if u.Host == "" {
-			return "", "", errors.Errorf("missing host in %q", target)
+			return "", "", false, errors.Errorf("missing host in %q", target)
 		}
 
-		return "tcp", u.Host, nil
+		return "tcp", u.Host, u.Scheme == "tls", nil
 
 	default:
-		return "", "", errors.Errorf("unsupported scheme %q in %q (expected unix:// or tcp://)", u.Scheme, target)
+		return "", "", false, errors.Errorf("unsupported scheme %q in %q (expected unix://, tcp:// or tls://)", u.Scheme, target)
 	}
 }
 
-// Listen creates a listener for a tezcatl target URL.
-func Listen(target string) (net.Listener, error) {
-	network, address, err := parseTarget(target)
+// Listen creates a listener for a tezcatl target URL. tls:// targets are
+// wrapped with the given certificate; certificate may be nil for
+// plaintext targets.
+func Listen(target string, certificate *tls.Certificate) (net.Listener, error) {
+	network, address, secure, err := parseTarget(target)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -54,12 +57,24 @@ func Listen(target string) (net.Listener, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	return listener, nil
+	if !secure {
+		return listener, nil
+	}
+
+	if certificate == nil {
+		listener.Close()
+		return nil, errors.Errorf("target %q requires a tls certificate (server.tls)", target)
+	}
+
+	return tls.NewListener(listener, &tls.Config{
+		Certificates: []tls.Certificate{*certificate},
+		NextProtos:   []string{"h2"},
+	}), nil
 }
 
 // DialTarget maps a tezcatl target URL to a gRPC client target.
 func DialTarget(target string) (string, error) {
-	network, address, err := parseTarget(target)
+	network, address, _, err := parseTarget(target)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}

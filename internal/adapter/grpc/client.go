@@ -2,13 +2,17 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log/slog"
+	"os"
 	"time"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -23,20 +27,65 @@ const (
 // already-acknowledged ones are not resent.
 type Client struct {
 	target string
+	caFile string
 }
 
-func NewClient(target string) *Client {
-	return &Client{target: target}
+type ClientOption func(c *Client)
+
+// ClientWithCA sets the PEM CA bundle used to verify tls:// targets.
+func ClientWithCA(caFile string) ClientOption {
+	return func(c *Client) {
+		c.caFile = caFile
+	}
 }
 
-// Dial opens a gRPC connection to a tezcatl target URL.
-func Dial(target string) (*grpc.ClientConn, error) {
+func NewClient(target string, opts ...ClientOption) *Client {
+	c := &Client{target: target}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+// Dial opens a gRPC connection to a tezcatl target URL. For tls://
+// targets, caFile optionally points to a PEM CA bundle (self-signed
+// deployments); empty means the system roots.
+func Dial(target string, caFile string) (*grpc.ClientConn, error) {
 	dialTarget, err := DialTarget(target)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	conn, err := grpc.NewClient(dialTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	_, _, secure, err := parseTarget(target)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	transport := insecure.NewCredentials()
+
+	if secure {
+		tlsConfig := &tls.Config{}
+
+		if caFile != "" {
+			pem, err := os.ReadFile(caFile)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not read ca file")
+			}
+
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				return nil, errors.Errorf("no certificate found in %q", caFile)
+			}
+
+			tlsConfig.RootCAs = pool
+		}
+
+		transport = credentials.NewTLS(tlsConfig)
+	}
+
+	conn, err := grpc.NewClient(dialTarget, grpc.WithTransportCredentials(transport))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -47,7 +96,7 @@ func Dial(target string) (*grpc.ClientConn, error) {
 // Forward drains the observations channel into the remote server and
 // returns once the channel is closed and the stream acknowledged.
 func (c *Client) Forward(ctx context.Context, observations <-chan model.Observation) error {
-	conn, err := Dial(c.target)
+	conn, err := Dial(c.target, c.caFile)
 	if err != nil {
 		return errors.WithStack(err)
 	}

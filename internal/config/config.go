@@ -48,8 +48,16 @@ type Config struct {
 }
 
 type Server struct {
-	// Listen targets, e.g. unix:///run/tezcatl.sock or tcp://127.0.0.1:4242.
+	// Listen targets: unix:///run/tezcatl.sock, tcp://127.0.0.1:4242 or
+	// tls://0.0.0.0:4243 (requires the tls section).
 	Listen []string `yaml:"listen"`
+	// TLS provides the certificate serving tls:// targets.
+	TLS ServerTLS `yaml:"tls"`
+}
+
+type ServerTLS struct {
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
 }
 
 type Pipeline struct {
@@ -169,6 +177,9 @@ type Logging struct {
 	Level string `yaml:"level"`
 	// Format is one of text, json.
 	Format string `yaml:"format"`
+	// StatsInterval is how often internal pipeline counters are logged;
+	// 0s disables periodic logging.
+	StatsInterval Duration `yaml:"stats_interval"`
 }
 
 func Default() *Config {
@@ -237,8 +248,9 @@ func Default() *Config {
 			},
 		},
 		Logging: Logging{
-			Level:  "info",
-			Format: "text",
+			Level:         "info",
+			Format:        "text",
+			StatsInterval: Duration(time.Minute),
 		},
 	}
 }
@@ -316,6 +328,12 @@ func (c *Config) Validate() error {
 
 	if c.Sinks.Webhook.Enabled && c.Sinks.Webhook.URL == "" {
 		return errors.New("sinks.webhook.url is required when the webhook sink is enabled")
+	}
+
+	for _, target := range c.Server.Listen {
+		if strings.HasPrefix(target, "tls://") && (c.Server.TLS.CertFile == "" || c.Server.TLS.KeyFile == "") {
+			return errors.Errorf("listen target %q requires server.tls.cert_file and server.tls.key_file", target)
+		}
 	}
 
 	switch c.Logging.Level {

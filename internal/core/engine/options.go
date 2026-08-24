@@ -16,6 +16,9 @@ type Options struct {
 	ObservationBufferSize int
 	EventBufferSize       int
 	FlushInterval         time.Duration
+	// StatsInterval is how often internal health counters are logged;
+	// 0 disables periodic logging (the final summary is always logged).
+	StatsInterval time.Duration
 }
 
 type OptionFunc func(opts *Options)
@@ -76,5 +79,11 @@ func WithFlushInterval(interval time.Duration) OptionFunc {
 		if interval > 0 {
 			opts.FlushInterval = interval
 		}
+	}
+}
+
+func WithStatsInterval(interval time.Duration) OptionFunc {
+	return func(opts *Options) {
+		opts.StatsInterval = interval
 	}
 }

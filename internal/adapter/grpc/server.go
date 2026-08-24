@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"log/slog"
 	"net"
@@ -20,23 +21,49 @@ import (
 type ServerIngester struct {
 	tezcatlv1.UnimplementedIngestServiceServer
 
-	targets  []string
-	register []func(server *grpc.Server)
-	now      func() time.Time
+	targets     []string
+	register    []func(server *grpc.Server)
+	certificate *tls.Certificate
+	now         func() time.Time
 
 	out chan<- model.Observation
 	ctx context.Context
 }
 
-// NewServerIngester serves the ingestion service on the given targets;
-// register functions attach additional services (e.g. the admin service)
-// to the same listeners.
-func NewServerIngester(targets []string, register ...func(server *grpc.Server)) *ServerIngester {
-	return &ServerIngester{
-		targets:  targets,
-		register: register,
-		now:      time.Now,
+type ServerIngesterOption func(s *ServerIngester)
+
+// WithServices attaches additional gRPC services (e.g. the admin
+// service) to the same listeners.
+func WithServices(register ...func(server *grpc.Server)) ServerIngesterOption {
+	return func(s *ServerIngester) {
+		s.register = append(s.register, register...)
 	}
+}
+
+// WithTLS serves tls:// targets with the given certificate.
+func WithTLS(certFile string, keyFile string) (ServerIngesterOption, error) {
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not load tls certificate")
+	}
+
+	return func(s *ServerIngester) {
+		s.certificate = &certificate
+	}, nil
+}
+
+// NewServerIngester serves the ingestion service on the given targets.
+func NewServerIngester(targets []string, opts ...ServerIngesterOption) *ServerIngester {
+	s := &ServerIngester{
+		targets: targets,
+		now:     time.Now,
+	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
 }
 
 func (s *ServerIngester) Ingest(ctx context.Context, out chan<- model.Observation) error {
@@ -46,7 +73,7 @@ func (s *ServerIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 
 	listeners := make([]net.Listener, 0, len(s.targets))
 	for _, target := range s.targets {
-		listener, err := Listen(target)
+		listener, err := Listen(target, s.certificate)
 		if err != nil {
 			return errors.WithStack(err)
 		}

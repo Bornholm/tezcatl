@@ -32,6 +32,10 @@ func adminTargetFlags() []cli.Flag {
 			Name:  "config",
 			Usage: "path to the YAML configuration file (offline mode)",
 		},
+		&cli.StringFlag{
+			Name:  "tls-ca",
+			Usage: "PEM CA bundle verifying a tls:// target (default: system roots)",
+		},
 	}
 }
 
@@ -64,7 +68,7 @@ func NewMarkCommand() *cli.Command {
 			}
 
 			if target := ctx.String("target"); target != "" {
-				return markRemote(ctx.Context, target, ctx.String("template"), marking)
+				return markRemote(ctx.Context, target, ctx.String("tls-ca"), ctx.String("template"), marking)
 			}
 
 			if stateDir := ctx.String("state-dir"); stateDir != "" {
@@ -88,7 +92,7 @@ func NewTemplatesCommand() *cli.Command {
 			)
 
 			if target := ctx.String("target"); target != "" {
-				templates, err = listRemote(ctx.Context, target)
+				templates, err = listRemote(ctx.Context, target, ctx.String("tls-ca"))
 			} else if stateDir := ctx.String("state-dir"); stateDir != "" {
 				templates, err = listOffline(ctx.Context, ctx.String("config"), stateDir)
 			} else {
@@ -111,8 +115,8 @@ func NewTemplatesCommand() *cli.Command {
 	}
 }
 
-func markRemote(ctx context.Context, target string, template string, marking detect.Marking) error {
-	conn, err := grpc.Dial(target)
+func markRemote(ctx context.Context, target string, caFile string, template string, marking detect.Marking) error {
+	conn, err := grpc.Dial(target, caFile)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -130,8 +134,8 @@ func markRemote(ctx context.Context, target string, template string, marking det
 	return nil
 }
 
-func listRemote(ctx context.Context, target string) ([]admin.TemplateInfo, error) {
-	conn, err := grpc.Dial(target)
+func listRemote(ctx context.Context, target string, caFile string) ([]admin.TemplateInfo, error) {
+	conn, err := grpc.Dial(target, caFile)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
