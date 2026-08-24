@@ -153,8 +153,8 @@ func TestLogDetectorMarkings(t *testing.T) {
 	config := DefaultLogConfig()
 	config.LearningPeriod = 0
 	config.Markings = map[string]Marking{
-		"noisy but fine":     MarkingIgnore,
-		"panic during boot":  MarkingSymptomatic,
+		"noisy but fine":    MarkingIgnore,
+		"panic during boot": MarkingSymptomatic,
 	}
 
 	detector := NewLogDetector(config)
@@ -169,6 +169,48 @@ func TestLogDetectorMarkings(t *testing.T) {
 	signals = detector.Detect(logObservation("api", "2", "panic during boot", "cluster_created", start.Add(time.Second)))
 	if !hasSignal(signals, SignalLogSymptomatic) {
 		t.Fatalf("expected %s signal, got %+v", SignalLogSymptomatic, signals)
+	}
+}
+
+func TestLogDetectorMarkingsPersistence(t *testing.T) {
+	config := DefaultLogConfig()
+	config.LearningPeriod = 0
+	config.Markings = map[string]Marking{"from config": MarkingNormal}
+
+	detector := NewLogDetector(config)
+
+	if err := detector.SetMarking("marked at runtime", MarkingIgnore); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	snapshot, err := detector.Snapshot()
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	restored := NewLogDetector(config)
+	if err := restored.Restore(snapshot); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	markings := restored.Markings()
+	if markings["marked at runtime"] != MarkingIgnore || markings["from config"] != MarkingNormal {
+		t.Fatalf("unexpected restored markings: %+v", markings)
+	}
+
+	// Legacy snapshots (sources map alone) must still restore.
+	legacy := []byte(`{"api": {"first_seen": "2026-08-24T12:00:00Z", "total": 10, "templates": {}}}`)
+
+	fromLegacy := NewLogDetector(config)
+	if err := fromLegacy.Restore(legacy); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	fromLegacy.mu.Lock()
+	defer fromLegacy.mu.Unlock()
+
+	if state := fromLegacy.sources["api"]; state == nil || state.Total != 10 {
+		t.Fatalf("unexpected legacy restore: %+v", fromLegacy.sources)
 	}
 }
 

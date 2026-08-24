@@ -14,6 +14,8 @@ func NewApp() *cli.App {
 			NewServerCommand(),
 			NewIngestCommand(),
 			NewStandaloneCommand(),
+			NewMarkCommand(),
+			NewTemplatesCommand(),
 		},
 	}
 }

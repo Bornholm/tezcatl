@@ -32,7 +32,9 @@ func NewServerCommand() *cli.Command {
 				return errors.WithStack(err)
 			}
 
-			ingester := grpc.NewServerIngester(cfg.Server.Listen...)
+			adminServer := grpc.NewAdminServer(runtime.AdminService())
+
+			ingester := grpc.NewServerIngester(cfg.Server.Listen, adminServer.Register)
 
 			if err := runtime.Run(ctx.Context, ingester); err != nil {
 				return errors.WithStack(err)

@@ -3,6 +3,7 @@ package detect
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"sync"
 	"time"
@@ -74,11 +75,16 @@ func DefaultLogConfig() *LogConfig {
 // LogDetector produces signals from template-annotated log observations:
 // new templates after the learning period, rare templates, frequency
 // spikes, missing templates and explicitly marked templates.
+//
+// Markings are dynamic: they are seeded from the configuration, can be
+// updated at runtime (SetMarking) and are persisted with the detector
+// state.
 type LogDetector struct {
 	config *LogConfig
 
-	mu      sync.Mutex
-	sources map[string]*logSourceState
+	mu       sync.Mutex
+	markings map[string]Marking
+	sources  map[string]*logSourceState
 }
 
 type logSourceState struct {
@@ -89,15 +95,15 @@ type logSourceState struct {
 }
 
 type templateStats struct {
-	Template       string    `json:"template"`
-	Count          int64     `json:"count"`
-	LastSeen       time.Time `json:"last_seen"`
-	MeanIntervalS  float64   `json:"mean_interval_s"`
-	BucketStart    time.Time `json:"bucket_start"`
-	BucketCount    int64     `json:"bucket_count"`
-	BucketBaseline float64   `json:"bucket_baseline"`
-	SpikeSignaled  bool      `json:"spike_signaled"`
-	MissingSignaled bool     `json:"missing_signaled"`
+	Template        string    `json:"template"`
+	Count           int64     `json:"count"`
+	LastSeen        time.Time `json:"last_seen"`
+	MeanIntervalS   float64   `json:"mean_interval_s"`
+	BucketStart     time.Time `json:"bucket_start"`
+	BucketCount     int64     `json:"bucket_count"`
+	BucketBaseline  float64   `json:"bucket_baseline"`
+	SpikeSignaled   bool      `json:"spike_signaled"`
+	MissingSignaled bool      `json:"missing_signaled"`
 }
 
 const intervalAlpha = 0.3
@@ -107,10 +113,56 @@ func NewLogDetector(config *LogConfig) *LogDetector {
 		config = DefaultLogConfig()
 	}
 
+	markings := map[string]Marking{}
+	maps.Copy(markings, config.Markings)
+
 	return &LogDetector{
-		config:  config,
-		sources: map[string]*logSourceState{},
+		config:   config,
+		markings: markings,
+		sources:  map[string]*logSourceState{},
 	}
+}
+
+// ValidMarking reports whether a marking value is supported.
+func ValidMarking(marking Marking) bool {
+	switch marking {
+	case MarkingNormal, MarkingIgnore, MarkingSymptomatic:
+		return true
+	default:
+		return false
+	}
+}
+
+// SetMarking overrides the behavior of a template at runtime. An empty
+// marking clears the override; note that a marking also seeded by the
+// configuration reappears at the next restart.
+func (d *LogDetector) SetMarking(template string, marking Marking) error {
+	if marking != "" && !ValidMarking(marking) {
+		return errors.Errorf("unsupported marking %q", marking)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if marking == "" {
+		delete(d.markings, template)
+		return nil
+	}
+
+	d.markings[template] = marking
+
+	return nil
+}
+
+// Markings returns a copy of the current markings.
+func (d *LogDetector) Markings() map[string]Marking {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	markings := make(map[string]Marking, len(d.markings))
+	maps.Copy(markings, d.markings)
+
+	return markings
 }
 
 func (d *LogDetector) Name() string {
@@ -167,7 +219,7 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 	learning := timestamp.Sub(state.FirstSeen) < d.config.LearningPeriod
 	changeType := obs.Attributes[model.AttrTemplateChangeType]
 
-	marking := d.config.Markings[obs.Log.Template]
+	marking := d.markings[obs.Log.Template]
 	if marking == MarkingIgnore || marking == MarkingNormal {
 		return nil
 	}
@@ -268,7 +320,7 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 			continue
 		}
 
-		if marking := d.config.Markings[stats.Template]; marking == MarkingIgnore || marking == MarkingNormal {
+		if marking := d.markings[stats.Template]; marking == MarkingIgnore || marking == MarkingNormal {
 			continue
 		}
 
@@ -302,11 +354,19 @@ func (d *LogDetector) SnapshotKey() string {
 	return "detect-log"
 }
 
+type logSnapshot struct {
+	Sources  map[string]*logSourceState `json:"sources"`
+	Markings map[string]Marking         `json:"markings,omitempty"`
+}
+
 func (d *LogDetector) Snapshot() ([]byte, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	data, err := json.Marshal(d.sources)
+	data, err := json.Marshal(logSnapshot{
+		Sources:  d.sources,
+		Markings: d.markings,
+	})
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -315,20 +375,34 @@ func (d *LogDetector) Snapshot() ([]byte, error) {
 }
 
 func (d *LogDetector) Restore(data []byte) error {
-	sources := map[string]*logSourceState{}
-	if err := json.Unmarshal(data, &sources); err != nil {
-		return errors.WithStack(err)
+	var snapshot logSnapshot
+	if err := json.Unmarshal(data, &snapshot); err != nil || snapshot.Sources == nil {
+		// Legacy format: the sources map alone.
+		sources := map[string]*logSourceState{}
+		if legacyErr := json.Unmarshal(data, &sources); legacyErr != nil {
+			return errors.WithStack(legacyErr)
+		}
+
+		snapshot = logSnapshot{Sources: sources}
 	}
 
-	for _, state := range sources {
+	for _, state := range snapshot.Sources {
 		if state.Templates == nil {
 			state.Templates = map[string]*templateStats{}
 		}
 	}
 
 	d.mu.Lock()
-	d.sources = sources
-	d.mu.Unlock()
+	defer d.mu.Unlock()
+
+	d.sources = snapshot.Sources
+
+	// Configuration markings are the seed, persisted runtime markings
+	// override them.
+	markings := map[string]Marking{}
+	maps.Copy(markings, d.config.Markings)
+	maps.Copy(markings, snapshot.Markings)
+	d.markings = markings
 
 	return nil
 }

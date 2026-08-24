@@ -29,15 +29,25 @@ func NewClient(target string) *Client {
 	return &Client{target: target}
 }
 
-// Forward drains the observations channel into the remote server and
-// returns once the channel is closed and the stream acknowledged.
-func (c *Client) Forward(ctx context.Context, observations <-chan model.Observation) error {
-	dialTarget, err := DialTarget(c.target)
+// Dial opens a gRPC connection to a tezcatl target URL.
+func Dial(target string) (*grpc.ClientConn, error) {
+	dialTarget, err := DialTarget(target)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	conn, err := grpc.NewClient(dialTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return conn, nil
+}
+
+// Forward drains the observations channel into the remote server and
+// returns once the channel is closed and the stream acknowledged.
+func (c *Client) Forward(ctx context.Context, observations <-chan model.Observation) error {
+	conn, err := Dial(c.target)
 	if err != nil {
 		return errors.WithStack(err)
 	}

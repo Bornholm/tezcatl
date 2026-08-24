@@ -12,6 +12,7 @@ import (
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
 	"github.com/bornholm/tezcatl/internal/adapter/webhook"
 	"github.com/bornholm/tezcatl/internal/config"
+	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/correlate"
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
@@ -35,6 +36,15 @@ type Runtime struct {
 	snapshotters []port.Snapshotter
 	stateStore   port.StateStore
 	eventsOut    io.Writer
+
+	miner       *drain.PartitionedMiner
+	logDetector *detect.LogDetector
+}
+
+// AdminService exposes the runtime feedback operations of this pipeline
+// (template inspection and marking).
+func (r *Runtime) AdminService() *admin.Service {
+	return admin.NewService(r.miner, r.logDetector)
 }
 
 type RuntimeOptionFunc func(r *Runtime)
@@ -76,17 +86,17 @@ func (r *Runtime) build(ctx context.Context) error {
 
 	r.processors = append(r.processors, processor.NewNormalize(processor.WithMaxLogLength(cfg.Pipeline.MaxLogLength)))
 
-	miner := drain.NewPartitionedMiner(&cfg.Logs.Drain)
-	mining := processor.NewTemplateMining(miner)
+	r.miner = drain.NewPartitionedMiner(&cfg.Logs.Drain)
+	mining := processor.NewTemplateMining(r.miner)
 	r.processors = append(r.processors, mining)
 	r.snapshotters = append(r.snapshotters, mining)
 
 	detectors := []detect.Detector{}
 
 	if cfg.Logs.Detection.Enabled == nil || *cfg.Logs.Detection.Enabled {
-		logDetector := detect.NewLogDetector(cfg.LogDetectionConfig())
-		detectors = append(detectors, logDetector)
-		r.snapshotters = append(r.snapshotters, logDetector)
+		r.logDetector = detect.NewLogDetector(cfg.LogDetectionConfig())
+		detectors = append(detectors, r.logDetector)
+		r.snapshotters = append(r.snapshotters, r.logDetector)
 	}
 
 	if cfg.Metrics.Detection.Enabled == nil || *cfg.Metrics.Detection.Enabled {
