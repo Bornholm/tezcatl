@@ -64,10 +64,14 @@ func NewRuntime(ctx context.Context, cfg *config.Config, funcs ...RuntimeOptionF
 func (r *Runtime) build(ctx context.Context) error {
 	cfg := r.config
 
-	// Processors: normalize → template mining → analysis (→ debug).
-	r.processors = []port.Processor{
-		processor.NewNormalize(processor.WithMaxLogLength(cfg.Pipeline.MaxLogLength)),
+	// Processors: parse → normalize → template mining → analysis (→ debug).
+	r.processors = []port.Processor{}
+
+	if cfg.Logs.Parsing.Enabled == nil || *cfg.Logs.Parsing.Enabled {
+		r.processors = append(r.processors, processor.NewParseLog())
 	}
+
+	r.processors = append(r.processors, processor.NewNormalize(processor.WithMaxLogLength(cfg.Pipeline.MaxLogLength)))
 
 	miner := drain.NewPartitionedMiner(&cfg.Logs.Drain)
 	mining := processor.NewTemplateMining(miner)

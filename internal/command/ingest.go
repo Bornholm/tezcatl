@@ -1,7 +1,9 @@
 package command
 
 import (
+	"context"
 	"os"
+	"time"
 
 	"github.com/bornholm/tezcatl/internal/adapter/grpc"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
@@ -22,7 +24,7 @@ func NewIngestCommand() *cli.Command {
 				Usage: "Forward log lines read from stdin",
 				Flags: ingestFlags(),
 				Action: func(ctx *cli.Context) error {
-					return runIngest(ctx, stdio.NewLogIngester(os.Stdin, ctx.String("source")))
+					return runIngest(ctx, stdio.NewLogIngester(os.Stdin, identity(ctx)))
 				},
 			},
 			{
@@ -30,23 +32,67 @@ func NewIngestCommand() *cli.Command {
 				Usage: "Forward Prometheus text format metrics read from stdin",
 				Flags: ingestFlags(),
 				Action: func(ctx *cli.Context) error {
-					return runIngest(ctx, stdio.NewMetricIngester(os.Stdin, ctx.String("source")))
+					return runIngest(ctx, stdio.NewMetricIngester(os.Stdin, identity(ctx)))
+				},
+			},
+			{
+				Name:  "change",
+				Usage: "Report a single change (deployment, configuration, restart...)",
+				Flags: append(ingestFlags(),
+					&cli.StringFlag{
+						Name:     "type",
+						Usage:    "change type, e.g. deployment, config, restart",
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:  "change-version",
+						Usage: "version identifier, e.g. checkout:v1.8.2",
+					},
+					&cli.StringFlag{
+						Name:  "summary",
+						Usage: "human readable description of the change",
+					},
+				),
+				Action: func(ctx *cli.Context) error {
+					now := time.Now()
+
+					obs := model.Observation{
+						ID:          model.NewID(),
+						Service:     ctx.String("service"),
+						Environment: ctx.String("environment"),
+						Modality:    model.ModalityChange,
+						Timestamp:   now,
+						IngestedAt:  now,
+						Change: &model.ChangeRecord{
+							Type:    ctx.String("type"),
+							Version: ctx.String("change-version"),
+							Summary: ctx.String("summary"),
+						},
+					}
+
+					return runIngest(ctx, singleObservation(obs))
 				},
 			},
 		},
 	}
 }
 
+type singleObservation model.Observation
+
+func (o singleObservation) Ingest(ctx context.Context, out chan<- model.Observation) error {
+	select {
+	case out <- model.Observation(o):
+		return nil
+	case <-ctx.Done():
+		return errors.WithStack(ctx.Err())
+	}
+}
+
 func ingestFlags() []cli.Flag {
-	return []cli.Flag{
+	return append(identityFlags(),
 		&cli.StringFlag{
 			Name:     "target",
 			Usage:    "server address, e.g. unix:///run/tezcatl.sock or tcp://host:4242",
-			Required: true,
-		},
-		&cli.StringFlag{
-			Name:     "source",
-			Usage:    "logical source of the observations",
 			Required: true,
 		},
 		&cli.IntFlag{
@@ -54,7 +100,7 @@ func ingestFlags() []cli.Flag {
 			Usage: "capacity of the local forwarding buffer",
 			Value: 1024,
 		},
-	}
+	)
 }
 
 func runIngest(ctx *cli.Context, ingester port.Ingester) error {

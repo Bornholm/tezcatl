@@ -14,16 +14,28 @@ const (
 // actionable by an operator or an LLM agent without access to the raw
 // streams.
 type Event struct {
-	ID         string            `json:"id"`
-	Kind       string            `json:"kind"`
-	Source     string            `json:"source"`
-	Timestamp  time.Time         `json:"timestamp"`
-	Severity   Severity          `json:"severity"`
-	Confidence float64           `json:"confidence"`
-	Summary    string            `json:"summary"`
-	Signals    []Signal          `json:"signals,omitempty"`
-	Context    Context           `json:"context,omitzero"`
-	Attributes map[string]string `json:"attributes,omitempty"`
+	ID             string            `json:"id"`
+	Kind           string            `json:"kind"`
+	Source         string            `json:"source"`
+	Service        string            `json:"service,omitempty"`
+	Environment    string            `json:"environment,omitempty"`
+	Timestamp      time.Time         `json:"timestamp"`
+	Severity       Severity          `json:"severity"`
+	Confidence     float64           `json:"confidence"`
+	Summary        string            `json:"summary"`
+	Signals        []Signal          `json:"signals,omitempty"`
+	RelatedChanges []RelatedChange   `json:"related_changes,omitempty"`
+	Context        Context           `json:"context,omitzero"`
+	Attributes     map[string]string `json:"attributes,omitempty"`
+}
+
+// RelatedChange is a change observed close enough to an event to be
+// worth surfacing. It is a temporal correlation, not a proof of cause.
+type RelatedChange struct {
+	Source        string       `json:"source"`
+	Change        ChangeRecord `json:"change"`
+	Timestamp     time.Time    `json:"timestamp"`
+	OffsetSeconds float64      `json:"offset_seconds"`
 }
 
 // Signal is an elementary anomaly produced by a detector, before

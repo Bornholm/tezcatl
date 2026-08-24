@@ -45,8 +45,16 @@ func (n *Normalize) Name() string {
 }
 
 func (n *Normalize) Process(ctx context.Context, obs *model.Observation, emit port.EmitFunc) (bool, error) {
+	if obs.Service != "" {
+		if obs.Environment == "" {
+			obs.Environment = model.DefaultEnvironment
+		}
+
+		obs.Source = obs.Environment + "/" + obs.Service
+	}
+
 	if obs.Source == "" {
-		return false, errors.New("missing source")
+		return false, errors.New("missing service or source")
 	}
 
 	switch obs.Modality {
@@ -59,6 +67,10 @@ func (n *Normalize) Process(ctx context.Context, obs *model.Observation, emit po
 			obs.Log.Raw = obs.Log.Raw[:n.maxLogLength]
 		}
 
+		if len(obs.Log.Message) > n.maxLogLength {
+			obs.Log.Message = obs.Log.Message[:n.maxLogLength]
+		}
+
 	case model.ModalityMetric:
 		if obs.Metric == nil {
 			return false, errors.New("metric observation without metric sample")
@@ -66,6 +78,15 @@ func (n *Normalize) Process(ctx context.Context, obs *model.Observation, emit po
 
 		if obs.Metric.Name == "" {
 			return false, errors.New("metric observation without metric name")
+		}
+
+	case model.ModalityChange:
+		if obs.Change == nil {
+			return false, errors.New("change observation without change record")
+		}
+
+		if obs.Change.Type == "" {
+			return false, errors.New("change observation without change type")
 		}
 
 	default:

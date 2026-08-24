@@ -2,6 +2,7 @@ package command
 
 import (
 	"github.com/bornholm/tezcatl/internal/config"
+	"github.com/bornholm/tezcatl/internal/core/correlate"
 	"github.com/bornholm/tezcatl/internal/setup"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -21,6 +22,10 @@ func commonFlags() []cli.Flag {
 			Name:  "debug-events",
 			Usage: "emit one debug.observation event per observation",
 		},
+		&cli.BoolFlag{
+			Name:  "replay",
+			Usage: "expire correlation windows on observation timestamps instead of the wall clock (replaying past incidents)",
+		},
 	}
 }
 
@@ -36,6 +41,10 @@ func loadConfig(ctx *cli.Context) (*config.Config, error) {
 
 	if ctx.Bool("debug-events") {
 		cfg.Pipeline.DebugEvents = true
+	}
+
+	if ctx.Bool("replay") {
+		cfg.Correlation.Clock = string(correlate.ClockEvent)
 	}
 
 	setup.SetupLogging(cfg)

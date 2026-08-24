@@ -11,6 +11,18 @@ import (
 	"github.com/bornholm/tezcatl/internal/core/window"
 )
 
+type Clock string
+
+const (
+	// ClockWall expires correlation windows on the wall clock: the
+	// normal mode for live streams.
+	ClockWall Clock = "wall"
+	// ClockEvent expires correlation windows on the observation
+	// timestamps (watermark): the mode for replaying past incidents
+	// with an exact timeline.
+	ClockEvent Clock = "event"
+)
+
 type Config struct {
 	// Window is how long signals of a same source are aggregated into a
 	// single event before it is emitted. It is also the upper bound on
@@ -20,6 +32,11 @@ type Config struct {
 	// attached around the first signal.
 	ContextBefore int `yaml:"context_before"`
 	ContextAfter  int `yaml:"context_after"`
+	// Clock selects how window expiry is measured (wall or event).
+	Clock Clock `yaml:"clock"`
+	// ChangeHorizon is how far back changes are still attached to an
+	// event as related changes.
+	ChangeHorizon time.Duration `yaml:"change_horizon"`
 }
 
 func DefaultConfig() *Config {
@@ -27,6 +44,8 @@ func DefaultConfig() *Config {
 		Window:        30 * time.Second,
 		ContextBefore: 10,
 		ContextAfter:  10,
+		Clock:         ClockWall,
+		ChangeHorizon: 15 * time.Minute,
 	}
 }
 
@@ -38,18 +57,22 @@ type Correlator struct {
 	config *Config
 	now    func() time.Time
 
-	mu      sync.Mutex
-	sources map[string]*sourceState
+	mu        sync.Mutex
+	watermark time.Time
+	sources   map[string]*sourceState
 }
 
 type sourceState struct {
 	ring    *window.Ring
+	changes []model.Observation
 	pending *pendingEvent
 }
 
 type pendingEvent struct {
 	firstReceivedAt time.Time
 	firstSignalAt   time.Time
+	service         string
+	environment     string
 	signals         map[string]*aggregatedSignal
 	before          []model.Observation
 	after           []model.Observation
@@ -78,12 +101,33 @@ func (c *Correlator) Observe(obs *model.Observation) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if obs.Timestamp.After(c.watermark) {
+		c.watermark = obs.Timestamp
+	}
+
 	state := c.source(obs.Source)
 
 	state.ring.Add(*obs)
 
+	if obs.Modality == model.ModalityChange {
+		state.changes = append(state.changes, *obs)
+		state.pruneChanges(c.watermark, c.config.ChangeHorizon)
+	}
+
 	if state.pending != nil && len(state.pending.after) < c.config.ContextAfter {
 		state.pending.after = append(state.pending.after, *obs)
+	}
+}
+
+const maxTrackedChanges = 64
+
+func (s *sourceState) pruneChanges(watermark time.Time, horizon time.Duration) {
+	for len(s.changes) > 0 && watermark.Sub(s.changes[0].Timestamp) > horizon {
+		s.changes = s.changes[1:]
+	}
+
+	if excess := len(s.changes) - maxTrackedChanges; excess > 0 {
+		s.changes = s.changes[excess:]
 	}
 }
 
@@ -103,6 +147,8 @@ func (c *Correlator) Add(obs *model.Observation, signals []model.Signal) {
 		state.pending = &pendingEvent{
 			firstReceivedAt: c.now(),
 			firstSignalAt:   signals[0].Timestamp,
+			service:         obs.Service,
+			environment:     obs.Environment,
 			signals:         map[string]*aggregatedSignal{},
 			before:          state.ring.Last(c.config.ContextBefore),
 		}
@@ -137,13 +183,21 @@ func (c *Correlator) Flush(force bool, emit func(evt model.Event)) {
 			continue
 		}
 
-		if !force && now.Sub(state.pending.firstReceivedAt) < c.config.Window {
+		if !force && !c.expired(state.pending, now) {
 			continue
 		}
 
-		emit(c.build(source, state.pending))
+		emit(c.build(source, state))
 		state.pending = nil
 	}
+}
+
+func (c *Correlator) expired(pending *pendingEvent, now time.Time) bool {
+	if c.config.Clock == ClockEvent {
+		return c.watermark.Sub(pending.firstSignalAt) >= c.config.Window
+	}
+
+	return now.Sub(pending.firstReceivedAt) >= c.config.Window
 }
 
 func (c *Correlator) source(name string) *sourceState {
@@ -158,7 +212,9 @@ func (c *Correlator) source(name string) *sourceState {
 	return state
 }
 
-func (c *Correlator) build(source string, pending *pendingEvent) model.Event {
+func (c *Correlator) build(source string, state *sourceState) model.Event {
+	pending := state.pending
+
 	signals := make([]model.Signal, 0, len(pending.signals))
 
 	var (
@@ -215,14 +271,17 @@ func (c *Correlator) build(source string, pending *pendingEvent) model.Event {
 	}
 
 	return model.Event{
-		ID:         model.NewID(),
-		Kind:       kind,
-		Source:     source,
-		Timestamp:  pending.firstSignalAt,
-		Severity:   severity,
-		Confidence: confidence,
-		Summary:    summary,
-		Signals:    signals,
+		ID:             model.NewID(),
+		Kind:           kind,
+		Source:         source,
+		Service:        pending.service,
+		Environment:    pending.environment,
+		Timestamp:      pending.firstSignalAt,
+		Severity:       severity,
+		Confidence:     confidence,
+		Summary:        summary,
+		Signals:        signals,
+		RelatedChanges: c.relatedChanges(state, pending),
 		Context: model.Context{
 			Before: pending.before,
 			After:  pending.after,
@@ -233,6 +292,34 @@ func (c *Correlator) build(source string, pending *pendingEvent) model.Event {
 			"multimodal":       strconv.FormatBool(multimodal),
 		},
 	}
+}
+
+// relatedChanges surfaces the changes observed shortly before the event
+// (within the change horizon) or during its correlation window. Temporal
+// proximity is a correlation, not a proof of cause.
+func (c *Correlator) relatedChanges(state *sourceState, pending *pendingEvent) []model.RelatedChange {
+	if len(state.changes) == 0 {
+		return nil
+	}
+
+	var related []model.RelatedChange
+
+	for _, change := range state.changes {
+		offset := change.Timestamp.Sub(pending.firstSignalAt)
+
+		if offset < -c.config.ChangeHorizon || offset > c.config.Window {
+			continue
+		}
+
+		related = append(related, model.RelatedChange{
+			Source:        change.Source,
+			Change:        *change.Change,
+			Timestamp:     change.Timestamp,
+			OffsetSeconds: offset.Seconds(),
+		})
+	}
+
+	return related
 }
 
 func signalKey(signal model.Signal) string {

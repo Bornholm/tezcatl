@@ -35,7 +35,7 @@ func BenchmarkPipelineThroughput(b *testing.B) {
 			b.Fatalf("unexpected error: %+v", err)
 		}
 
-		if err := runtime.Run(context.Background(), stdio.NewLogIngester(strings.NewReader(lines), "bench")); err != nil {
+		if err := runtime.Run(context.Background(), stdio.NewLogIngester(strings.NewReader(lines), stdio.Identity{Service: "bench"})); err != nil {
 			b.Fatalf("unexpected error: %+v", err)
 		}
 	}

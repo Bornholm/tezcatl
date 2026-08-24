@@ -68,12 +68,45 @@ func TestNormalize(t *testing.T) {
 		}
 	})
 
+	t.Run("derives source from service and environment", func(t *testing.T) {
+		obs := model.Observation{
+			Service:  "checkout",
+			Modality: model.ModalityLog,
+			Log:      &model.LogRecord{Raw: "hello"},
+		}
+
+		if _, err := normalize.Process(context.Background(), &obs, nil); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
+
+		if obs.Source != "default/checkout" || obs.Environment != model.DefaultEnvironment {
+			t.Fatalf("unexpected identity: %+v", obs)
+		}
+
+		obs = model.Observation{
+			Service:     "checkout",
+			Environment: "prod",
+			Modality:    model.ModalityChange,
+			Change:      &model.ChangeRecord{Type: "deployment"},
+		}
+
+		if _, err := normalize.Process(context.Background(), &obs, nil); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
+
+		if obs.Source != "prod/checkout" {
+			t.Fatalf("unexpected source: %q", obs.Source)
+		}
+	})
+
 	t.Run("rejects invalid observations", func(t *testing.T) {
 		invalid := []model.Observation{
 			{Modality: model.ModalityLog, Log: &model.LogRecord{Raw: "no source"}},
 			{Source: "api", Modality: model.ModalityLog},
 			{Source: "api", Modality: model.ModalityMetric},
 			{Source: "api", Modality: model.ModalityMetric, Metric: &model.MetricSample{}},
+			{Source: "api", Modality: model.ModalityChange},
+			{Source: "api", Modality: model.ModalityChange, Change: &model.ChangeRecord{}},
 			{Source: "api", Modality: "unknown"},
 		}
 
