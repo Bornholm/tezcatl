@@ -75,6 +75,45 @@ Restes à faire (hors périmètre MVP) :
 - [ ] `StateStore` PostgreSQL (aujourd'hui fichiers uniquement)
 - [ ] job CI exécutant `misc/drain3-golden/generate.py` pour détecter les dérives de compatibilité
 
+## Chantiers cas d'usage
+
+Déclinaison de [USE_CASES.md](../USE_CASES.md) (dogfooding Dokku/systemd/Docker, puis Kubernetes). Le moteur est en place ; ces chantiers portent sur la couche d'entrée et la couche sémantique.
+
+### C1 — Logs réels et rejeu d'incidents
+
+- [ ] Identité canonique `service` + `environment` de première classe (partition et corrélation par `env/service`, flags `--service`/`--environment`, champs protobuf dédiés)
+- [ ] Parsing structuré des logs : JSON (clés usuelles + journald `-o json`), niveaux normalisés, timestamps extraits (JSON, RFC3339 en tête de ligne, préfixe syslog) — le mining porte sur le message, plus sur l'enveloppe
+- [ ] Horloge de corrélation configurable `wall|event` + flag `--replay` : les fenêtres avancent sur le temps des événements, ce qui permet de rejouer un incident passé avec une chronologie exacte (les détecteurs sont déjà en event-time)
+
+Objectif de validation : rejouer trois incidents passés connus et vérifier que tezcatl rassemble automatiquement ce qu'un ingénieur cherche à la main.
+
+### C2 — Métriques depuis l'API Prometheus
+
+- [ ] Ingester interrogeant périodiquement `/api/v1/query` avec des requêtes PromQL configurées (nom de métrique logique, identité service/env statique ou dérivée d'un label)
+- [ ] Activable en standalone comme en serveur (composé par `setup.Runtime`)
+
+### C3 — Modalité « changement »
+
+- [ ] `ModalityChange` + `ChangeRecord` (type, version, résumé) dans le modèle et le protobuf
+- [ ] `tezcatl ingest change` (one-shot) et `--changes-from` (JSONL) en standalone
+- [ ] Le corrélateur attache les changements récents aux événements (`related_changes` avec offset temporel) — en tant que **corrélation**, pas preuve
+
+### C4 — Corrélation multi-sources (Kubernetes)
+
+- [ ] Second niveau de regroupement (workload, namespace) au-dessus des sources
+- [ ] Événements multi-services (`affected_services`), corrélation entre pods d'un même workload
+- [ ] Ingestion des métadonnées Kubernetes (déploiements, redémarrages) — s'appuie sur C3
+
+### C5 — Artefact d'incident enrichi
+
+- [ ] Titre, chronologie ordonnée, distinction trigger/evidence/related_changes/hypothèses
+- [ ] Résumé destiné à un humain ; export optionnel vers un LLM
+
+### C6 — Sorties complémentaires
+
+- [ ] Sink webhook (notification HTTP par événement, derrière le sink résilient)
+- [ ] Sink SQLite (alternative légère à PostgreSQL pour le mode personnel)
+
 ## Après le MVP
 
 Voir [PLAN.md](../PLAN.md) : boucle de feedback dynamique (marquage au runtime), génération de stimuli LLM, nouvelles modalités (traces OTel, événements Kubernetes), détection avancée (saisonnalité, ruptures, multivarié), industrialisation (authn/z, multi-tenant, HA).
