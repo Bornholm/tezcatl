@@ -1,0 +1,4 @@
+[plugin]
+description = "Signale les déploiements Dokku à tezcatl comme changements corrélables"
+version = "0.1.0"
+[plugin.config]

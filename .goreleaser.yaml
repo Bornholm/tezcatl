@@ -94,6 +94,59 @@ nfpms:
       preremove: misc/packaging/preremove.sh
       postremove: misc/packaging/postremove.sh
 
+  # Intégration Dokku : une unité systemd template (une instance par
+  # application) qui pipe `dokku logs -t` vers l'ingestion, et un plugin
+  # Dokku déclarant chaque déploiement comme changement corrélable.
+  - id: tezcatl-dokku
+    package_name: tezcatl-dokku
+    meta: true
+    # Dokku ne vit que sur Debian/Ubuntu.
+    formats:
+      - deb
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - intégration Dokku.
+      Unité systemd d'ingestion des logs par application
+      (tezcatl-ingest@) et hook de déploiement Dokku.
+    dependencies:
+      - tezcatl
+      - dokku
+    contents:
+      - src: misc/packaging/tezcatl-ingest@.service
+        dst: /usr/lib/systemd/system/tezcatl-ingest@.service
+        file_info: { mode: 0644 }
+      - src: misc/packaging/ingest.env
+        dst: /etc/tezcatl/ingest.env
+        type: config|noreplace
+        file_info: { mode: 0644 }
+      - src: misc/packaging/dokku/plugin.toml
+        dst: /var/lib/dokku/plugins/available/tezcatl/plugin.toml
+        file_info: { mode: 0644 }
+      - src: misc/packaging/dokku/post-deploy
+        dst: /var/lib/dokku/plugins/available/tezcatl/post-deploy
+        file_info: { mode: 0755 }
+    scripts:
+      postinstall: misc/packaging/dokku-postinstall.sh
+      postremove: misc/packaging/dokku-postremove.sh
+
+# Image de conteneur (serveur en Kubernetes, jobs one-shot ingest/mark)
+# construite avec ko : pas de Dockerfile ni de daemon Docker, base
+# statique distroless, publiée sur GHCR.
+kos:
+  - id: tezcatl
+    build: tezcatl
+    repositories:
+      - ghcr.io/bornholm/tezcatl
+    bare: true
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
 checksum:
   name_template: "checksums.txt"
 

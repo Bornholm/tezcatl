@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Déclenché par Dokku après chaque déploiement : déclare le déploiement
+# comme changement, que le corrélateur attachera aux anomalies suivantes
+# (related_changes). Ne doit jamais faire échouer un déploiement.
+set -u
+
+APP="${1:-}"
+[ -n "$APP" ] || exit 0
+
+TEZCATL_TARGET="unix:///run/tezcatl/tezcatl.sock"
+TEZCATL_ENVIRONMENT="production"
+[ -f /etc/tezcatl/ingest.env ] && . /etc/tezcatl/ingest.env
+
+SHA="$(dokku git:report "$APP" --git-sha 2>/dev/null || true)"
+
+tezcatl ingest change \
+    --target "$TEZCATL_TARGET" \
+    --service "$APP" \
+    --environment "$TEZCATL_ENVIRONMENT" \
+    --type deployment \
+    --change-version "$APP:${SHA:-unknown}" \
+    --summary "dokku deploy" || true
+
+exit 0
