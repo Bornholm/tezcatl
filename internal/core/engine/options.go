@@ -2,6 +2,7 @@ package engine
 
 import (
 	"runtime"
+	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/port"
 )
@@ -14,6 +15,7 @@ type Options struct {
 	Workers               int
 	ObservationBufferSize int
 	EventBufferSize       int
+	FlushInterval         time.Duration
 }
 
 type OptionFunc func(opts *Options)
@@ -23,6 +25,7 @@ func NewOptions(funcs ...OptionFunc) *Options {
 		Workers:               max(1, runtime.NumCPU()-1),
 		ObservationBufferSize: 1024,
 		EventBufferSize:       256,
+		FlushInterval:         time.Second,
 	}
 
 	for _, fn := range funcs {
@@ -65,5 +68,13 @@ func WithObservationBufferSize(size int) OptionFunc {
 func WithEventBufferSize(size int) OptionFunc {
 	return func(opts *Options) {
 		opts.EventBufferSize = max(1, size)
+	}
+}
+
+func WithFlushInterval(interval time.Duration) OptionFunc {
+	return func(opts *Options) {
+		if interval > 0 {
+			opts.FlushInterval = interval
+		}
 	}
 }

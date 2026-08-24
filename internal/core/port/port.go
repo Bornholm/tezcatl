@@ -32,6 +32,22 @@ type EventSink interface {
 	Close() error
 }
 
+// Flusher is implemented by processors holding time-based state (e.g.
+// correlation windows) that must be flushed even when no observation
+// arrives. The engine calls Flush periodically; force is true on the
+// final flush before shutdown.
+type Flusher interface {
+	Flush(ctx context.Context, force bool, emit EmitFunc)
+}
+
+// Snapshotter is implemented by components whose learned state must
+// survive restarts (template miner, detector baselines).
+type Snapshotter interface {
+	SnapshotKey() string
+	Snapshot() ([]byte, error)
+	Restore(data []byte) error
+}
+
 var ErrStateNotFound = errors.New("state not found")
 
 // StateStore persists opaque engine state (template miner snapshots,
