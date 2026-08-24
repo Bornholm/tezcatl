@@ -36,9 +36,11 @@ func (d *Debug) Process(ctx context.Context, obs *model.Observation, emit port.E
 
 	switch {
 	case obs.Log != nil:
-		evt.Summary = obs.Log.Raw
+		evt.Summary = obs.Log.EffectiveMessage()
 	case obs.Metric != nil:
 		evt.Summary = obs.Metric.Name
+	case obs.Change != nil:
+		evt.Summary = obs.Change.Type + " " + obs.Change.Version
 	}
 
 	emit(evt)
