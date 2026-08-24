@@ -8,83 +8,73 @@ Ce document décline les phases de [PLAN.md](../PLAN.md) en tâches concrètes e
 |---|---|
 | Module | `github.com/bornholm/tezcatl` |
 | Go | ≥ 1.26.0 |
-| Layout | `cmd/tezcatl`, `internal/core/{model,port,engine,processor}`, `internal/adapter/<tech>`, `internal/command` |
+| Layout | `cmd/tezcatl`, `internal/core/{model,port,engine,processor,drain,detect,correlate,sink,state,window}`, `internal/adapter/<tech>`, `internal/{config,setup,command}` |
 | Erreurs | `github.com/pkg/errors` (`WithStack`/`Wrap`) |
-| Logs internes | `log/slog` structuré |
+| Logs internes | `log/slog` structuré, sur stderr (stdout réservé aux événements) |
 | CLI | `github.com/urfave/cli/v2` |
-| Concurrence | canaux bornés + `errgroup` ; workers partitionnés par hash FNV de `Observation.PartitionKey()` — une partition est toujours traitée par le même worker, donc séquentiellement |
-| Panne d'un sink | loggée, n'interrompt pas le pipeline (cf. Phase 8) |
+| Concurrence | canaux bornés + `errgroup` ; workers partitionnés par hash FNV de `Observation.PartitionKey()` = `Source` — toutes les modalités d'une source sont traitées séquentiellement par le même worker, ce qui donne au corrélateur une vue cohérente |
+| Backpressure | bout en bout : sink lent → canal events plein → workers bloqués → canal observations plein → ingestion ralentie (flow control HTTP/2 côté gRPC) |
+| Panne d'un sink | file bornée + retries en arrière-plan (`sink.Resilient`) ; drop compté et loggé, jamais bloquant |
 | Panne d'un processor sur une observation | observation abandonnée, pipeline maintenu |
+| Snapshots Drain3 | format JSON gzip propre (l'arbre est reconstruit depuis les clusters) ; compatibilité **comportementale** avec drain3, pas compatibilité du format jsonpickle |
+| Golden tests | fixtures générées par `misc/drain3-golden/generate.py` avec le drain3 Python officiel (`pip install drain3`), y compris l'éviction LRU |
+| Masques Drain3 | syntaxe RE2 (pas de lookaround) — utiliser `\b` |
+| PostgreSQL | doit être joignable au démarrage (création du schéma) ; les coupures en cours d'exécution sont absorbées par le sink résilient |
 
 ## État des phases
 
 ### Phase 1 — Modèle de domaine et moteur commun ✅
 
-- [x] `internal/core/model` : `Observation` (multimodale : log, métrique, trace à venir), `Event`, `Signal`, `Context`
-- [x] `internal/core/port` : `Ingester`, `Processor`, `EventSink`, `StateStore`
-- [x] `internal/core/engine` : pipeline borné `ingesters → dispatch partitionné → workers → sinks`, arrêt propre en cascade (fermeture des canaux), test de flux et test d'ordre par partition sous `-race`
-- [x] `internal/core/processor` : processor `debug` (transforme chaque observation en événement `debug.observation`) pour valider la chaîne de bout en bout — sera désactivé par défaut quand la détection existera
-- [x] Tranche verticale : `stdin → Engine → stdout JSONL` via `tezcatl standalone logs`
+`Observation`/`Event`/`Signal` (`core/model`), ports `Ingester`/`Processor`/`EventSink`/`StateStore`/`Flusher`/`Snapshotter` (`core/port`), moteur borné avec arrêt propre en cascade et ticks de flush (`core/engine`).
 
-### Phase 2 — CLI et transport client/serveur ⏳
+### Phase 2 — CLI et transport client/serveur ✅
 
-- [ ] Définir le contrat protobuf (`api/proto/tezcatl/v1`) : `IngestService.StreamObservations` (client-streaming), messages `Observation`/`Ack`
-- [ ] `internal/adapter/grpc/server` : serveur gRPC branché sur le canal d'ingestion de l'Engine, listeners Unix et TCP
-- [ ] `internal/adapter/grpc/client` : client streaming avec reconnexion élémentaire (backoff) et arrêt propre
-- [ ] Backpressure : le serveur ne lit le stream qu'à la vitesse d'absorption du canal borné
-- [ ] Commandes `tezcatl server` et `tezcatl ingest logs --target unix:///…`
+Contrat protobuf `api/proto/tezcatl/v1` (client-streaming `IngestService.StreamObservations`), serveur multi-listeners unix/TCP (`adapter/grpc`), client avec reconnexion à backoff exponentiel, commandes `tezcatl server` et `tezcatl ingest logs|metrics`. `make generate` régénère le code (protoc + plugins installés dans `tools/bin`).
 
-### Phase 3 — Mode standalone ⏳
+### Phase 3 — Mode standalone ✅
 
-- [x] Squelette `tezcatl standalone logs` (ingestion stdin → Engine → stdout)
-- [ ] Aligner la composition sur la configuration YAML commune (mêmes profils que le serveur, hors réseau)
-- [ ] `tezcatl standalone metrics` une fois l'ingestion de métriques disponible
+`tezcatl standalone logs|metrics` compose le même `setup.Runtime` que le serveur (seuls les ingesters diffèrent). `--metrics-from` permet l'ingestion multimodale locale via fichier ou FIFO.
 
-### Phase 4 — Pipeline multimodal
+### Phase 4 — Pipeline multimodal ✅
 
-- [ ] Processor de validation/normalisation (timestamps, source obligatoire, troncature)
-- [ ] Ingestion de métriques (format ligne `name value [labels]` + scrape/remote-write plus tard)
-- [ ] Fenêtres de contexte temporelles : ring buffer par partition conservant N observations avant/après un signal
-- [ ] Limitation : l'ingester stdin bloque sur `Read` — la fermeture du pipe reste le signal d'arrêt principal ; à revisiter ici
+Processor de normalisation (validation, troncature, timestamps), parseur Prometheus text format (`format/prometheus`), ring buffer de contexte (`core/window`). Limitation connue : l'ingester stdin bloque sur `Read`, la fermeture du pipe reste le signal d'arrêt principal.
 
-### Phase 5 — Port Go compatible Drain3
+### Phase 5 — Port Go compatible Drain3 ✅
 
-- [ ] `internal/core/drain` : arbre à profondeur fixe, similarité, clusters, masquage configurable, LRU, modes apprentissage/inférence, extraction de paramètres
-- [ ] Partitions indépendantes (env/service) — s'appuie sur le partitionnement du moteur
-- [ ] Snapshot/restore via `port.StateStore` (JSON compressé, format compatible Drain3)
-- [ ] Golden tests contre l'implémentation Python officielle (fixtures générées par script sous `misc/drain3-golden`)
+`core/drain` : arbre à profondeur fixe, similarité et wildcards, masquage RE2, LRU avec nettoyage paresseux de l'arbre, modes apprentissage (`AddLogMessage`) et inférence (`Match` never/fallback/always), extraction de paramètres, partitions indépendantes, snapshots gzip. Golden tests ligne à ligne contre le drain3 Python (corpus 168 lignes, avec et sans `max_clusters`).
 
-### Phase 6 — Détection d'anomalies
+### Phase 6 — Détection d'anomalies ✅
 
-- [ ] Logs : nouveaux templates post-apprentissage, templates rares, hausse de fréquence, disparition, marquage de clusters
-- [ ] Métriques : moyenne/variance glissantes, Z-score, EWMA, quantiles, dérive, seuils
-- [ ] Chaque détecteur produit des `Signal` explicables (score + résumé + attributs)
+- Logs (`detect.LogDetector`) : nouveau template après apprentissage, template rare, pic de fréquence (buckets + baseline EWMA), disparition de template attendu (scan paresseux), marquages `normal`/`ignore`/`symptomatic`.
+- Métriques (`detect.MetricDetector`) : Z-score sur moyenne/variance EWMA, seuils statiques configurables, dérive de tendance (EWMA rapide vs lente).
+- Tous les signaux portent score, résumé et attributs explicatifs.
 
-### Phase 7 — Corrélation multimodale
+### Phase 7 — Corrélation multimodale ✅
 
-- [ ] Corrélateur fenêtré par source : regroupement, déduplication, score de confiance, attachement du contexte avant/après
-- [ ] Production d'`Event` contextualisés uniques
+`correlate.Correlator` : fenêtre par source, déduplication des signaux (occurrences comptées), confiance combinée `1-Π(1-score)`, sévérité dérivée, contexte avant/après attaché, attribut `multimodal`. Flush périodique via le ticker du moteur + flush final au drain.
 
-### Phase 8 — Sinks et persistance
+### Phase 8 — Sinks et persistance ✅
 
-- [x] Sink stdout JSON Lines (défaut)
-- [ ] Sink PostgreSQL (connecteur générique, file bornée + drop loggé si indisponible)
-- [ ] `StateStore` fichier local (snapshots Drain3 + baselines), puis PostgreSQL
+- Sinks : stdout JSONL (défaut) ; PostgreSQL (`adapter/postgres`, table `tezcatl_events` avec payload JSONB) derrière `sink.Resilient` (file bornée, retries, drops comptés).
+- État : `StateStore` fichiers avec écriture atomique (`adapter/fs`) ; `state.Manager` restaure au démarrage, sauvegarde périodiquement et au shutdown les snapshots du miner et des baselines des deux détecteurs.
 
-### Phase 9 — Configuration et exploitation
+### Phase 9 — Configuration et exploitation ✅
 
-- [ ] `internal/config` : chargement YAML, validation stricte au démarrage, profils standalone/serveur, secrets via env
-- [ ] Métriques de santé internes
+`internal/config` : YAML strict (clés inconnues rejetées), durées lisibles (`30s`), expansion `${VAR}` pour les secrets, validation au démarrage (y compris masques drain). Profils d'exemple dans `misc/config/{standalone,server}.yaml`. `internal/setup` compose le runtime identique serveur/standalone. Logs internes configurables (niveau, text/json).
 
-### Phase 10 — Validation du MVP
+### Phase 10 — Validation du MVP ✅
 
-- [x] Tests unitaires moteur sous `-race`
-- [ ] Tests bout en bout standalone et client/serveur, restauration snapshot, backpressure, reconnexion, arrêt files non vides, indisponibilité PostgreSQL
-- [ ] Benchmarks débit/mémoire (`make bench`)
+- unités : drain (golden inclus), détecteurs, corrélateur, parseur, ring, config, state, sink résilient ;
+- intégration : moteur (flux, ordre par partition, annulation, backpressure, fuite de goroutines), gRPC client/serveur sur socket unix, runtime e2e (anomalie détectée, restauration sans faux positifs, corrélation multimodale) ;
+- `go test -race ./...` vert ; benchmarks : miner ~190k msg/s single-thread, pipeline complet ~275k lignes/s (`make bench`).
 
-## Ordre de travail recommandé
+Restes à faire (hors périmètre MVP) :
 
-1. Phase 4 (validation + métriques + fenêtres de contexte) pour solidifier le socle multimodal
-2. Phase 2 (gRPC) pour figer le contrat de transport
-3. Phase 5 (Drain3) — le gros morceau, isolable dans `internal/core/drain`
-4. Phases 6 → 7 → 8 (PostgreSQL) → 9 → 10
+- [ ] métriques de santé exposées (compteurs internes → endpoint ou logs périodiques)
+- [ ] TLS/mTLS sur les listeners
+- [ ] `StateStore` PostgreSQL (aujourd'hui fichiers uniquement)
+- [ ] job CI exécutant `misc/drain3-golden/generate.py` pour détecter les dérives de compatibilité
+
+## Après le MVP
+
+Voir [PLAN.md](../PLAN.md) : boucle de feedback dynamique (marquage au runtime), génération de stimuli LLM, nouvelles modalités (traces OTel, événements Kubernetes), détection avancée (saisonnalité, ruptures, multivarié), industrialisation (authn/z, multi-tenant, HA).
