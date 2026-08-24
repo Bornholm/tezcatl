@@ -73,7 +73,7 @@ Restes à faire (hors périmètre MVP) :
 - [x] métriques de santé : compteurs internes du moteur (ingérées/traitées/rejetées/événements) loggés périodiquement (`logging.stats_interval`) et en résumé final
 - [x] TLS sur les listeners : cibles `tls://host:port` servies avec `server.tls.{cert_file,key_file}`, clients avec `--tls-ca` (mTLS non couvert)
 - [ ] `StateStore` PostgreSQL (aujourd'hui fichiers uniquement)
-- [ ] job CI exécutant `misc/drain3-golden/generate.py` pour détecter les dérives de compatibilité
+- [x] CI (`.github/workflows/ci.yml`) : `go vet` + `go test -race ./...`, et job `drain-golden` qui régénère les fixtures avec le drain3 Python (non épinglé, exprès) puis échoue à la moindre dérive avant de les rejouer avec le port Go
 
 ## Chantiers cas d'usage
 
