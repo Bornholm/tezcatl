@@ -10,10 +10,12 @@ import (
 
 func toProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
 	proto := &tezcatlv1.Observation{
-		Id:         obs.ID,
-		Source:     obs.Source,
-		Modality:   toProtoModality(obs.Modality),
-		Attributes: obs.Attributes,
+		Id:          obs.ID,
+		Source:      obs.Source,
+		Service:     obs.Service,
+		Environment: obs.Environment,
+		Modality:    toProtoModality(obs.Modality),
+		Attributes:  obs.Attributes,
 	}
 
 	if !obs.Timestamp.IsZero() {
@@ -32,16 +34,26 @@ func toProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
 		}
 	}
 
+	if obs.Change != nil {
+		proto.Change = &tezcatlv1.ChangeRecord{
+			Type:    obs.Change.Type,
+			Version: obs.Change.Version,
+			Summary: obs.Change.Summary,
+		}
+	}
+
 	return proto
 }
 
 func fromProtoObservation(proto *tezcatlv1.Observation, ingestedAt time.Time) model.Observation {
 	obs := model.Observation{
-		ID:         proto.GetId(),
-		Source:     proto.GetSource(),
-		Modality:   fromProtoModality(proto.GetModality()),
-		IngestedAt: ingestedAt,
-		Attributes: proto.GetAttributes(),
+		ID:          proto.GetId(),
+		Source:      proto.GetSource(),
+		Service:     proto.GetService(),
+		Environment: proto.GetEnvironment(),
+		Modality:    fromProtoModality(proto.GetModality()),
+		IngestedAt:  ingestedAt,
+		Attributes:  proto.GetAttributes(),
 	}
 
 	if timestamp := proto.GetTimestamp(); timestamp != nil {
@@ -60,6 +72,14 @@ func fromProtoObservation(proto *tezcatlv1.Observation, ingestedAt time.Time) mo
 		}
 	}
 
+	if change := proto.GetChange(); change != nil {
+		obs.Change = &model.ChangeRecord{
+			Type:    change.GetType(),
+			Version: change.GetVersion(),
+			Summary: change.GetSummary(),
+		}
+	}
+
 	return obs
 }
 
@@ -69,6 +89,8 @@ func toProtoModality(modality model.Modality) tezcatlv1.Modality {
 		return tezcatlv1.Modality_MODALITY_LOG
 	case model.ModalityMetric:
 		return tezcatlv1.Modality_MODALITY_METRIC
+	case model.ModalityChange:
+		return tezcatlv1.Modality_MODALITY_CHANGE
 	case model.ModalityTrace:
 		return tezcatlv1.Modality_MODALITY_TRACE
 	default:
@@ -82,6 +104,8 @@ func fromProtoModality(modality tezcatlv1.Modality) model.Modality {
 		return model.ModalityLog
 	case tezcatlv1.Modality_MODALITY_METRIC:
 		return model.ModalityMetric
+	case tezcatlv1.Modality_MODALITY_CHANGE:
+		return model.ModalityChange
 	case tezcatlv1.Modality_MODALITY_TRACE:
 		return model.ModalityTrace
 	default:

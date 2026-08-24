@@ -62,8 +62,15 @@ type Pipeline struct {
 }
 
 type Logs struct {
+	Parsing   LogParsing   `yaml:"parsing"`
 	Drain     drain.Config `yaml:"drain"`
 	Detection LogDetection `yaml:"detection"`
+}
+
+type LogParsing struct {
+	// Enabled turns structured parsing (JSON, timestamps, levels) on;
+	// defaults to true.
+	Enabled *bool `yaml:"enabled"`
 }
 
 type LogDetection struct {
@@ -99,6 +106,11 @@ type Correlation struct {
 	Window        Duration `yaml:"window"`
 	ContextBefore int      `yaml:"context_before"`
 	ContextAfter  int      `yaml:"context_after"`
+	// Clock is "wall" for live streams or "event" to expire windows on
+	// observation timestamps (replaying past incidents).
+	Clock string `yaml:"clock"`
+	// ChangeHorizon is how far back changes are attached to events.
+	ChangeHorizon Duration `yaml:"change_horizon"`
 }
 
 type State struct {
@@ -175,6 +187,8 @@ func Default() *Config {
 			Window:        Duration(30 * time.Second),
 			ContextBefore: 10,
 			ContextAfter:  10,
+			Clock:         string(correlate.ClockWall),
+			ChangeHorizon: Duration(15 * time.Minute),
 		},
 		State: State{
 			SaveInterval: Duration(30 * time.Second),
@@ -242,6 +256,12 @@ func (c *Config) Validate() error {
 		return errors.New("correlation context sizes must not be negative")
 	}
 
+	switch correlate.Clock(c.Correlation.Clock) {
+	case correlate.ClockWall, correlate.ClockEvent:
+	default:
+		return errors.Errorf("unsupported correlation.clock %q (expected wall or event)", c.Correlation.Clock)
+	}
+
 	if c.Sinks.Postgres.Enabled && c.Sinks.Postgres.DSN == "" {
 		return errors.New("sinks.postgres.dsn is required when the postgres sink is enabled")
 	}
@@ -303,5 +323,7 @@ func (c *Config) CorrelationConfig() *correlate.Config {
 		Window:        c.Correlation.Window.AsDuration(),
 		ContextBefore: c.Correlation.ContextBefore,
 		ContextAfter:  c.Correlation.ContextAfter,
+		Clock:         correlate.Clock(c.Correlation.Clock),
+		ChangeHorizon: c.Correlation.ChangeHorizon.AsDuration(),
 	}
 }

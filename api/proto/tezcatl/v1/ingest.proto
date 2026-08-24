@@ -11,6 +11,7 @@ enum Modality {
   MODALITY_LOG = 1;
   MODALITY_METRIC = 2;
   MODALITY_TRACE = 3;
+  MODALITY_CHANGE = 4;
 }
 
 message LogRecord {
@@ -23,6 +24,12 @@ message MetricSample {
   map<string, string> labels = 3;
 }
 
+message ChangeRecord {
+  string type = 1;
+  string version = 2;
+  string summary = 3;
+}
+
 message Observation {
   string id = 1;
   string source = 2;
@@ -32,6 +39,10 @@ message Observation {
 
   LogRecord log = 6;
   MetricSample metric = 7;
+  ChangeRecord change = 8;
+
+  string service = 9;
+  string environment = 10;
 }
 
 message StreamSummary {

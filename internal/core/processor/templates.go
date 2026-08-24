@@ -35,11 +35,13 @@ func (p *TemplateMining) Process(ctx context.Context, obs *model.Observation, em
 		return false, errors.WithStack(err)
 	}
 
-	result := miner.AddLogMessage(obs.Log.Raw)
+	message := obs.Log.EffectiveMessage()
+
+	result := miner.AddLogMessage(message)
 
 	obs.Log.TemplateID = strconv.FormatInt(result.Cluster.ID, 10)
 	obs.Log.Template = result.Cluster.Template()
-	obs.Log.Parameters = miner.ExtractParameters(result.Cluster, obs.Log.Raw)
+	obs.Log.Parameters = miner.ExtractParameters(result.Cluster, message)
 
 	if obs.Attributes == nil {
 		obs.Attributes = map[string]string{}

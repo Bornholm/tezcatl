@@ -29,6 +29,7 @@ const (
 	Modality_MODALITY_LOG         Modality = 1
 	Modality_MODALITY_METRIC      Modality = 2
 	Modality_MODALITY_TRACE       Modality = 3
+	Modality_MODALITY_CHANGE      Modality = 4
 )
 
 // Enum value maps for Modality.
@@ -38,12 +39,14 @@ var (
 		1: "MODALITY_LOG",
 		2: "MODALITY_METRIC",
 		3: "MODALITY_TRACE",
+		4: "MODALITY_CHANGE",
 	}
 	Modality_value = map[string]int32{
 		"MODALITY_UNSPECIFIED": 0,
 		"MODALITY_LOG":         1,
 		"MODALITY_METRIC":      2,
 		"MODALITY_TRACE":       3,
+		"MODALITY_CHANGE":      4,
 	}
 )
 
@@ -178,6 +181,66 @@ func (x *MetricSample) GetLabels() map[string]string {
 	return nil
 }
 
+type ChangeRecord struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Summary       string                 `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeRecord) Reset() {
+	*x = ChangeRecord{}
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeRecord) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeRecord) ProtoMessage() {}
+
+func (x *ChangeRecord) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeRecord.ProtoReflect.Descriptor instead.
+func (*ChangeRecord) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_ingest_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ChangeRecord) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ChangeRecord) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ChangeRecord) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
 type Observation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -187,13 +250,16 @@ type Observation struct {
 	Attributes    map[string]string      `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Log           *LogRecord             `protobuf:"bytes,6,opt,name=log,proto3" json:"log,omitempty"`
 	Metric        *MetricSample          `protobuf:"bytes,7,opt,name=metric,proto3" json:"metric,omitempty"`
+	Change        *ChangeRecord          `protobuf:"bytes,8,opt,name=change,proto3" json:"change,omitempty"`
+	Service       string                 `protobuf:"bytes,9,opt,name=service,proto3" json:"service,omitempty"`
+	Environment   string                 `protobuf:"bytes,10,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_tezcatl_v1_ingest_proto_msgTypes[2]
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -205,7 +271,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_ingest_proto_msgTypes[2]
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -218,7 +284,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_ingest_proto_rawDescGZIP(), []int{2}
+	return file_tezcatl_v1_ingest_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Observation) GetId() string {
@@ -270,6 +336,27 @@ func (x *Observation) GetMetric() *MetricSample {
 	return nil
 }
 
+func (x *Observation) GetChange() *ChangeRecord {
+	if x != nil {
+		return x.Change
+	}
+	return nil
+}
+
+func (x *Observation) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *Observation) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
 type StreamSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Accepted      uint64                 `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
@@ -279,7 +366,7 @@ type StreamSummary struct {
 
 func (x *StreamSummary) Reset() {
 	*x = StreamSummary{}
-	mi := &file_tezcatl_v1_ingest_proto_msgTypes[3]
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -291,7 +378,7 @@ func (x *StreamSummary) String() string {
 func (*StreamSummary) ProtoMessage() {}
 
 func (x *StreamSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_ingest_proto_msgTypes[3]
+	mi := &file_tezcatl_v1_ingest_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -304,7 +391,7 @@ func (x *StreamSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamSummary.ProtoReflect.Descriptor instead.
 func (*StreamSummary) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_ingest_proto_rawDescGZIP(), []int{3}
+	return file_tezcatl_v1_ingest_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StreamSummary) GetAccepted() uint64 {
@@ -328,7 +415,11 @@ const file_tezcatl_v1_ingest_proto_rawDesc = "" +
 	"\x06labels\x18\x03 \x03(\v2$.tezcatl.v1.MetricSample.LabelsEntryR\x06labels\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x84\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"V\n" +
+	"\fChangeRecord\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x18\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\"\xf2\x03\n" +
 	"\vObservation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x120\n" +
@@ -338,17 +429,22 @@ const file_tezcatl_v1_ingest_proto_rawDesc = "" +
 	"attributes\x18\x05 \x03(\v2'.tezcatl.v1.Observation.AttributesEntryR\n" +
 	"attributes\x12'\n" +
 	"\x03log\x18\x06 \x01(\v2\x15.tezcatl.v1.LogRecordR\x03log\x120\n" +
-	"\x06metric\x18\a \x01(\v2\x18.tezcatl.v1.MetricSampleR\x06metric\x1a=\n" +
+	"\x06metric\x18\a \x01(\v2\x18.tezcatl.v1.MetricSampleR\x06metric\x120\n" +
+	"\x06change\x18\b \x01(\v2\x18.tezcatl.v1.ChangeRecordR\x06change\x12\x18\n" +
+	"\aservice\x18\t \x01(\tR\aservice\x12 \n" +
+	"\venvironment\x18\n" +
+	" \x01(\tR\venvironment\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"+\n" +
 	"\rStreamSummary\x12\x1a\n" +
-	"\baccepted\x18\x01 \x01(\x04R\baccepted*_\n" +
+	"\baccepted\x18\x01 \x01(\x04R\baccepted*t\n" +
 	"\bModality\x12\x18\n" +
 	"\x14MODALITY_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fMODALITY_LOG\x10\x01\x12\x13\n" +
 	"\x0fMODALITY_METRIC\x10\x02\x12\x12\n" +
-	"\x0eMODALITY_TRACE\x10\x032[\n" +
+	"\x0eMODALITY_TRACE\x10\x03\x12\x13\n" +
+	"\x0fMODALITY_CHANGE\x10\x042[\n" +
 	"\rIngestService\x12J\n" +
 	"\x12StreamObservations\x12\x17.tezcatl.v1.Observation\x1a\x19.tezcatl.v1.StreamSummary(\x01B6Z4github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1b\x06proto3"
 
@@ -365,31 +461,33 @@ func file_tezcatl_v1_ingest_proto_rawDescGZIP() []byte {
 }
 
 var file_tezcatl_v1_ingest_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_tezcatl_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_tezcatl_v1_ingest_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_tezcatl_v1_ingest_proto_goTypes = []any{
 	(Modality)(0),                 // 0: tezcatl.v1.Modality
 	(*LogRecord)(nil),             // 1: tezcatl.v1.LogRecord
 	(*MetricSample)(nil),          // 2: tezcatl.v1.MetricSample
-	(*Observation)(nil),           // 3: tezcatl.v1.Observation
-	(*StreamSummary)(nil),         // 4: tezcatl.v1.StreamSummary
-	nil,                           // 5: tezcatl.v1.MetricSample.LabelsEntry
-	nil,                           // 6: tezcatl.v1.Observation.AttributesEntry
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*ChangeRecord)(nil),          // 3: tezcatl.v1.ChangeRecord
+	(*Observation)(nil),           // 4: tezcatl.v1.Observation
+	(*StreamSummary)(nil),         // 5: tezcatl.v1.StreamSummary
+	nil,                           // 6: tezcatl.v1.MetricSample.LabelsEntry
+	nil,                           // 7: tezcatl.v1.Observation.AttributesEntry
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_tezcatl_v1_ingest_proto_depIdxs = []int32{
-	5, // 0: tezcatl.v1.MetricSample.labels:type_name -> tezcatl.v1.MetricSample.LabelsEntry
+	6, // 0: tezcatl.v1.MetricSample.labels:type_name -> tezcatl.v1.MetricSample.LabelsEntry
 	0, // 1: tezcatl.v1.Observation.modality:type_name -> tezcatl.v1.Modality
-	7, // 2: tezcatl.v1.Observation.timestamp:type_name -> google.protobuf.Timestamp
-	6, // 3: tezcatl.v1.Observation.attributes:type_name -> tezcatl.v1.Observation.AttributesEntry
+	8, // 2: tezcatl.v1.Observation.timestamp:type_name -> google.protobuf.Timestamp
+	7, // 3: tezcatl.v1.Observation.attributes:type_name -> tezcatl.v1.Observation.AttributesEntry
 	1, // 4: tezcatl.v1.Observation.log:type_name -> tezcatl.v1.LogRecord
 	2, // 5: tezcatl.v1.Observation.metric:type_name -> tezcatl.v1.MetricSample
-	3, // 6: tezcatl.v1.IngestService.StreamObservations:input_type -> tezcatl.v1.Observation
-	4, // 7: tezcatl.v1.IngestService.StreamObservations:output_type -> tezcatl.v1.StreamSummary
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	3, // 6: tezcatl.v1.Observation.change:type_name -> tezcatl.v1.ChangeRecord
+	4, // 7: tezcatl.v1.IngestService.StreamObservations:input_type -> tezcatl.v1.Observation
+	5, // 8: tezcatl.v1.IngestService.StreamObservations:output_type -> tezcatl.v1.StreamSummary
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_tezcatl_v1_ingest_proto_init() }
@@ -403,7 +501,7 @@ func file_tezcatl_v1_ingest_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tezcatl_v1_ingest_proto_rawDesc), len(file_tezcatl_v1_ingest_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

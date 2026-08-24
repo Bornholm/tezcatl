@@ -81,7 +81,7 @@ func TestRuntimeEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 
-	ingester := stdio.NewLogIngester(strings.NewReader(corpus.String()), "api")
+	ingester := stdio.NewLogIngester(strings.NewReader(corpus.String()), stdio.Identity{Service: "api"})
 
 	if err := runtime.Run(ctx, ingester); err != nil {
 		t.Fatalf("unexpected error: %+v", err)
@@ -119,7 +119,7 @@ func TestRuntimeEndToEnd(t *testing.T) {
 
 	replay := "request 4242 handled in 7 ms\nFATAL disk failure on /dev/sdb9\n"
 
-	if err := runtime2.Run(ctx, stdio.NewLogIngester(strings.NewReader(replay), "api")); err != nil {
+	if err := runtime2.Run(ctx, stdio.NewLogIngester(strings.NewReader(replay), stdio.Identity{Service: "api"})); err != nil {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 
@@ -153,8 +153,8 @@ func TestRuntimeMultimodalCorrelation(t *testing.T) {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 
-	logs := stdio.NewLogIngester(strings.NewReader("FATAL pool exhausted\n"), "api")
-	metrics := stdio.NewMetricIngester(strings.NewReader("pool_usage_percent 97\n"), "api")
+	logs := stdio.NewLogIngester(strings.NewReader("FATAL pool exhausted\n"), stdio.Identity{Service: "api"})
+	metrics := stdio.NewMetricIngester(strings.NewReader("pool_usage_percent 97\n"), stdio.Identity{Service: "api"})
 
 	if err := runtime.Run(ctx, logs, metrics); err != nil {
 		t.Fatalf("unexpected error: %+v", err)

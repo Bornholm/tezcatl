@@ -18,16 +18,16 @@ import (
 // end of the pipe is therefore the primary termination signal, context
 // cancellation being honored between reads.
 type LogIngester struct {
-	reader io.Reader
-	source string
-	now    func() time.Time
+	reader   io.Reader
+	identity Identity
+	now      func() time.Time
 }
 
-func NewLogIngester(reader io.Reader, source string) *LogIngester {
+func NewLogIngester(reader io.Reader, identity Identity) *LogIngester {
 	return &LogIngester{
-		reader: reader,
-		source: source,
-		now:    time.Now,
+		reader:   reader,
+		identity: identity,
+		now:      time.Now,
 	}
 }
 
@@ -44,11 +44,11 @@ func (i *LogIngester) Ingest(ctx context.Context, out chan<- model.Observation) 
 		now := i.now()
 
 		obs := model.Observation{
-			ID:         model.NewID(),
-			Source:     i.source,
-			Modality:   model.ModalityLog,
-			Timestamp:  now,
-			IngestedAt: now,
+			ID:          model.NewID(),
+			Service:     i.identity.Service,
+			Environment: i.identity.Environment,
+			Modality:    model.ModalityLog,
+			IngestedAt:  now,
 			Log: &model.LogRecord{
 				Raw: line,
 			},

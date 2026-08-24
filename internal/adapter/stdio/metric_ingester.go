@@ -17,16 +17,16 @@ import (
 // Malformed lines are logged and skipped so a partially broken exporter
 // does not stop ingestion.
 type MetricIngester struct {
-	reader io.Reader
-	source string
-	now    func() time.Time
+	reader   io.Reader
+	identity Identity
+	now      func() time.Time
 }
 
-func NewMetricIngester(reader io.Reader, source string) *MetricIngester {
+func NewMetricIngester(reader io.Reader, identity Identity) *MetricIngester {
 	return &MetricIngester{
-		reader: reader,
-		source: source,
-		now:    time.Now,
+		reader:   reader,
+		identity: identity,
+		now:      time.Now,
 	}
 }
 
@@ -37,7 +37,7 @@ func (i *MetricIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 	for scanner.Scan() {
 		sample, timestamp, err := prometheus.ParseLine(scanner.Text())
 		if err != nil {
-			slog.WarnContext(ctx, "skipping malformed metric line", slog.String("source", i.source), slog.Any("error", errors.WithStack(err)))
+			slog.WarnContext(ctx, "skipping malformed metric line", slog.String("service", i.identity.Service), slog.Any("error", errors.WithStack(err)))
 			continue
 		}
 
@@ -51,12 +51,13 @@ func (i *MetricIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 		}
 
 		obs := model.Observation{
-			ID:         model.NewID(),
-			Source:     i.source,
-			Modality:   model.ModalityMetric,
-			Timestamp:  timestamp,
-			IngestedAt: now,
-			Metric:     sample,
+			ID:          model.NewID(),
+			Service:     i.identity.Service,
+			Environment: i.identity.Environment,
+			Modality:    model.ModalityMetric,
+			Timestamp:   timestamp,
+			IngestedAt:  now,
+			Metric:      sample,
 		}
 
 		select {
