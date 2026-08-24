@@ -7,6 +7,11 @@ server:
   listen:
     - unix:///run/tezcatl.sock
     - tcp://0.0.0.0:4242
+    # tls://0.0.0.0:4243 serves the same services encrypted; clients use
+    # tls:// targets (and --tls-ca for a private CA).
+  # tls:
+  #   cert_file: /etc/tezcatl/tls/cert.pem
+  #   key_file: /etc/tezcatl/tls/key.pem
 
 pipeline:
   workers: 0
@@ -73,3 +78,4 @@ sinks:
 logging:
   level: info
   format: json
+  stats_interval: 1m

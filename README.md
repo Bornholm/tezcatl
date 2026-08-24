@@ -38,7 +38,14 @@ tezcatl ingest metrics --target tcp://host:4242 --service payment-api < metrics.
 tezcatl ingest change --target tcp://host:4242 \
   --service checkout --environment prod \
   --type deployment --change-version checkout:v1.8.2
+
+# Boucle de feedback : inspecter ce qui a été appris, marquer le bruit
+tezcatl templates --target unix:///run/tezcatl.sock
+tezcatl mark --target unix:///run/tezcatl.sock \
+  --template "connection reset by peer" --as ignore
 ```
+
+Les marquages (`normal`, `ignore`, `symptomatic`) prennent effet immédiatement et sont persistés avec l'état. La détection apprend des baselines par heure de la journée (`seasonality: hourly`) : un cron nocturne ou un pic de trafic quotidien n'est pas une anomalie. Le transport accepte `unix://`, `tcp://` et `tls://` (certificat côté serveur, `--tls-ca` côté client).
 
 Les logs JSON (dont `journalctl -o json`) sont parsés automatiquement : message, niveau et timestamp sont extraits, et la découverte de templates porte sur le message. Les métriques peuvent aussi être tirées de l'API Prometheus (`metrics.prometheus` dans la configuration, requêtes PromQL périodiques).
 
