@@ -1,31 +1,96 @@
-# Tezcatl standalone profile: local processing, events on stdout,
-# learned state persisted on disk.
+# =========================================================================
+# Configuration de référence de tezcatl — profil standalone, entièrement
+# commentée. Toutes les clés sont optionnelles : chaque valeur ci-dessous
+# est la valeur par défaut, sauf mention contraire. Les clés inconnues
+# sont rejetées au démarrage (validation stricte).
 #
+# Usage :
 #   journalctl -o json -fu app.service |
 #     tezcatl standalone logs --config standalone.yaml \
 #       --service app --environment production
 #
-# Add --replay to replay a past incident with an exact timeline, and
-# --changes-from deployments.jsonl to correlate deployments.
+# Le même fichier sert au mode serveur (tezcatl server --config …), seule
+# la section `server` diffère. Les durées s'écrivent "30s", "5m", "1h".
+# Les valeurs peuvent référencer l'environnement avec ${VAR} (secrets).
+# =========================================================================
 
+# --- Réseau (mode serveur uniquement, ignoré en standalone) --------------
+server:
+  # Points d'écoute gRPC. Trois schémas :
+  #   unix:///chemin/socket  — socket unix locale (recommandé sur l'hôte)
+  #   tcp://hôte:port        — TCP en clair (réseau de confiance)
+  #   tls://hôte:port        — TCP chiffré (exige la section tls)
+  listen:
+    - tcp://127.0.0.1:4242
+  # Certificat servant les cibles tls:// (les deux champs sont requis dès
+  # qu'une cible tls:// est déclarée). Côté client : --tls-ca pour une CA
+  # privée, sinon les racines système.
+  # tls:
+  #   cert_file: /etc/tezcatl/tls/cert.pem
+  #   key_file: /etc/tezcatl/tls/key.pem
+
+# --- Moteur de traitement ------------------------------------------------
 pipeline:
-  # 0 = number of CPUs - 1
+  # Nombre de workers partitionnés. Chaque source (environnement/service)
+  # est toujours traitée par le même worker, séquentiellement ; des
+  # sources différentes sont traitées en parallèle.
+  # 0 = nombre de CPU - 1.
   workers: 0
+  # Capacité des canaux d'observations et d'événements. Des canaux pleins
+  # ralentissent l'ingestion (backpressure) au lieu de perdre des données.
   observation_buffer_size: 1024
   event_buffer_size: 256
+  # Cadence de vidage des fenêtres temporelles (corrélation) pour les
+  # sources devenues silencieuses.
   flush_interval: 1s
+  # Troncature des lignes de log démesurées (octets).
   max_log_length: 8192
+  # true : émet un événement debug.observation par observation reçue.
+  # Utile pour vérifier la plomberie, très verbeux — laisser à false.
+  debug_events: false
 
+# --- Logs : parsing, templates, détection --------------------------------
 logs:
   parsing:
-    # JSON envelopes (incl. journald -o json), levels, timestamps.
+    # Parsing structurel avant la découverte de templates :
+    #   - enveloppes JSON (clés message/msg/log, level/severity/lvl,
+    #     time/ts/timestamp/@timestamp) ;
+    #   - journald -o json (MESSAGE, PRIORITY syslog, __REALTIME_TIMESTAMP) ;
+    #   - timestamp RFC3339 en tête de ligne (docker logs --timestamps).
+    # Le timestamp extrait devient l'heure de l'événement ; le mining
+    # porte sur le message, pas sur l'enveloppe.
     enabled: true
+
+  # Découverte de templates : port Go compatible drain3
+  # (https://github.com/logpai/Drain3). Chaque source a sa partition
+  # indépendante (arbre + clusters).
   drain:
+    # Profondeur de l'arbre de préfixes (≥ 3). Plus profond = clusters
+    # plus spécifiques.
     depth: 4
+    # Seuil de similarité [0..1] pour rattacher un message à un cluster
+    # existant. Plus haut = plus de clusters, plus fins.
     sim_th: 0.4
+    # Nombre maximal d'enfants par nœud de l'arbre avant de router vers
+    # le joker <*>.
     max_children: 100
-    # 0 = unlimited
+    # Nombre maximal de clusters par partition, avec éviction LRU.
+    # 0 = illimité.
     max_clusters: 0
+    # Jeton représentant un paramètre dans les templates.
+    param_str: "<*>"
+    # Délimiteurs supplémentaires convertis en espaces avant tokenisation.
+    extra_delimiters: []
+    # true : un jeton contenant un chiffre devient d'office un paramètre
+    # dans l'arbre (comportement drain3).
+    parametrize_numeric_tokens: true
+    # Habillage des noms de masques dans les templates (<IP>, <NUM>…).
+    mask_prefix: "<"
+    mask_suffix: ">"
+    # Masquage des parties variables AVANT le mining : chaque motif
+    # (syntaxe RE2 — pas de lookaround, utiliser \b) est remplacé par son
+    # nom de masque. L'ordre compte (appliqués séquentiellement).
+    # Défaut : aucun masque ; ceux-ci sont un point de départ raisonnable.
     masking:
       - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
         mask_with: IP
@@ -33,81 +98,166 @@ logs:
         mask_with: HEX
       - pattern: '\b\d+\b'
         mask_with: NUM
+
   detection:
+    # false : désactive entièrement la détection sur les logs.
+    enabled: true
+    # Fenêtre, depuis la première observation d'une source, pendant
+    # laquelle les nouveaux templates sont considérés normaux (le système
+    # « apprend » le comportement nominal).
     learning_period: 5m
+    # Template rare : signalé quand son cluster compte au plus
+    # rare_threshold occurrences alors que la source en a produit au
+    # moins rare_min_observations.
     rare_threshold: 3
     rare_min_observations: 500
+    # Pic de fréquence : les occurrences par template sont comptées par
+    # buckets de spike_bucket ; un bucket dépassant spike_factor × la
+    # baseline apprise (et au moins spike_min_count) est signalé.
     spike_bucket: 1m
     spike_factor: 3
     spike_min_count: 10
+    # Disparition : un template vu au moins disappearance_min_count fois
+    # est signalé absent quand son silence dépasse disappearance_factor ×
+    # son intervalle moyen. Le scan est borné par
+    # disappearance_scan_interval. disappearance_factor: 0 désactive.
     disappearance_factor: 3
     disappearance_min_count: 10
     disappearance_scan_interval: 30s
-    # hourly learns hour-of-day baselines (crons, daily traffic); none
-    # keeps flat baselines.
+    # Saisonnalité :
+    #   hourly — baselines par heure de la journée : un pic quotidien à
+    #            9h ou un cron nocturne ne sont pas des anomalies ; un
+    #            template jamais vu à une heure connue-active n'y est pas
+    #            attendu (dès seasonal_min_observations à cette heure) ;
+    #   none   — baselines plates.
     seasonality: hourly
     seasonal_min_observations: 50
-    # Markings seed the runtime feedback loop; use 'tezcatl mark' to
-    # adjust them without restarting.
+    # Marquages de templates (chaîne exacte, telle qu'affichée par
+    # `tezcatl templates`) :
+    #   normal      — attendu, aucun signal ;
+    #   ignore      — aucun signal non plus (bruit assumé) ;
+    #   symptomatic — signal fort à chaque occurrence.
+    # Ce bloc est la base ; `tezcatl mark` ajuste au runtime sans
+    # redémarrage et ses marquages, persistés avec l'état, priment.
     # markings:
     #   "connection reset by peer": ignore
     #   "disk failure on <*>": symptomatic
 
+# --- Métriques -----------------------------------------------------------
 metrics:
-  # Poll the Prometheus HTTP API for PromQL queries.
+  # Interrogation périodique de l'API Prometheus (aucun agent requis).
+  # Désactivé par défaut. Attention : activé, le processus ne se termine
+  # plus à la fermeture de stdin (arrêt par SIGINT/SIGTERM).
   prometheus:
     enabled: false
+    # URL de base de Prometheus.
     url: http://localhost:9090
+    # Cadence d'évaluation des requêtes.
     interval: 30s
+    # Identité par défaut des métriques collectées (surchargable par
+    # requête). La corrélation logs/métriques exige la même identité
+    # environnement/service que les logs.
+    service: app
     environment: production
     queries:
+        # name : nom logique de la métrique dans les observations.
+        # query : requête PromQL instantanée (vector ou scalar).
+        # service_label : dérive le service d'un label du résultat
+        #   (prioritaire sur service) — chaque valeur du label devient
+        #   une source distincte.
       - name: latency_p95
         query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
         service_label: service
       - name: pool_usage_percent
         query: 100 * db_pool_in_use / db_pool_size
         service: app
+
   detection:
+    # false : désactive la détection sur les métriques.
+    enabled: true
+    # Nombre d'échantillons par série avant les signaux statistiques
+    # (z-score, dérive) — les seuils statiques s'appliquent dès le 1er.
     warmup_samples: 30
+    # Lissage de la baseline moyenne/variance (EWMA). Plus petit = plus
+    # stable, plus lent à s'adapter.
     alpha: 0.05
+    # |z| au-delà duquel un échantillon est anormal vis-à-vis de la
+    # baseline.
     z_threshold: 3
+    # Dérive de tendance : deux EWMA (rapide/lente) ; un écart relatif
+    # supérieur à trend_threshold signale une dérive soutenue.
+    trend_fast_alpha: 0.3
+    trend_slow_alpha: 0.05
     trend_threshold: 0.5
+    # Seuils statiques par métrique (nom logique) : signal fort dès le
+    # franchissement. min et max sont chacun optionnels.
     # thresholds:
     #   - metric: pool_usage_percent
     #     max: 90
 
+# --- Corrélation ---------------------------------------------------------
 correlation:
+  # Fenêtre d'agrégation : les signaux d'une même source émis dans cette
+  # fenêtre forment UN événement (déduplication, confiance combinée).
+  # C'est aussi la latence maximale d'émission d'un événement.
   window: 30s
+  # Observations attachées à l'événement autour du premier signal.
   context_before: 10
   context_after: 10
-  # wall for live streams, event to replay past incidents (--replay).
+  # Horloge d'expiration des fenêtres :
+  #   wall  — horloge murale (flux temps réel) ;
+  #   event — timestamps des observations (rejeu d'incidents passés avec
+  #           chronologie exacte ; c'est ce que fait le flag --replay).
   clock: wall
-  # How far back deployments/changes are attached to events.
+  # Ancienneté maximale d'un changement (déploiement…) encore rattaché à
+  # un événement (related_changes, avec offset en secondes).
   change_horizon: 15m
 
+# --- Persistance de l'état appris ----------------------------------------
 state:
+  # Répertoire des snapshots : templates drain3, baselines des
+  # détecteurs, marquages runtime. L'état est restauré au démarrage —
+  # pas de réapprentissage, pas de faux positifs après redémarrage.
+  # Vide ("" — le défaut) : aucune persistance.
   dir: ./tezcatl-state
+  # Cadence de sauvegarde (plus une sauvegarde finale à l'arrêt).
   save_interval: 30s
 
+# --- Destinations des événements -----------------------------------------
 sinks:
+  # JSON Lines sur stdout — un événement par ligne. Les logs internes
+  # vont sur stderr, stdout reste propre pour du pipe (jq…).
   stdout:
     enabled: true
+  # PostgreSQL : table tezcatl_events (créée au démarrage — la base doit
+  # être joignable à ce moment-là ; les coupures ultérieures sont
+  # absorbées par une file bornée avec retries, sans bloquer le
+  # pipeline).
   postgres:
     enabled: false
-    # Secrets come from the environment.
+    # DSN libpq/pgx ; le secret vient de l'environnement.
     dsn: ${TEZCATL_POSTGRES_DSN}
+    # File d'attente locale et tentatives avant abandon d'un événement.
     queue_size: 1024
     max_attempts: 5
+  # Webhook : un POST JSON par événement (notifications). Même file
+  # bornée + retries que PostgreSQL.
   webhook:
     enabled: false
     url: https://example.net/hooks/tezcatl
+    # En-têtes ajoutés à chaque requête (authentification…).
     headers:
       Authorization: Bearer ${TEZCATL_WEBHOOK_TOKEN}
     queue_size: 256
     max_attempts: 5
 
+# --- Logs internes -------------------------------------------------------
 logging:
+  # debug | info | warn | error
   level: info
+  # text | json
   format: text
-  # Internal pipeline counters; 0s disables periodic logging.
+  # Cadence des compteurs de santé du pipeline (observations ingérées /
+  # traitées / rejetées, événements publiés), plus un résumé final à
+  # l'arrêt. "0s" désactive le périodique.
   stats_interval: 1m
