@@ -75,6 +75,17 @@ Exemple d'événement produit (une ligne JSON par événement) :
 
 L'état appris (templates Drain3, baselines des détecteurs) est persisté dans `state.dir` et restauré au redémarrage : un template déjà connu ne redéclenche pas d'anomalie.
 
+## Déploiement
+
+Des paquets Debian/Arch (`tezcatl`, `tezcatl-server`, `tezcatl-dokku`) et
+une image de conteneur (`ghcr.io/bornholm/tezcatl`) sont publiés à chaque
+release. Guides pas à pas :
+
+- [Serveur Dokku/Ubuntu](./docs/deploy-dokku.md) — paquets, ingestion des
+  logs par application, hook de déploiement ;
+- [Kubernetes](./docs/deploy-kubernetes.md) — serveur en Deployment,
+  métriques via Prometheus, forwarder de logs, changements depuis la CI.
+
 ## Configuration
 
 Tout est configurable en YAML (validation stricte au démarrage, secrets via `${VAR}`) : listeners, buffers, workers, masques Drain3, période d'apprentissage, détecteurs, fenêtre de corrélation, persistance, sinks (stdout JSONL et/ou PostgreSQL). Profils d'exemple dans [misc/config](./misc/config).
