@@ -27,9 +27,11 @@ type Observation struct {
 
 // PartitionKey identifies the sequential processing unit an observation
 // belongs to: observations sharing a key are always handled by the same
-// engine worker, in ingestion order.
+// engine worker, in ingestion order. Partitioning by source keeps all
+// modalities of a system on the same worker, which gives correlation a
+// consistent view without cross-worker synchronization.
 func (o *Observation) PartitionKey() string {
-	return o.Source + "/" + string(o.Modality)
+	return o.Source
 }
 
 type LogRecord struct {
