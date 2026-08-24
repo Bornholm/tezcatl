@@ -10,6 +10,7 @@ import (
 	"github.com/bornholm/tezcatl/internal/adapter/postgres"
 	"github.com/bornholm/tezcatl/internal/adapter/prometheus"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
+	"github.com/bornholm/tezcatl/internal/adapter/webhook"
 	"github.com/bornholm/tezcatl/internal/config"
 	"github.com/bornholm/tezcatl/internal/core/correlate"
 	"github.com/bornholm/tezcatl/internal/core/detect"
@@ -115,6 +116,15 @@ func (r *Runtime) build(ctx context.Context) error {
 		}
 
 		r.sinks = append(r.sinks, sink.NewResilient("postgres", pg, cfg.Sinks.Postgres.QueueSize, cfg.Sinks.Postgres.MaxAttempts))
+	}
+
+	if cfg.Sinks.Webhook.Enabled {
+		hook, err := webhook.NewEventSink(cfg.Sinks.Webhook.URL, cfg.Sinks.Webhook.Headers)
+		if err != nil {
+			return errors.Wrap(err, "could not set up webhook sink")
+		}
+
+		r.sinks = append(r.sinks, sink.NewResilient("webhook", hook, cfg.Sinks.Webhook.QueueSize, cfg.Sinks.Webhook.MaxAttempts))
 	}
 
 	if len(r.sinks) == 0 {
