@@ -2,6 +2,12 @@ package model
 
 import "time"
 
+// Attributes set on log observations by the template mining stage.
+const (
+	AttrTemplateChangeType = "drain.change_type"
+	AttrClusterSize        = "drain.cluster_size"
+)
+
 type Modality string
 
 const (

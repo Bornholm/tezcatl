@@ -4,8 +4,11 @@ import (
 	"context"
 	"hash/fnv"
 	"log/slog"
+	"sync"
+	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/model"
+	"github.com/bornholm/tezcatl/internal/core/port"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -91,7 +94,34 @@ func (e *Engine) Run(ctx context.Context) error {
 	g.Go(func() error {
 		defer close(events)
 
-		if err := workers.Wait(); err != nil {
+		emit := func(evt model.Event) {
+			select {
+			case events <- evt:
+			case <-gctx.Done():
+			}
+		}
+
+		flusherDone := make(chan struct{})
+		var flusherWait sync.WaitGroup
+
+		flusherWait.Go(func() {
+			e.runFlushers(gctx, flusherDone, emit)
+		})
+
+		err := workers.Wait()
+
+		close(flusherDone)
+		flusherWait.Wait()
+
+		// Final flush: the pipeline is draining, emit whatever is
+		// pending regardless of correlation windows.
+		for _, proc := range e.opts.Processors {
+			if flusher, ok := proc.(port.Flusher); ok {
+				flusher.Flush(gctx, true, emit)
+			}
+		}
+
+		if err != nil {
 			return errors.WithStack(err)
 		}
 
@@ -116,6 +146,37 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// runFlushers periodically flushes the processors holding time-based
+// state, so pending events are emitted even when no observation arrives.
+func (e *Engine) runFlushers(ctx context.Context, done <-chan struct{}, emit func(evt model.Event)) {
+	flushers := []port.Flusher{}
+	for _, proc := range e.opts.Processors {
+		if flusher, ok := proc.(port.Flusher); ok {
+			flushers = append(flushers, flusher)
+		}
+	}
+
+	if len(flushers) == 0 {
+		return
+	}
+
+	ticker := time.NewTicker(e.opts.FlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			for _, flusher := range flushers {
+				flusher.Flush(ctx, false, emit)
+			}
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (e *Engine) runWorker(ctx context.Context, input <-chan model.Observation, events chan<- model.Event) error {
