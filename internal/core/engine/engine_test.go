@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -123,6 +124,68 @@ func TestEngineProcessesAllObservations(t *testing.T) {
 		}
 
 		lastSequence[evt.Source] = sequence
+	}
+}
+
+type slowSink struct {
+	memorySink
+	delay time.Duration
+}
+
+func (s *slowSink) Publish(ctx context.Context, events []model.Event) error {
+	time.Sleep(s.delay)
+
+	return s.memorySink.Publish(ctx, events)
+}
+
+// TestEngineBackpressure verifies that a slow sink slows ingestion down
+// through the bounded channels instead of losing events or deadlocking,
+// and that buffered work is drained at shutdown.
+func TestEngineBackpressure(t *testing.T) {
+	const total = 300
+
+	observations := make([]model.Observation, 0, total)
+	for i := range total {
+		observations = append(observations, model.Observation{
+			ID:       model.NewID(),
+			Source:   fmt.Sprintf("source-%d", i%3),
+			Modality: model.ModalityLog,
+			Log:      &model.LogRecord{Raw: "line"},
+		})
+	}
+
+	sink := &slowSink{delay: time.Millisecond}
+
+	e := New(
+		WithIngesters(&staticIngester{observations: observations}),
+		WithProcessors(&debugProcessor{}),
+		WithSinks(sink),
+		WithWorkers(2),
+		WithObservationBufferSize(4),
+		WithEventBufferSize(4),
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	before := runtime.NumGoroutine()
+
+	if err := e.Run(ctx); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if got := len(sink.events); got != total {
+		t.Fatalf("expected %d events, got %d", total, got)
+	}
+
+	// All engine goroutines must be gone once Run returns.
+	deadline := time.Now().Add(2 * time.Second)
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if after := runtime.NumGoroutine(); after > before {
+		t.Fatalf("goroutine leak: %d before, %d after", before, after)
 	}
 }
 
