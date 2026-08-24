@@ -1,0 +1,20 @@
+[Unit]
+Description=Tezcatl log ingestion for Dokku app %i
+Documentation=https://github.com/bornholm/tezcatl
+After=docker.service tezcatl-server.service
+
+[Service]
+# Cible et environnement par défaut, surchargables dans
+# /etc/tezcatl/ingest.env (ex. serveur distant en tls://).
+Environment=TEZCATL_TARGET=unix:///run/tezcatl/tezcatl.sock
+Environment=TEZCATL_ENVIRONMENT=production
+EnvironmentFile=-/etc/tezcatl/ingest.env
+ExecStart=/bin/sh -c 'dokku logs %i -t 2>&1 | tezcatl ingest logs \
+    --target "$TEZCATL_TARGET" \
+    --service %i \
+    --environment "$TEZCATL_ENVIRONMENT"'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
