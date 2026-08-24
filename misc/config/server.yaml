@@ -1,7 +1,11 @@
-# Tezcatl server profile: gRPC ingestion over unix socket and TCP,
-# events stored in PostgreSQL, learned state persisted on disk.
+# Profil serveur tezcatl : ingestion gRPC (socket unix + TCP),
+# événements vers PostgreSQL, état persisté sur disque.
 #
 #   tezcatl server --config server.yaml
+#
+# Profil volontairement concis : la référence commentée de TOUTES les
+# options (avec leurs valeurs par défaut) est standalone.yaml, dans ce
+# même répertoire.
 
 server:
   listen:
