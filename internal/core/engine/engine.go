@@ -127,7 +127,6 @@ func (e *Engine) runWorker(ctx context.Context, input <-chan model.Observation, 
 	}
 
 	for obs := range input {
-		obs := obs
 		for _, proc := range e.opts.Processors {
 			next, err := proc.Process(ctx, &obs, emit)
 			if err != nil {
