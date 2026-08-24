@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/model"
@@ -21,7 +22,25 @@ import (
 // every ingester has returned, so buffered observations are drained
 // before Run returns.
 type Engine struct {
-	opts *Options
+	opts  *Options
+	stats stats
+}
+
+// stats are the internal health counters of the pipeline.
+type stats struct {
+	ingested  atomic.Int64
+	processed atomic.Int64
+	rejected  atomic.Int64
+	events    atomic.Int64
+}
+
+func (s *stats) log(ctx context.Context, message string) {
+	slog.InfoContext(ctx, message,
+		slog.Int64("observations_ingested", s.ingested.Load()),
+		slog.Int64("observations_processed", s.processed.Load()),
+		slog.Int64("observations_rejected", s.rejected.Load()),
+		slog.Int64("events_published", s.events.Load()),
+	)
 }
 
 func New(funcs ...OptionFunc) *Engine {
@@ -72,6 +91,8 @@ func (e *Engine) Run(ctx context.Context) error {
 		}()
 
 		for obs := range observations {
+			e.stats.ingested.Add(1)
+
 			input := workerInputs[partitionIndex(obs.PartitionKey(), len(workerInputs))]
 
 			select {
@@ -83,6 +104,26 @@ func (e *Engine) Run(ctx context.Context) error {
 
 		return nil
 	})
+
+	statsDone := make(chan struct{})
+
+	if e.opts.StatsInterval > 0 {
+		g.Go(func() error {
+			ticker := time.NewTicker(e.opts.StatsInterval)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					e.stats.log(gctx, "pipeline stats")
+				case <-statsDone:
+					return nil
+				case <-gctx.Done():
+					return nil
+				}
+			}
+		})
+	}
 
 	workers, workersCtx := errgroup.WithContext(gctx)
 	for _, input := range workerInputs {
@@ -129,7 +170,11 @@ func (e *Engine) Run(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
+		defer close(statsDone)
+
 		for evt := range events {
+			e.stats.events.Add(1)
+
 			for _, sink := range e.opts.Sinks {
 				if err := sink.Publish(gctx, []model.Event{evt}); err != nil {
 					// A failing sink must not take the pipeline down.
@@ -141,7 +186,11 @@ func (e *Engine) Run(ctx context.Context) error {
 		return nil
 	})
 
-	if err := g.Wait(); err != nil {
+	err := g.Wait()
+
+	e.stats.log(ctx, "pipeline stopped")
+
+	if err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -188,17 +237,27 @@ func (e *Engine) runWorker(ctx context.Context, input <-chan model.Observation, 
 	}
 
 	for obs := range input {
+		rejected := false
+
 		for _, proc := range e.opts.Processors {
 			next, err := proc.Process(ctx, &obs, emit)
 			if err != nil {
 				// Drop the observation, keep the pipeline alive.
 				slog.ErrorContext(ctx, "processor failed", slog.String("processor", proc.Name()), slog.String("observation", obs.ID), slog.Any("error", errors.WithStack(err)))
+				rejected = true
 				break
 			}
 
 			if !next {
+				rejected = true
 				break
 			}
+		}
+
+		if rejected {
+			e.stats.rejected.Add(1)
+		} else {
+			e.stats.processed.Add(1)
 		}
 	}
 

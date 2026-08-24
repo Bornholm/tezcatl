@@ -181,6 +181,7 @@ func (r *Runtime) Run(ctx context.Context, ingesters ...port.Ingester) error {
 		engine.WithObservationBufferSize(r.config.Pipeline.ObservationBufferSize),
 		engine.WithEventBufferSize(r.config.Pipeline.EventBufferSize),
 		engine.WithFlushInterval(r.config.Pipeline.FlushInterval.AsDuration()),
+		engine.WithStatsInterval(r.config.Logging.StatsInterval.AsDuration()),
 	}
 
 	if r.config.Pipeline.Workers > 0 {

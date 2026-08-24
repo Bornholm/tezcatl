@@ -36,6 +36,14 @@ func NewIngestCommand() *cli.Command {
 				},
 			},
 			{
+				Name:  "changes",
+				Usage: "Forward change records (JSON Lines) read from stdin, e.g. from a CI pipeline or docker events",
+				Flags: ingestFlags(),
+				Action: func(ctx *cli.Context) error {
+					return runIngest(ctx, stdio.NewChangeIngester(os.Stdin, identity(ctx)))
+				},
+			},
+			{
 				Name:  "change",
 				Usage: "Report a single change (deployment, configuration, restart...)",
 				Flags: append(ingestFlags(),
@@ -100,13 +108,17 @@ func ingestFlags() []cli.Flag {
 			Usage: "capacity of the local forwarding buffer",
 			Value: 1024,
 		},
+		&cli.StringFlag{
+			Name:  "tls-ca",
+			Usage: "PEM CA bundle verifying a tls:// target (default: system roots)",
+		},
 	)
 }
 
 func runIngest(ctx *cli.Context, ingester port.Ingester) error {
 	observations := make(chan model.Observation, ctx.Int("buffer-size"))
 
-	client := grpc.NewClient(ctx.String("target"))
+	client := grpc.NewClient(ctx.String("target"), grpc.ClientWithCA(ctx.String("tls-ca")))
 
 	g, gctx := errgroup.WithContext(ctx.Context)
 
