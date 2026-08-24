@@ -16,6 +16,8 @@ pipeline:
   max_log_length: 8192
 
 logs:
+  parsing:
+    enabled: true
   drain:
     depth: 4
     sim_th: 0.4
@@ -32,6 +34,14 @@ logs:
     learning_period: 15m
 
 metrics:
+  prometheus:
+    enabled: false
+    url: http://prometheus:9090
+    interval: 30s
+    queries:
+      - name: latency_p95
+        query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+        service_label: service
   detection:
     warmup_samples: 30
 
@@ -39,6 +49,8 @@ correlation:
   window: 30s
   context_before: 10
   context_after: 10
+  clock: wall
+  change_horizon: 15m
 
 state:
   dir: /var/lib/tezcatl/state
@@ -52,6 +64,11 @@ sinks:
     dsn: ${TEZCATL_POSTGRES_DSN}
     queue_size: 4096
     max_attempts: 5
+  webhook:
+    enabled: false
+    url: https://example.net/hooks/tezcatl
+    headers:
+      Authorization: Bearer ${TEZCATL_WEBHOOK_TOKEN}
 
 logging:
   level: info

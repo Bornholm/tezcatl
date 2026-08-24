@@ -79,24 +79,26 @@ Restes à faire (hors périmètre MVP) :
 
 Déclinaison de [USE_CASES.md](../USE_CASES.md) (dogfooding Dokku/systemd/Docker, puis Kubernetes). Le moteur est en place ; ces chantiers portent sur la couche d'entrée et la couche sémantique.
 
-### C1 — Logs réels et rejeu d'incidents
+### C1 — Logs réels et rejeu d'incidents ✅
 
-- [ ] Identité canonique `service` + `environment` de première classe (partition et corrélation par `env/service`, flags `--service`/`--environment`, champs protobuf dédiés)
-- [ ] Parsing structuré des logs : JSON (clés usuelles + journald `-o json`), niveaux normalisés, timestamps extraits (JSON, RFC3339 en tête de ligne, préfixe syslog) — le mining porte sur le message, plus sur l'enveloppe
-- [ ] Horloge de corrélation configurable `wall|event` + flag `--replay` : les fenêtres avancent sur le temps des événements, ce qui permet de rejouer un incident passé avec une chronologie exacte (les détecteurs sont déjà en event-time)
+- [x] Identité canonique `service` + `environment` de première classe (`--service`/`--environment`, `Source = env/service` dérivé à la normalisation, champs protobuf dédiés)
+- [x] Parsing structuré des logs (`processor.ParseLog`) : JSON (clés usuelles + journald `-o json` : MESSAGE/PRIORITY/__REALTIME_TIMESTAMP), niveaux normalisés, timestamps extraits (JSON string/epoch, RFC3339 en tête de ligne à la docker) — le mining porte sur le message extrait, plus sur l'enveloppe
+- [x] Horloge de corrélation `wall|event` (`correlation.clock`) + flag `--replay` : les fenêtres expirent sur le watermark des timestamps d'observation, chronologie exacte au rejeu (les détecteurs étaient déjà en event-time)
 
-Objectif de validation : rejouer trois incidents passés connus et vérifier que tezcatl rassemble automatiquement ce qu'un ingénieur cherche à la main.
+Objectif de validation (à faire avec de vrais incidents) : rejouer trois incidents passés connus et vérifier que tezcatl rassemble automatiquement ce qu'un ingénieur cherche à la main. Le scénario-type de USE_CASES.md (déploiement 14:02 → anomalie SQL 14:05) est reproduit : événement critique horodaté 14:05:00 avec le déploiement en `related_changes` à −180 s.
 
-### C2 — Métriques depuis l'API Prometheus
+### C2 — Métriques depuis l'API Prometheus ✅
 
-- [ ] Ingester interrogeant périodiquement `/api/v1/query` avec des requêtes PromQL configurées (nom de métrique logique, identité service/env statique ou dérivée d'un label)
-- [ ] Activable en standalone comme en serveur (composé par `setup.Runtime`)
+- [x] `adapter/prometheus.Poller` : évaluation périodique de requêtes PromQL (`/api/v1/query`, vector et scalar), nom de métrique logique par requête, identité statique ou dérivée d'un label (`service_label`)
+- [x] Activable en standalone comme en serveur (`metrics.prometheus` dans la config, composé par `setup.Runtime`)
+- Note : un poller actif rend le processus persistant (l'ingestion ne se termine plus à la fermeture de stdin) — arrêt par SIGINT/SIGTERM
 
-### C3 — Modalité « changement »
+### C3 — Modalité « changement » ✅
 
-- [ ] `ModalityChange` + `ChangeRecord` (type, version, résumé) dans le modèle et le protobuf
-- [ ] `tezcatl ingest change` (one-shot) et `--changes-from` (JSONL) en standalone
-- [ ] Le corrélateur attache les changements récents aux événements (`related_changes` avec offset temporel) — en tant que **corrélation**, pas preuve
+- [x] `ModalityChange` + `ChangeRecord` (type, version, résumé) dans le modèle et le protobuf
+- [x] `tezcatl ingest change` (one-shot) et `--changes-from` (JSONL `{"time","type","version","summary"}`) en standalone
+- [x] Le corrélateur attache les changements récents aux événements (`related_changes` avec `offset_seconds`, horizon `correlation.change_horizon`) — documenté comme **corrélation**, pas preuve
+- [ ] Watcher de déploiements Kubernetes/Dokku alimentant automatiquement cette modalité (voir C4)
 
 ### C4 — Corrélation multi-sources (Kubernetes)
 
@@ -109,9 +111,9 @@ Objectif de validation : rejouer trois incidents passés connus et vérifier que
 - [ ] Titre, chronologie ordonnée, distinction trigger/evidence/related_changes/hypothèses
 - [ ] Résumé destiné à un humain ; export optionnel vers un LLM
 
-### C6 — Sorties complémentaires
+### C6 — Sorties complémentaires 🟡
 
-- [ ] Sink webhook (notification HTTP par événement, derrière le sink résilient)
+- [x] Sink webhook (`sinks.webhook` : POST JSON par événement, headers configurables pour les secrets, derrière le sink résilient)
 - [ ] Sink SQLite (alternative légère à PostgreSQL pour le mode personnel)
 
 ## Après le MVP

@@ -1,7 +1,12 @@
 # Tezcatl standalone profile: local processing, events on stdout,
 # learned state persisted on disk.
 #
-#   tail -F app.log | tezcatl standalone logs --config standalone.yaml --source app
+#   journalctl -o json -fu app.service |
+#     tezcatl standalone logs --config standalone.yaml \
+#       --service app --environment production
+#
+# Add --replay to replay a past incident with an exact timeline, and
+# --changes-from deployments.jsonl to correlate deployments.
 
 pipeline:
   # 0 = number of CPUs - 1
@@ -12,6 +17,9 @@ pipeline:
   max_log_length: 8192
 
 logs:
+  parsing:
+    # JSON envelopes (incl. journald -o json), levels, timestamps.
+    enabled: true
   drain:
     depth: 4
     sim_th: 0.4
@@ -40,6 +48,19 @@ logs:
     #   "disk failure on <*>": symptomatic
 
 metrics:
+  # Poll the Prometheus HTTP API for PromQL queries.
+  prometheus:
+    enabled: false
+    url: http://localhost:9090
+    interval: 30s
+    environment: production
+    queries:
+      - name: latency_p95
+        query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+        service_label: service
+      - name: pool_usage_percent
+        query: 100 * db_pool_in_use / db_pool_size
+        service: app
   detection:
     warmup_samples: 30
     alpha: 0.05
@@ -53,6 +74,10 @@ correlation:
   window: 30s
   context_before: 10
   context_after: 10
+  # wall for live streams, event to replay past incidents (--replay).
+  clock: wall
+  # How far back deployments/changes are attached to events.
+  change_horizon: 15m
 
 state:
   dir: ./tezcatl-state
@@ -66,6 +91,13 @@ sinks:
     # Secrets come from the environment.
     dsn: ${TEZCATL_POSTGRES_DSN}
     queue_size: 1024
+    max_attempts: 5
+  webhook:
+    enabled: false
+    url: https://example.net/hooks/tezcatl
+    headers:
+      Authorization: Bearer ${TEZCATL_WEBHOOK_TOKEN}
+    queue_size: 256
     max_attempts: 5
 
 logging:

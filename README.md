@@ -12,37 +12,54 @@ Un binaire unique, trois modes :
 
 ```bash
 # Traitement local autonome : stdin → détection → événements JSONL sur stdout
-tail -F application.log |
+journalctl -o json -fu payment-api.service |
   tezcatl standalone logs \
     --config misc/config/standalone.yaml \
-    --source payment-api
+    --service payment-api --environment production
+
+# Rejouer un incident passé avec une chronologie exacte (fenêtres de
+# corrélation sur le temps des événements) et corréler les déploiements
+cat incident.log |
+  tezcatl standalone logs --service checkout --environment prod \
+    --replay --changes-from deployments.jsonl
 
 # Serveur centralisé (gRPC unix/TCP)
 tezcatl server --config misc/config/server.yaml
 
-# Client d'ingestion distant
-tail -F application.log |
+# Clients d'ingestion distants
+docker logs -f payment-api 2>&1 |
   tezcatl ingest logs \
     --target unix:///run/tezcatl.sock \
-    --source payment-api
+    --service payment-api --environment production
 
-# Métriques (format texte Prometheus), en standalone ou vers un serveur
-tezcatl standalone metrics --source payment-api < metrics.txt
-tezcatl ingest metrics --target tcp://host:4242 --source payment-api < metrics.txt
+tezcatl ingest metrics --target tcp://host:4242 --service payment-api < metrics.txt
+
+# Signaler un déploiement (corrélé aux anomalies qui suivent)
+tezcatl ingest change --target tcp://host:4242 \
+  --service checkout --environment prod \
+  --type deployment --change-version checkout:v1.8.2
 ```
+
+Les logs JSON (dont `journalctl -o json`) sont parsés automatiquement : message, niveau et timestamp sont extraits, et la découverte de templates porte sur le message. Les métriques peuvent aussi être tirées de l'API Prometheus (`metrics.prometheus` dans la configuration, requêtes PromQL périodiques).
 
 Exemple d'événement produit (une ligne JSON par événement) :
 
 ```json
 {
   "kind": "anomaly.correlated",
-  "source": "payment-api",
+  "source": "prod/checkout",
+  "service": "checkout",
+  "environment": "prod",
+  "timestamp": "2026-08-24T14:05:00Z",
   "severity": "critical",
-  "confidence": 0.98,
-  "summary": "new log template after learning period: FATAL pool exhausted (+1 correlated signals)",
+  "confidence": 0.92,
+  "summary": "new log template after learning period: database connection timeout after 30s (+1 correlated signals)",
   "signals": [
-    {"kind": "log.new_template", "score": 0.8, "attributes": {"template": "FATAL pool exhausted"}},
+    {"kind": "log.new_template", "score": 0.8, "attributes": {"template": "database connection timeout after <NUM>s"}},
     {"kind": "metric.threshold", "score": 0.9, "attributes": {"metric": "pool_usage_percent", "value": "97"}}
+  ],
+  "related_changes": [
+    {"change": {"type": "deployment", "version": "checkout:v1.8.2"}, "offset_seconds": -180}
   ],
   "context": {"before": ["…"], "after": ["…"]},
   "attributes": {"multimodal": "true", "signal_count": "2"}
