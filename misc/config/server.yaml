@@ -1,0 +1,58 @@
+# Tezcatl server profile: gRPC ingestion over unix socket and TCP,
+# events stored in PostgreSQL, learned state persisted on disk.
+#
+#   tezcatl server --config server.yaml
+
+server:
+  listen:
+    - unix:///run/tezcatl.sock
+    - tcp://0.0.0.0:4242
+
+pipeline:
+  workers: 0
+  observation_buffer_size: 4096
+  event_buffer_size: 1024
+  flush_interval: 1s
+  max_log_length: 8192
+
+logs:
+  drain:
+    depth: 4
+    sim_th: 0.4
+    max_children: 100
+    max_clusters: 0
+    masking:
+      - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
+        mask_with: IP
+      - pattern: '\b[0-9a-fA-F]{8,}\b'
+        mask_with: HEX
+      - pattern: '\b\d+\b'
+        mask_with: NUM
+  detection:
+    learning_period: 15m
+
+metrics:
+  detection:
+    warmup_samples: 30
+
+correlation:
+  window: 30s
+  context_before: 10
+  context_after: 10
+
+state:
+  dir: /var/lib/tezcatl/state
+  save_interval: 30s
+
+sinks:
+  stdout:
+    enabled: false
+  postgres:
+    enabled: true
+    dsn: ${TEZCATL_POSTGRES_DSN}
+    queue_size: 4096
+    max_attempts: 5
+
+logging:
+  level: info
+  format: json

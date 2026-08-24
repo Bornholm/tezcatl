@@ -1,0 +1,213 @@
+package setup
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"os"
+
+	"github.com/bornholm/tezcatl/internal/adapter/fs"
+	"github.com/bornholm/tezcatl/internal/adapter/postgres"
+	"github.com/bornholm/tezcatl/internal/adapter/stdio"
+	"github.com/bornholm/tezcatl/internal/config"
+	"github.com/bornholm/tezcatl/internal/core/correlate"
+	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/drain"
+	"github.com/bornholm/tezcatl/internal/core/engine"
+	"github.com/bornholm/tezcatl/internal/core/port"
+	"github.com/bornholm/tezcatl/internal/core/processor"
+	"github.com/bornholm/tezcatl/internal/core/sink"
+	"github.com/bornholm/tezcatl/internal/core/state"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+)
+
+// Runtime is the fully composed pipeline for one tezcatl process,
+// identical between the server and standalone modes except for the
+// ingesters.
+type Runtime struct {
+	config       *config.Config
+	processors   []port.Processor
+	sinks        []port.EventSink
+	snapshotters []port.Snapshotter
+	stateStore   port.StateStore
+	eventsOut    io.Writer
+}
+
+type RuntimeOptionFunc func(r *Runtime)
+
+// WithEventsOutput overrides the writer of the stdout sink (tests).
+func WithEventsOutput(w io.Writer) RuntimeOptionFunc {
+	return func(r *Runtime) {
+		r.eventsOut = w
+	}
+}
+
+func NewRuntime(ctx context.Context, cfg *config.Config, funcs ...RuntimeOptionFunc) (*Runtime, error) {
+	runtime := &Runtime{
+		config:    cfg,
+		eventsOut: os.Stdout,
+	}
+
+	for _, fn := range funcs {
+		fn(runtime)
+	}
+
+	if err := runtime.build(ctx); err != nil {
+		runtime.Close()
+		return nil, errors.WithStack(err)
+	}
+
+	return runtime, nil
+}
+
+func (r *Runtime) build(ctx context.Context) error {
+	cfg := r.config
+
+	// Processors: normalize → template mining → analysis (→ debug).
+	r.processors = []port.Processor{
+		processor.NewNormalize(processor.WithMaxLogLength(cfg.Pipeline.MaxLogLength)),
+	}
+
+	miner := drain.NewPartitionedMiner(&cfg.Logs.Drain)
+	mining := processor.NewTemplateMining(miner)
+	r.processors = append(r.processors, mining)
+	r.snapshotters = append(r.snapshotters, mining)
+
+	detectors := []detect.Detector{}
+
+	if cfg.Logs.Detection.Enabled == nil || *cfg.Logs.Detection.Enabled {
+		logDetector := detect.NewLogDetector(cfg.LogDetectionConfig())
+		detectors = append(detectors, logDetector)
+		r.snapshotters = append(r.snapshotters, logDetector)
+	}
+
+	if cfg.Metrics.Detection.Enabled == nil || *cfg.Metrics.Detection.Enabled {
+		metricDetector := detect.NewMetricDetector(cfg.MetricDetectionConfig())
+		detectors = append(detectors, metricDetector)
+		r.snapshotters = append(r.snapshotters, metricDetector)
+	}
+
+	if len(detectors) > 0 {
+		correlator := correlate.NewCorrelator(cfg.CorrelationConfig())
+		r.processors = append(r.processors, processor.NewAnalysis(correlator, detectors...))
+	}
+
+	if cfg.Pipeline.DebugEvents {
+		r.processors = append(r.processors, processor.NewDebug())
+	}
+
+	// Sinks.
+	if cfg.Sinks.Stdout.Enabled == nil || *cfg.Sinks.Stdout.Enabled {
+		r.sinks = append(r.sinks, stdio.NewJSONLSink(r.eventsOut))
+	}
+
+	if cfg.Sinks.Postgres.Enabled {
+		pg, err := postgres.NewEventSink(ctx, cfg.Sinks.Postgres.DSN)
+		if err != nil {
+			return errors.Wrap(err, "could not set up postgres sink")
+		}
+
+		r.sinks = append(r.sinks, sink.NewResilient("postgres", pg, cfg.Sinks.Postgres.QueueSize, cfg.Sinks.Postgres.MaxAttempts))
+	}
+
+	if len(r.sinks) == 0 {
+		return errors.New("no sink enabled")
+	}
+
+	// State persistence.
+	if cfg.State.Dir != "" {
+		store, err := fs.NewStateStore(cfg.State.Dir)
+		if err != nil {
+			return errors.Wrap(err, "could not set up state store")
+		}
+
+		r.stateStore = store
+	}
+
+	return nil
+}
+
+// Run executes the engine fed by the given ingesters, alongside the
+// state persistence loop when enabled. It blocks until ingestion
+// completes or the context is canceled.
+func (r *Runtime) Run(ctx context.Context, ingesters ...port.Ingester) error {
+	defer r.Close()
+
+	opts := []engine.OptionFunc{
+		engine.WithIngesters(ingesters...),
+		engine.WithProcessors(r.processors...),
+		engine.WithSinks(r.sinks...),
+		engine.WithObservationBufferSize(r.config.Pipeline.ObservationBufferSize),
+		engine.WithEventBufferSize(r.config.Pipeline.EventBufferSize),
+		engine.WithFlushInterval(r.config.Pipeline.FlushInterval.AsDuration()),
+	}
+
+	if r.config.Pipeline.Workers > 0 {
+		opts = append(opts, engine.WithWorkers(r.config.Pipeline.Workers))
+	}
+
+	if r.stateStore != nil {
+		manager := state.NewManager(r.stateStore, r.config.State.SaveInterval.AsDuration(), r.snapshotters...)
+
+		if err := manager.RestoreAll(ctx); err != nil {
+			return errors.WithStack(err)
+		}
+
+		g, gctx := errgroup.WithContext(ctx)
+
+		engineCtx, stopEngine := context.WithCancel(gctx)
+		defer stopEngine()
+
+		managerCtx, stopManager := context.WithCancel(context.WithoutCancel(gctx))
+
+		g.Go(func() error {
+			// The manager stops (and saves one final time) once the
+			// engine is done.
+			defer stopManager()
+
+			if err := engine.New(opts...).Run(engineCtx); err != nil {
+				return errors.WithStack(err)
+			}
+
+			return nil
+		})
+
+		g.Go(func() error {
+			if err := manager.Run(managerCtx); err != nil {
+				return errors.WithStack(err)
+			}
+
+			return nil
+		})
+
+		if err := g.Wait(); err != nil {
+			return errors.WithStack(err)
+		}
+
+		return nil
+	}
+
+	if err := engine.New(opts...).Run(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+// Close releases the sinks and the state store.
+func (r *Runtime) Close() {
+	for _, s := range r.sinks {
+		if err := s.Close(); err != nil {
+			slog.Error("could not close sink", slog.Any("error", err))
+		}
+	}
+	r.sinks = nil
+
+	if r.stateStore != nil {
+		if err := r.stateStore.Close(); err != nil {
+			slog.Error("could not close state store", slog.Any("error", err))
+		}
+		r.stateStore = nil
+	}
+}

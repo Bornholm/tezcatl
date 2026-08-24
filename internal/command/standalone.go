@@ -4,12 +4,19 @@ import (
 	"os"
 
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
-	"github.com/bornholm/tezcatl/internal/core/engine"
 	"github.com/bornholm/tezcatl/internal/core/port"
-	"github.com/bornholm/tezcatl/internal/core/processor"
+	"github.com/bornholm/tezcatl/internal/setup"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
+
+func sourceFlag() *cli.StringFlag {
+	return &cli.StringFlag{
+		Name:     "source",
+		Usage:    "logical source of the observations",
+		Required: true,
+	}
+}
 
 func NewStandaloneCommand() *cli.Command {
 	return &cli.Command{
@@ -19,7 +26,8 @@ func NewStandaloneCommand() *cli.Command {
 			{
 				Name:  "logs",
 				Usage: "Process log lines read from stdin, emit events on stdout as JSON Lines",
-				Flags: append(standaloneFlags(),
+				Flags: append(commonFlags(),
+					sourceFlag(),
 					&cli.StringFlag{
 						Name:  "metrics-from",
 						Usage: "also ingest Prometheus text format metrics from this file or FIFO",
@@ -46,7 +54,7 @@ func NewStandaloneCommand() *cli.Command {
 			{
 				Name:  "metrics",
 				Usage: "Process Prometheus text format metrics read from stdin, emit events on stdout as JSON Lines",
-				Flags: standaloneFlags(),
+				Flags: append(commonFlags(), sourceFlag()),
 				Action: func(ctx *cli.Context) error {
 					return runStandalone(ctx, []port.Ingester{
 						stdio.NewMetricIngester(os.Stdin, ctx.String("source")),
@@ -57,57 +65,18 @@ func NewStandaloneCommand() *cli.Command {
 	}
 }
 
-func standaloneFlags() []cli.Flag {
-	return []cli.Flag{
-		&cli.StringFlag{
-			Name:     "source",
-			Usage:    "logical source of the observations",
-			Required: true,
-		},
-		&cli.IntFlag{
-			Name:  "workers",
-			Usage: "number of partitioned workers (0 = number of CPUs - 1)",
-		},
-		&cli.IntFlag{
-			Name:  "observation-buffer-size",
-			Usage: "capacity of the observation channels",
-			Value: 1024,
-		},
-		&cli.IntFlag{
-			Name:  "event-buffer-size",
-			Usage: "capacity of the event channel",
-			Value: 256,
-		},
-		&cli.BoolFlag{
-			Name:  "debug-events",
-			Usage: "emit one debug.observation event per observation (default until detectors exist)",
-			Value: true,
-		},
-	}
-}
-
 func runStandalone(ctx *cli.Context, ingesters []port.Ingester) error {
-	processors := []port.Processor{
-		processor.NewNormalize(),
+	cfg, err := loadConfig(ctx)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
-	if ctx.Bool("debug-events") {
-		processors = append(processors, processor.NewDebug())
+	runtime, err := setup.NewRuntime(ctx.Context, cfg)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
-	opts := []engine.OptionFunc{
-		engine.WithIngesters(ingesters...),
-		engine.WithProcessors(processors...),
-		engine.WithSinks(stdio.NewJSONLSink(os.Stdout)),
-		engine.WithObservationBufferSize(ctx.Int("observation-buffer-size")),
-		engine.WithEventBufferSize(ctx.Int("event-buffer-size")),
-	}
-
-	if workers := ctx.Int("workers"); workers > 0 {
-		opts = append(opts, engine.WithWorkers(workers))
-	}
-
-	if err := engine.New(opts...).Run(ctx.Context); err != nil {
+	if err := runtime.Run(ctx.Context, ingesters...); err != nil {
 		return errors.WithStack(err)
 	}
 

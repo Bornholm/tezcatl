@@ -1,13 +1,8 @@
 package command
 
 import (
-	"os"
-
 	"github.com/bornholm/tezcatl/internal/adapter/grpc"
-	"github.com/bornholm/tezcatl/internal/adapter/stdio"
-	"github.com/bornholm/tezcatl/internal/core/engine"
-	"github.com/bornholm/tezcatl/internal/core/port"
-	"github.com/bornholm/tezcatl/internal/core/processor"
+	"github.com/bornholm/tezcatl/internal/setup"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 )
@@ -16,46 +11,30 @@ func NewServerCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "server",
 		Usage: "Run the centralized ingestion server",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "config",
-				Usage: "path to the YAML configuration file",
-			},
+		Flags: append(commonFlags(),
 			&cli.StringSliceFlag{
 				Name:  "listen",
-				Usage: "listen target, e.g. unix:///run/tezcatl.sock or tcp://127.0.0.1:4242 (repeatable)",
-				Value: cli.NewStringSlice("tcp://127.0.0.1:4242"),
+				Usage: "listen target, e.g. unix:///run/tezcatl.sock or tcp://127.0.0.1:4242 (repeatable, overrides the configuration)",
 			},
-			&cli.IntFlag{
-				Name:  "workers",
-				Usage: "number of partitioned workers (0 = number of CPUs - 1)",
-			},
-			&cli.BoolFlag{
-				Name:  "debug-events",
-				Usage: "emit one debug.observation event per observation (default until detectors exist)",
-				Value: true,
-			},
-		},
+		),
 		Action: func(ctx *cli.Context) error {
-			processors := []port.Processor{
-				processor.NewNormalize(),
+			cfg, err := loadConfig(ctx)
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
-			if ctx.Bool("debug-events") {
-				processors = append(processors, processor.NewDebug())
+			if listen := ctx.StringSlice("listen"); len(listen) > 0 {
+				cfg.Server.Listen = listen
 			}
 
-			opts := []engine.OptionFunc{
-				engine.WithIngesters(grpc.NewServerIngester(ctx.StringSlice("listen")...)),
-				engine.WithProcessors(processors...),
-				engine.WithSinks(stdio.NewJSONLSink(os.Stdout)),
+			runtime, err := setup.NewRuntime(ctx.Context, cfg)
+			if err != nil {
+				return errors.WithStack(err)
 			}
 
-			if workers := ctx.Int("workers"); workers > 0 {
-				opts = append(opts, engine.WithWorkers(workers))
-			}
+			ingester := grpc.NewServerIngester(cfg.Server.Listen...)
 
-			if err := engine.New(opts...).Run(ctx.Context); err != nil {
+			if err := runtime.Run(ctx.Context, ingester); err != nil {
 				return errors.WithStack(err)
 			}
 
