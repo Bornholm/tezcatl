@@ -54,9 +54,22 @@ type LogConfig struct {
 	// DisappearanceScanInterval bounds the frequency of the per-source
 	// overdue templates scan.
 	DisappearanceScanInterval time.Duration `yaml:"disappearance_scan_interval"`
+	// Seasonality is "hourly" to learn hour-of-day baselines (crons,
+	// nightly jobs, daily traffic patterns) or "none" for flat
+	// baselines.
+	Seasonality string `yaml:"seasonality"`
+	// SeasonalMinObservations is the number of observations a source
+	// must have accumulated at a given hour of day before that hour is
+	// considered known (and templates never seen then are not expected).
+	SeasonalMinObservations int64 `yaml:"seasonal_min_observations"`
 	// Markings overrides the behavior of specific templates.
 	Markings map[string]Marking `yaml:"markings"`
 }
+
+const (
+	SeasonalityNone   = "none"
+	SeasonalityHourly = "hourly"
+)
 
 func DefaultLogConfig() *LogConfig {
 	return &LogConfig{
@@ -69,6 +82,8 @@ func DefaultLogConfig() *LogConfig {
 		DisappearanceFactor:       3,
 		DisappearanceMinCount:     10,
 		DisappearanceScanInterval: 30 * time.Second,
+		Seasonality:               SeasonalityHourly,
+		SeasonalMinObservations:   50,
 	}
 }
 
@@ -92,6 +107,9 @@ type logSourceState struct {
 	Total     int64                     `json:"total"`
 	Templates map[string]*templateStats `json:"templates"`
 	LastScan  time.Time                 `json:"last_scan"`
+	// HourlySeen counts the observations of the source per hour of day,
+	// telling seasonality which hours are known to be active.
+	HourlySeen [24]int64 `json:"hourly_seen,omitempty"`
 }
 
 type templateStats struct {
@@ -104,6 +122,12 @@ type templateStats struct {
 	BucketBaseline  float64   `json:"bucket_baseline"`
 	SpikeSignaled   bool      `json:"spike_signaled"`
 	MissingSignaled bool      `json:"missing_signaled"`
+	// HourlyCounts counts the occurrences of the template per hour of
+	// day; HourlyBaseline is the per-bucket EWMA per hour of day, and
+	// HourlyFolded the number of buckets folded into it.
+	HourlyCounts   [24]int64   `json:"hourly_counts,omitempty"`
+	HourlyBaseline [24]float64 `json:"hourly_baseline,omitempty"`
+	HourlyFolded   [24]int64   `json:"hourly_folded,omitempty"`
 }
 
 const intervalAlpha = 0.3
@@ -213,6 +237,12 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 	stats.LastSeen = timestamp
 	stats.MissingSignaled = false
 
+	if d.seasonal() {
+		hour := timestamp.Hour()
+		state.HourlySeen[hour]++
+		stats.HourlyCounts[hour]++
+	}
+
 	d.rollBucket(stats, timestamp)
 	stats.BucketCount++
 
@@ -263,22 +293,46 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 			}))
 	}
 
-	spikeThreshold := max(float64(d.config.SpikeMinCount), stats.BucketBaseline*d.config.SpikeFactor)
-	if !learning && !stats.SpikeSignaled && stats.BucketBaseline > 0 && float64(stats.BucketCount) >= spikeThreshold {
+	baseline := d.spikeBaseline(stats, timestamp)
+
+	spikeThreshold := max(float64(d.config.SpikeMinCount), baseline*d.config.SpikeFactor)
+	if !learning && !stats.SpikeSignaled && baseline > 0 && float64(stats.BucketCount) >= spikeThreshold {
 		stats.SpikeSignaled = true
 
 		signals = append(signals, newSignal(SignalLogFrequencySpike, 0.7,
 			fmt.Sprintf("frequency spike for template (%d in current bucket, baseline %.1f): %s",
-				stats.BucketCount, stats.BucketBaseline, obs.Log.Template),
+				stats.BucketCount, baseline, obs.Log.Template),
 			map[string]string{
 				"bucket_count": strconv.FormatInt(stats.BucketCount, 10),
-				"baseline":     strconv.FormatFloat(stats.BucketBaseline, 'f', 2, 64),
+				"baseline":     strconv.FormatFloat(baseline, 'f', 2, 64),
 			}))
 	}
 
 	signals = append(signals, d.scanMissing(state, timestamp, obs.Source)...)
 
 	return signals
+}
+
+func (d *LogDetector) seasonal() bool {
+	return d.config.Seasonality == SeasonalityHourly
+}
+
+// spikeBaseline picks the expected per-bucket count: the hour-of-day
+// baseline when seasonality has enough history for the current hour, the
+// flat baseline otherwise.
+func (d *LogDetector) spikeBaseline(stats *templateStats, timestamp time.Time) float64 {
+	if !d.seasonal() {
+		return stats.BucketBaseline
+	}
+
+	const minFoldedBuckets = 3
+
+	hour := timestamp.Hour()
+	if stats.HourlyFolded[hour] >= minFoldedBuckets {
+		return stats.HourlyBaseline[hour]
+	}
+
+	return stats.BucketBaseline
 }
 
 func (d *LogDetector) rollBucket(stats *templateStats, timestamp time.Time) {
@@ -295,6 +349,14 @@ func (d *LogDetector) rollBucket(stats *templateStats, timestamp time.Time) {
 	stats.BucketBaseline += bucketAlpha * (float64(stats.BucketCount) - stats.BucketBaseline)
 	for i := int64(1); i < int64(elapsed) && i <= 60; i++ {
 		stats.BucketBaseline += bucketAlpha * (0 - stats.BucketBaseline)
+	}
+
+	// The hour-of-day baseline only folds observed buckets, so a quiet
+	// night does not erase what a busy hour looks like.
+	if d.seasonal() {
+		hour := stats.BucketStart.Hour()
+		stats.HourlyBaseline[hour] += bucketAlpha * (float64(stats.BucketCount) - stats.HourlyBaseline[hour])
+		stats.HourlyFolded[hour]++
 	}
 
 	stats.BucketStart = bucketStart
@@ -322,6 +384,16 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 
 		if marking := d.markings[stats.Template]; marking == MarkingIgnore || marking == MarkingNormal {
 			continue
+		}
+
+		// Seasonality: when the source is known to be active at this
+		// hour of day but the template has never appeared then (a
+		// nightly cron checked at noon), do not expect it.
+		if d.seasonal() {
+			hour := timestamp.Hour()
+			if stats.HourlyCounts[hour] == 0 && state.HourlySeen[hour] >= d.config.SeasonalMinObservations {
+				continue
+			}
 		}
 
 		overdue := d.config.DisappearanceFactor * stats.MeanIntervalS

@@ -85,6 +85,8 @@ type LogDetection struct {
 	DisappearanceFactor       float64                   `yaml:"disappearance_factor"`
 	DisappearanceMinCount     int64                     `yaml:"disappearance_min_count"`
 	DisappearanceScanInterval Duration                  `yaml:"disappearance_scan_interval"`
+	Seasonality               string                    `yaml:"seasonality"`
+	SeasonalMinObservations   int64                     `yaml:"seasonal_min_observations"`
 	Markings                  map[string]detect.Marking `yaml:"markings"`
 }
 
@@ -195,6 +197,8 @@ func Default() *Config {
 				DisappearanceFactor:       3,
 				DisappearanceMinCount:     10,
 				DisappearanceScanInterval: Duration(30 * time.Second),
+				Seasonality:               detect.SeasonalityHourly,
+				SeasonalMinObservations:   50,
 			},
 		},
 		Metrics: Metrics{
@@ -294,6 +298,18 @@ func (c *Config) Validate() error {
 		return errors.Errorf("unsupported correlation.clock %q (expected wall or event)", c.Correlation.Clock)
 	}
 
+	switch c.Logs.Detection.Seasonality {
+	case detect.SeasonalityNone, detect.SeasonalityHourly:
+	default:
+		return errors.Errorf("unsupported logs.detection.seasonality %q (expected none or hourly)", c.Logs.Detection.Seasonality)
+	}
+
+	for template, marking := range c.Logs.Detection.Markings {
+		if !detect.ValidMarking(marking) {
+			return errors.Errorf("unsupported marking %q for template %q", marking, template)
+		}
+	}
+
 	if c.Sinks.Postgres.Enabled && c.Sinks.Postgres.DSN == "" {
 		return errors.New("sinks.postgres.dsn is required when the postgres sink is enabled")
 	}
@@ -354,6 +370,8 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		DisappearanceFactor:       detection.DisappearanceFactor,
 		DisappearanceMinCount:     detection.DisappearanceMinCount,
 		DisappearanceScanInterval: detection.DisappearanceScanInterval.AsDuration(),
+		Seasonality:               detection.Seasonality,
+		SeasonalMinObservations:   detection.SeasonalMinObservations,
 		Markings:                  detection.Markings,
 	}
 }
