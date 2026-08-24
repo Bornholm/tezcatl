@@ -1,0 +1,168 @@
+Accepted password for bob from 10.0.0.1 port 38024 ssh2
+GET /api/orders returned 200 in 755 ms
+connection pool db-main usage 87 percent
+session 9935 expired for user bob
+cache warmup complete
+disconnecting idle client 10.0.0.1 after 119 seconds
+Failed password for invalid user bob from 10.0.0.1 port 58698 ssh2
+Accepted password for trent from 10.0.0.1 port 21952 ssh2
+GET /api/orders returned 200 in 518 ms
+Accepted password for alice from 10.0.1.4 port 33031 ssh2
+PUT /metrics returned 201 in 226 ms
+Accepted password for peggy from 10.0.1.5 port 38231 ssh2
+GET /api/orders returned 500 in 433 ms
+connection pool db-replica usage 36 percent
+Accepted password for carol from 10.0.0.4 port 42059 ssh2
+GET /api/users returned 201 in 100 ms
+Accepted password for mallory from 10.0.2.4 port 42541 ssh2
+PUT /api/payments returned 503 in 45 ms
+Accepted password for peggy from 10.0.1.4 port 28180 ssh2
+POST /api/users returned 404 in 301 ms
+connection pool cache usage 80 percent
+Accepted password for mallory from 10.0.1.5 port 32601 ssh2
+PUT /api/users returned 200 in 678 ms
+session 4733 expired for user mallory
+Accepted password for eve from 10.0.0.2 port 35256 ssh2
+GET /health returned 200 in 465 ms
+Accepted password for mallory from 10.0.0.3 port 44260 ssh2
+POST /api/orders returned 500 in 274 ms
+connection pool cache usage 88 percent
+Accepted password for bob from 10.0.1.5 port 31215 ssh2
+PUT /api/orders returned 200 in 474 ms
+Accepted password for trent from 10.0.0.5 port 56500 ssh2
+GET /api/payments returned 503 in 787 ms
+cache warmup complete
+disconnecting idle client 10.0.0.5 after 87 seconds
+Accepted password for dave from 10.0.2.4 port 22103 ssh2
+POST /health returned 200 in 68 ms
+connection pool db-main usage 73 percent
+Accepted password for mallory from 10.0.0.4 port 52717 ssh2
+POST /health returned 200 in 272 ms
+Failed password for invalid user mallory from 10.0.0.4 port 29150 ssh2
+Accepted password for dave from 10.0.2.2 port 56789 ssh2
+PUT /api/payments returned 500 in 599 ms
+session 8019 expired for user dave
+Accepted password for trent from 10.0.1.1 port 34373 ssh2
+GET /metrics returned 201 in 94 ms
+connection pool db-main usage 15 percent
+Accepted password for carol from 10.0.2.1 port 30484 ssh2
+PUT /health returned 404 in 66 ms
+Accepted password for trent from 10.0.1.2 port 59052 ssh2
+POST /metrics returned 200 in 567 ms
+Accepted password for alice from 10.0.2.1 port 27507 ssh2
+PUT /metrics returned 503 in 274 ms
+connection pool cache usage 44 percent
+Accepted password for bob from 10.0.0.5 port 48492 ssh2
+GET /health returned 200 in 740 ms
+Accepted password for eve from 10.0.1.4 port 31708 ssh2
+PUT /api/users returned 503 in 641 ms
+Accepted password for eve from 10.0.2.4 port 53270 ssh2
+PUT /api/orders returned 200 in 383 ms
+connection pool db-main usage 70 percent
+session 9689 expired for user eve
+Accepted password for alice from 10.0.1.5 port 41243 ssh2
+POST /api/users returned 200 in 372 ms
+cache warmup complete
+disconnecting idle client 10.0.1.5 after 344 seconds
+Accepted password for dave from 10.0.0.1 port 35785 ssh2
+PUT /api/users returned 200 in 750 ms
+Accepted password for peggy from 10.0.2.4 port 24535 ssh2
+PUT /api/orders returned 200 in 676 ms
+connection pool db-replica usage 71 percent
+Accepted password for carol from 10.0.0.5 port 54581 ssh2
+PUT /health returned 200 in 553 ms
+Accepted password for dave from 10.0.2.2 port 40428 ssh2
+POST /api/payments returned 201 in 530 ms
+Failed password for invalid user dave from 10.0.2.2 port 49588 ssh2
+Accepted password for bob from 10.0.0.4 port 34725 ssh2
+GET /api/payments returned 200 in 603 ms
+connection pool cache usage 30 percent
+Accepted password for dave from 10.0.0.1 port 24652 ssh2
+PUT /api/users returned 200 in 70 ms
+session 1514 expired for user dave
+Accepted password for mallory from 10.0.0.2 port 53695 ssh2
+GET /api/payments returned 500 in 498 ms
+Accepted password for dave from 10.0.1.4 port 28671 ssh2
+PUT /metrics returned 404 in 485 ms
+connection pool db-main usage 61 percent
+Accepted password for trent from 10.0.0.4 port 26181 ssh2
+GET /health returned 200 in 434 ms
+Accepted password for trent from 10.0.1.3 port 23550 ssh2
+PUT /api/users returned 200 in 413 ms
+Accepted password for mallory from 10.0.2.3 port 27161 ssh2
+GET /api/orders returned 200 in 550 ms
+connection pool db-replica usage 18 percent
+cache warmup complete
+disconnecting idle client 10.0.2.3 after 462 seconds
+Accepted password for carol from 10.0.0.5 port 50318 ssh2
+GET /api/users returned 201 in 828 ms
+Accepted password for bob from 10.0.0.1 port 55427 ssh2
+GET /api/users returned 503 in 870 ms
+session 4872 expired for user bob
+Accepted password for carol from 10.0.1.2 port 51826 ssh2
+POST /api/orders returned 503 in 411 ms
+connection pool db-main usage 22 percent
+Accepted password for trent from 10.0.0.1 port 45586 ssh2
+POST /health returned 200 in 434 ms
+Accepted password for peggy from 10.0.0.3 port 32445 ssh2
+POST /api/orders returned 200 in 594 ms
+Accepted password for alice from 10.0.2.2 port 40552 ssh2
+GET /api/users returned 404 in 489 ms
+connection pool cache usage 68 percent
+Failed password for invalid user alice from 10.0.2.2 port 30317 ssh2
+Accepted password for alice from 10.0.1.4 port 25250 ssh2
+GET /api/users returned 404 in 70 ms
+Accepted password for dave from 10.0.1.2 port 27856 ssh2
+PUT /api/orders returned 404 in 609 ms
+Accepted password for alice from 10.0.1.5 port 25372 ssh2
+POST /metrics returned 404 in 536 ms
+connection pool db-replica usage 34 percent
+session 4346 expired for user alice
+Accepted password for mallory from 10.0.0.4 port 37407 ssh2
+POST /api/orders returned 500 in 661 ms
+Accepted password for eve from 10.0.1.3 port 40720 ssh2
+GET /api/users returned 201 in 637 ms
+cache warmup complete
+disconnecting idle client 10.0.1.3 after 132 seconds
+Accepted password for bob from 10.0.1.4 port 33969 ssh2
+PUT /api/payments returned 200 in 358 ms
+connection pool db-main usage 32 percent
+Accepted password for mallory from 10.0.0.5 port 30338 ssh2
+POST /metrics returned 500 in 310 ms
+Accepted password for alice from 10.0.2.1 port 56346 ssh2
+POST /api/users returned 200 in 271 ms
+Accepted password for bob from 10.0.2.5 port 27014 ssh2
+PUT /metrics returned 200 in 279 ms
+connection pool db-replica usage 78 percent
+Accepted password for dave from 10.0.2.2 port 42471 ssh2
+GET /api/payments returned 404 in 501 ms
+session 5114 expired for user dave
+Accepted password for alice from 10.0.0.2 port 47759 ssh2
+POST /api/users returned 200 in 342 ms
+Accepted password for carol from 10.0.2.1 port 37167 ssh2
+GET /health returned 404 in 723 ms
+connection pool db-replica usage 72 percent
+Accepted password for alice from 10.0.0.2 port 24931 ssh2
+PUT /api/orders returned 404 in 37 ms
+Failed password for invalid user alice from 10.0.0.2 port 44196 ssh2
+Accepted password for carol from 10.0.1.2 port 28352 ssh2
+GET /api/payments returned 200 in 816 ms
+Accepted password for alice from 10.0.2.5 port 43449 ssh2
+GET /api/orders returned 500 in 106 ms
+connection pool db-replica usage 100 percent
+Accepted password for trent from 10.0.1.5 port 30128 ssh2
+GET /api/orders returned 503 in 831 ms
+cache warmup complete
+disconnecting idle client 10.0.1.5 after 211 seconds
+Accepted password for trent from 10.0.0.1 port 31754 ssh2
+PUT /api/payments returned 503 in 422 ms
+session 5065 expired for user trent
+Accepted password for eve from 10.0.0.3 port 27084 ssh2
+POST /api/users returned 503 in 482 ms
+connection pool db-main usage 26 percent
+Accepted password for peggy from 10.0.1.1 port 40000 ssh2
+GET /api/orders returned 200 in 676 ms
+Accepted password for dave from 10.0.1.2 port 41512 ssh2
+POST /api/users returned 503 in 286 ms
+server shutting down gracefully
+server shutting down now
