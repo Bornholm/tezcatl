@@ -1,0 +1,866 @@
+{
+  "lines": [
+    {
+      "cluster_id": 1,
+      "change_type": "cluster_created",
+      "template": "Accepted password for bob from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "cluster_created",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user bob"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user bob from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "cluster_created",
+      "template": "Accepted password for trent from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "cluster_created",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "cluster_template_changed",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 10,
+      "change_type": "cluster_created",
+      "template": "PUT /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 11,
+      "change_type": "cluster_created",
+      "template": "connection pool db-replica usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "cluster_template_changed",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 10,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 12,
+      "change_type": "cluster_created",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 13,
+      "change_type": "cluster_created",
+      "template": "connection pool cache usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 10,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 14,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user mallory"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 15,
+      "change_type": "cluster_created",
+      "template": "GET /health returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 16,
+      "change_type": "cluster_created",
+      "template": "POST /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 17,
+      "change_type": "cluster_created",
+      "template": "connection pool cache usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 18,
+      "change_type": "cluster_created",
+      "template": "PUT /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 19,
+      "change_type": "cluster_created",
+      "template": "GET /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 20,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 21,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 22,
+      "change_type": "cluster_created",
+      "template": "POST /health returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 23,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 22,
+      "change_type": "none",
+      "template": "POST /health returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 24,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user mallory from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 25,
+      "change_type": "cluster_created",
+      "template": "PUT /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 26,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user dave"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 27,
+      "change_type": "cluster_created",
+      "template": "GET /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 28,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 29,
+      "change_type": "cluster_created",
+      "template": "PUT /health returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 30,
+      "change_type": "cluster_created",
+      "template": "POST /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 29,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 28,
+      "change_type": "cluster_template_changed",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 31,
+      "change_type": "cluster_created",
+      "template": "GET /health returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 29,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 29,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 28,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 32,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user eve"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 33,
+      "change_type": "cluster_created",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 34,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 35,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 36,
+      "change_type": "cluster_created",
+      "template": "PUT /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 36,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 37,
+      "change_type": "cluster_created",
+      "template": "connection pool db-replica usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 36,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 38,
+      "change_type": "cluster_created",
+      "template": "POST /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 39,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user dave from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 40,
+      "change_type": "cluster_created",
+      "template": "GET /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 41,
+      "change_type": "cluster_created",
+      "template": "connection pool cache usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 42,
+      "change_type": "cluster_created",
+      "template": "PUT /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 43,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user dave"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 44,
+      "change_type": "cluster_created",
+      "template": "GET /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 42,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 45,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 44,
+      "change_type": "cluster_template_changed",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 42,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 44,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 45,
+      "change_type": "cluster_template_changed",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 46,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 47,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "cluster_created",
+      "template": "Accepted password for carol from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 49,
+      "change_type": "cluster_created",
+      "template": "GET /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "cluster_template_changed",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 49,
+      "change_type": "none",
+      "template": "GET /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 50,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user bob"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 51,
+      "change_type": "cluster_created",
+      "template": "POST /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 52,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 51,
+      "change_type": "cluster_template_changed",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 51,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 53,
+      "change_type": "cluster_created",
+      "template": "GET /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 52,
+      "change_type": "cluster_template_changed",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 54,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user alice from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 53,
+      "change_type": "none",
+      "template": "GET /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 55,
+      "change_type": "cluster_created",
+      "template": "PUT /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 56,
+      "change_type": "cluster_created",
+      "template": "POST /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 57,
+      "change_type": "cluster_created",
+      "template": "connection pool db-replica usage <NUM> percent"
+    },
+    {
+      "cluster_id": 58,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user alice"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 56,
+      "change_type": "cluster_template_changed",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 59,
+      "change_type": "cluster_created",
+      "template": "GET /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 60,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 61,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 62,
+      "change_type": "cluster_created",
+      "template": "PUT /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 63,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 64,
+      "change_type": "cluster_created",
+      "template": "POST /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 64,
+      "change_type": "cluster_template_changed",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 62,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 63,
+      "change_type": "cluster_template_changed",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 65,
+      "change_type": "cluster_created",
+      "template": "GET /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 66,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user dave"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 67,
+      "change_type": "cluster_created",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 65,
+      "change_type": "cluster_template_changed",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 68,
+      "change_type": "cluster_created",
+      "template": "connection pool db-replica usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 69,
+      "change_type": "cluster_created",
+      "template": "PUT /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 70,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user alice from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 71,
+      "change_type": "cluster_created",
+      "template": "GET /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 71,
+      "change_type": "cluster_template_changed",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 72,
+      "change_type": "cluster_created",
+      "template": "connection pool db-replica usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 71,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 73,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 74,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 75,
+      "change_type": "cluster_created",
+      "template": "PUT /api/payments returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 76,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user trent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 77,
+      "change_type": "cluster_created",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 78,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 79,
+      "change_type": "cluster_created",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 48,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 77,
+      "change_type": "none",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 80,
+      "change_type": "cluster_created",
+      "template": "server shutting down gracefully"
+    },
+    {
+      "cluster_id": 80,
+      "change_type": "cluster_template_changed",
+      "template": "server shutting down <*>"
+    }
+  ],
+  "clusters": [
+    {
+      "id": 48,
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2",
+      "size": 26
+    },
+    {
+      "id": 77,
+      "template": "POST /api/users returned <NUM> in <NUM> ms",
+      "size": 2
+    },
+    {
+      "id": 79,
+      "template": "GET /api/orders returned <NUM> in <NUM> ms",
+      "size": 1
+    },
+    {
+      "id": 80,
+      "template": "server shutting down <*>",
+      "size": 2
+    }
+  ]
+}

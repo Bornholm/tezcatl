@@ -1,0 +1,896 @@
+{
+  "lines": [
+    {
+      "cluster_id": 1,
+      "change_type": "cluster_created",
+      "template": "Accepted password for bob from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "cluster_created",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "cluster_created",
+      "template": "connection pool db-main usage <NUM> percent"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "cluster_created",
+      "template": "session <NUM> expired for user bob"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "cluster_created",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "cluster_created",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "cluster_created",
+      "template": "Failed password for invalid user bob from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "cluster_template_changed",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "cluster_created",
+      "template": "PUT /metrics returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET /api/orders returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "cluster_template_changed",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "cluster_template_changed",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "cluster_template_changed",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "cluster_created",
+      "template": "POST /api/users returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "cluster_template_changed",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "cluster_template_changed",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "none",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "none",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "cluster_template_changed",
+      "template": "Failed password for invalid user <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "none",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "none",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "none",
+      "template": "Failed password for invalid user <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "none",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "none",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "none",
+      "template": "Failed password for invalid user <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "none",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "none",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 7,
+      "change_type": "none",
+      "template": "Failed password for invalid user <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 5,
+      "change_type": "none",
+      "template": "cache warmup complete"
+    },
+    {
+      "cluster_id": 6,
+      "change_type": "none",
+      "template": "disconnecting idle client <IP> after <NUM> seconds"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 8,
+      "change_type": "none",
+      "template": "PUT <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 4,
+      "change_type": "none",
+      "template": "session <NUM> expired for user <*>"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 3,
+      "change_type": "none",
+      "template": "connection pool <*> usage <NUM> percent"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 2,
+      "change_type": "none",
+      "template": "GET <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 1,
+      "change_type": "none",
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2"
+    },
+    {
+      "cluster_id": 9,
+      "change_type": "none",
+      "template": "POST <*> returned <NUM> in <NUM> ms"
+    },
+    {
+      "cluster_id": 10,
+      "change_type": "cluster_created",
+      "template": "server shutting down gracefully"
+    },
+    {
+      "cluster_id": 10,
+      "change_type": "cluster_template_changed",
+      "template": "server shutting down <*>"
+    }
+  ],
+  "clusters": [
+    {
+      "id": 1,
+      "template": "Accepted password for <*> from <IP> port <NUM> ssh2",
+      "size": 60
+    },
+    {
+      "id": 2,
+      "template": "GET <*> returned <NUM> in <NUM> ms",
+      "size": 23
+    },
+    {
+      "id": 3,
+      "template": "connection pool <*> usage <NUM> percent",
+      "size": 20
+    },
+    {
+      "id": 4,
+      "template": "session <NUM> expired for user <*>",
+      "size": 9
+    },
+    {
+      "id": 5,
+      "template": "cache warmup complete",
+      "size": 6
+    },
+    {
+      "id": 6,
+      "template": "disconnecting idle client <IP> after <NUM> seconds",
+      "size": 6
+    },
+    {
+      "id": 7,
+      "template": "Failed password for invalid user <*> from <IP> port <NUM> ssh2",
+      "size": 5
+    },
+    {
+      "id": 8,
+      "template": "PUT <*> returned <NUM> in <NUM> ms",
+      "size": 20
+    },
+    {
+      "id": 9,
+      "template": "POST <*> returned <NUM> in <NUM> ms",
+      "size": 17
+    },
+    {
+      "id": 10,
+      "template": "server shutting down <*>",
+      "size": 2
+    }
+  ]
+}
