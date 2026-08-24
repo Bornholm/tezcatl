@@ -8,6 +8,7 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/adapter/fs"
 	"github.com/bornholm/tezcatl/internal/adapter/postgres"
+	"github.com/bornholm/tezcatl/internal/adapter/prometheus"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
 	"github.com/bornholm/tezcatl/internal/config"
 	"github.com/bornholm/tezcatl/internal/core/correlate"
@@ -27,6 +28,7 @@ import (
 // ingesters.
 type Runtime struct {
 	config       *config.Config
+	ingesters    []port.Ingester
 	processors   []port.Processor
 	sinks        []port.EventSink
 	snapshotters []port.Snapshotter
@@ -119,6 +121,18 @@ func (r *Runtime) build(ctx context.Context) error {
 		return errors.New("no sink enabled")
 	}
 
+	// Configuration-driven ingesters, added to the ones the command
+	// provides (both server and standalone modes poll metrics
+	// themselves).
+	if cfg.Metrics.Prometheus.Enabled {
+		poller, err := prometheus.NewPoller(cfg.PrometheusOptions())
+		if err != nil {
+			return errors.Wrap(err, "could not set up prometheus poller")
+		}
+
+		r.ingesters = append(r.ingesters, poller)
+	}
+
 	// State persistence.
 	if cfg.State.Dir != "" {
 		store, err := fs.NewStateStore(cfg.State.Dir)
@@ -137,6 +151,8 @@ func (r *Runtime) build(ctx context.Context) error {
 // completes or the context is canceled.
 func (r *Runtime) Run(ctx context.Context, ingesters ...port.Ingester) error {
 	defer r.Close()
+
+	ingesters = append(ingesters, r.ingesters...)
 
 	opts := []engine.OptionFunc{
 		engine.WithIngesters(ingesters...),

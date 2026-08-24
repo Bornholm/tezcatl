@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bornholm/tezcatl/internal/adapter/prometheus"
 	"github.com/bornholm/tezcatl/internal/core/correlate"
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
@@ -88,7 +89,19 @@ type LogDetection struct {
 }
 
 type Metrics struct {
-	Detection MetricDetection `yaml:"detection"`
+	Detection  MetricDetection  `yaml:"detection"`
+	Prometheus PrometheusSource `yaml:"prometheus"`
+}
+
+type PrometheusSource struct {
+	Enabled bool `yaml:"enabled"`
+	// URL is the Prometheus base URL, e.g. http://localhost:9090.
+	URL      string   `yaml:"url"`
+	Interval Duration `yaml:"interval"`
+	// Service/Environment are the default identity of polled metrics.
+	Service     string             `yaml:"service"`
+	Environment string             `yaml:"environment"`
+	Queries     []prometheus.Query `yaml:"queries"`
 }
 
 type MetricDetection struct {
@@ -173,6 +186,9 @@ func Default() *Config {
 			},
 		},
 		Metrics: Metrics{
+			Prometheus: PrometheusSource{
+				Interval: Duration(30 * time.Second),
+			},
 			Detection: MetricDetection{
 				Enabled:        &enabled,
 				WarmupSamples:  30,
@@ -282,7 +298,25 @@ func (c *Config) Validate() error {
 		return errors.Wrap(err, "invalid logs.drain configuration")
 	}
 
+	if c.Metrics.Prometheus.Enabled {
+		if _, err := prometheus.NewPoller(c.PrometheusOptions()); err != nil {
+			return errors.Wrap(err, "invalid metrics.prometheus configuration")
+		}
+	}
+
 	return nil
+}
+
+func (c *Config) PrometheusOptions() *prometheus.Options {
+	source := c.Metrics.Prometheus
+
+	return &prometheus.Options{
+		URL:         source.URL,
+		Interval:    source.Interval.AsDuration(),
+		Service:     source.Service,
+		Environment: source.Environment,
+		Queries:     source.Queries,
+	}
 }
 
 // LogDetectionConfig maps the configuration to the detector's own
