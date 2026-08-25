@@ -82,8 +82,12 @@ func (d *Drain) tokenize(content string) []string {
 // AddLogMessage learns from a (masked) log message, either updating the
 // matching cluster or creating a new one.
 func (d *Drain) AddLogMessage(content string) (*Cluster, ChangeType) {
-	tokens := d.tokenize(content)
+	return d.addTokens(d.tokenize(content))
+}
 
+// addTokens is AddLogMessage on an already tokenized message, letting
+// callers reuse the tokens (e.g. for parameter extraction).
+func (d *Drain) addTokens(tokens []string) (*Cluster, ChangeType) {
 	matched := d.treeSearch(tokens, d.simTh, false)
 
 	if matched == nil {
