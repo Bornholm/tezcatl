@@ -5,8 +5,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/bornholm/tezcatl/internal/adapter/docker"
 	"github.com/bornholm/tezcatl/internal/adapter/grpc"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
+	"github.com/bornholm/tezcatl/internal/adapter/system"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/bornholm/tezcatl/internal/core/port"
 	"github.com/pkg/errors"
@@ -33,6 +35,87 @@ func NewIngestCommand() *cli.Command {
 				Flags: ingestFlags(),
 				Action: func(ctx *cli.Context) error {
 					return runIngest(ctx, stdio.NewMetricIngester(os.Stdin, identity(ctx)))
+				},
+			},
+			{
+				Name:  "host",
+				Usage: "Collect local system and docker metrics and forward them",
+				Flags: append(targetFlags(),
+					&cli.StringFlag{
+						Name:  "service",
+						Usage: "identity of the host metrics",
+						Value: "host",
+					},
+					&cli.StringFlag{
+						Name:  "environment",
+						Usage: "deployment environment of the collected metrics",
+						Value: model.DefaultEnvironment,
+					},
+					&cli.DurationFlag{
+						Name:  "interval",
+						Usage: "collection interval",
+						Value: 30 * time.Second,
+					},
+					&cli.StringSliceFlag{
+						Name:  "disk-path",
+						Usage: "mount point whose usage is reported (repeatable)",
+						Value: cli.NewStringSlice("/"),
+					},
+					&cli.StringFlag{
+						Name:  "docker-socket",
+						Usage: "docker engine unix socket",
+						Value: "/var/run/docker.sock",
+					},
+					&cli.StringFlag{
+						Name:  "service-label",
+						Usage: "container label deriving the service identity",
+						Value: docker.DefaultServiceLabel,
+					},
+					&cli.BoolFlag{
+						Name:  "no-system",
+						Usage: "disable host metrics collection",
+					},
+					&cli.BoolFlag{
+						Name:  "no-docker",
+						Usage: "disable docker metrics collection",
+					},
+				),
+				Action: func(ctx *cli.Context) error {
+					ingesters := []port.Ingester{}
+
+					if !ctx.Bool("no-system") {
+						collector, err := system.NewCollector(&system.Options{
+							Interval:    ctx.Duration("interval"),
+							Service:     ctx.String("service"),
+							Environment: ctx.String("environment"),
+							DiskPaths:   ctx.StringSlice("disk-path"),
+						})
+						if err != nil {
+							return errors.WithStack(err)
+						}
+
+						ingesters = append(ingesters, collector)
+					}
+
+					if !ctx.Bool("no-docker") {
+						collector, err := docker.NewCollector(&docker.Options{
+							Socket:       ctx.String("docker-socket"),
+							Interval:     ctx.Duration("interval"),
+							Environment:  ctx.String("environment"),
+							ServiceLabel: ctx.String("service-label"),
+						})
+						if err != nil {
+							return errors.WithStack(err)
+						}
+
+						ingesters = append(ingesters, collector)
+					}
+
+					if len(ingesters) == 0 {
+						return errors.New("both collectors are disabled")
+					}
+
+					return runIngest(ctx, ingesters...)
 				},
 			},
 			{
@@ -96,8 +179,8 @@ func (o singleObservation) Ingest(ctx context.Context, out chan<- model.Observat
 	}
 }
 
-func ingestFlags() []cli.Flag {
-	return append(identityFlags(),
+func targetFlags() []cli.Flag {
+	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "target",
 			Usage:    "server address, e.g. unix:///run/tezcatl.sock or tcp://host:4242",
@@ -112,20 +195,35 @@ func ingestFlags() []cli.Flag {
 			Name:  "tls-ca",
 			Usage: "PEM CA bundle verifying a tls:// target (default: system roots)",
 		},
-	)
+	}
 }
 
-func runIngest(ctx *cli.Context, ingester port.Ingester) error {
+func ingestFlags() []cli.Flag {
+	return append(identityFlags(), targetFlags()...)
+}
+
+func runIngest(ctx *cli.Context, ingesters ...port.Ingester) error {
 	observations := make(chan model.Observation, ctx.Int("buffer-size"))
 
 	client := grpc.NewClient(ctx.String("target"), grpc.ClientWithCA(ctx.String("tls-ca")))
 
 	g, gctx := errgroup.WithContext(ctx.Context)
 
+	ingest, ingestCtx := errgroup.WithContext(gctx)
+	for _, ingester := range ingesters {
+		ingest.Go(func() error {
+			if err := ingester.Ingest(ingestCtx, observations); err != nil {
+				return errors.WithStack(err)
+			}
+
+			return nil
+		})
+	}
+
 	g.Go(func() error {
 		defer close(observations)
 
-		if err := ingester.Ingest(gctx, observations); err != nil {
+		if err := ingest.Wait(); err != nil {
 			return errors.WithStack(err)
 		}
 
