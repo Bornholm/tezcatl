@@ -12,7 +12,8 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
 fi
 
 echo "tezcatl-dokku installé :"
-echo "  systemctl enable --now tezcatl-ingest@<app>   # par application Dokku"
+echo "  systemctl enable --now tezcatl-ingest@<app>   # logs, par application Dokku"
+echo "  systemctl enable --now tezcatl-metrics        # métriques hôte + conteneurs"
 echo "  cible et environnement dans /etc/tezcatl/ingest.env"
 
 exit 0
