@@ -102,6 +102,68 @@ func TestParseLogPlainTextFallback(t *testing.T) {
 	}
 }
 
+// TestParseLogDokku exercises real dokku logs output: ANSI color
+// escapes, docker timestamp, process prefix, then the actual payload.
+func TestParseLogDokku(t *testing.T) {
+	t.Run("json payload", func(t *testing.T) {
+		obs := parseLine(t, "\x1b[36m2026-08-25T09:41:38.016458925Z app[web.1]:\x1b[0m {\"level\":\"warn\",\"ts\":1787996498.5,\"logger\":\"http\",\"msg\":\"HTTP/3 skipped because it requires TLS\"}")
+
+		if obs.Log.Message != "HTTP/3 skipped because it requires TLS" {
+			t.Errorf("unexpected message: %q", obs.Log.Message)
+		}
+
+		if obs.Log.Level != "warn" {
+			t.Errorf("unexpected level: %q", obs.Log.Level)
+		}
+
+		// The docker timestamp comes first, the JSON ts must not override it.
+		want := time.Date(2026, 8, 25, 9, 41, 38, 16458925, time.UTC)
+		if !obs.Timestamp.Equal(want) {
+			t.Errorf("unexpected timestamp: %v", obs.Timestamp)
+		}
+
+		if obs.Attributes[AttrLogProcess] != "app[web.1]" {
+			t.Errorf("unexpected process attribute: %q", obs.Attributes[AttrLogProcess])
+		}
+	})
+
+	t.Run("plain payload", func(t *testing.T) {
+		obs := parseLine(t, "2026-08-25T09:41:38Z app[web.1]: 10.0.0.1 - - \"GET /robots.txt HTTP/1.1\" 200 512")
+
+		if obs.Log.Message != "10.0.0.1 - - \"GET /robots.txt HTTP/1.1\" 200 512" {
+			t.Errorf("unexpected message: %q", obs.Log.Message)
+		}
+
+		if obs.Attributes[AttrLogProcess] != "app[web.1]" {
+			t.Errorf("unexpected process attribute: %q", obs.Attributes[AttrLogProcess])
+		}
+
+		if obs.Timestamp.IsZero() {
+			t.Error("expected timestamp to be extracted")
+		}
+	})
+
+	t.Run("ansi only", func(t *testing.T) {
+		obs := parseLine(t, "\x1b[0;33msome colored warning\x1b[0m")
+
+		if obs.Log.Message != "some colored warning" {
+			t.Errorf("expected escapes to be stripped, got %q", obs.Log.Message)
+		}
+	})
+
+	t.Run("prefix without timestamp", func(t *testing.T) {
+		obs := parseLine(t, "heroku[router]: at=info method=GET path=/")
+
+		if obs.Log.Message != "at=info method=GET path=/" {
+			t.Errorf("unexpected message: %q", obs.Log.Message)
+		}
+
+		if obs.Attributes[AttrLogProcess] != "heroku[router]" {
+			t.Errorf("unexpected process attribute: %q", obs.Attributes[AttrLogProcess])
+		}
+	})
+}
+
 func TestParseLogMalformedJSON(t *testing.T) {
 	obs := parseLine(t, `{"broken json`)
 
