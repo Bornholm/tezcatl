@@ -89,16 +89,20 @@ logs:
     mask_suffix: ">"
     # Masquage des parties variables AVANT le mining : chaque motif
     # (syntaxe RE2 — pas de lookaround, utiliser \b) est remplacé par son
-    # nom de masque. L'ordre compte (appliqués séquentiellement) : IP et
-    # UUID avant NUM (leurs chiffres seraient mangés), et NUM avant HEX —
-    # sinon un epoch comme 1787996498, entièrement composé de chiffres
-    # hexadécimaux valides, deviendrait <HEX>.
+    # nom de masque. L'ordre compte (appliqués séquentiellement) : IP,
+    # UUID et EMAIL avant NUM (leurs chiffres seraient mangés), et NUM
+    # avant HEX — sinon un epoch comme 1787996498, entièrement composé de
+    # chiffres hexadécimaux valides, deviendrait <HEX>. EMAIL est autant
+    # une question d'hygiène (pas d'adresse dans les templates, les
+    # événements ni leurs destinations) que de qualité de clustering.
     # Défaut : aucun masque ; ceux-ci sont un point de départ raisonnable.
     masking:
       - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
         mask_with: IP
       - pattern: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
         mask_with: UUID
+      - pattern: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+        mask_with: EMAIL
       - pattern: '\b\d+\b'
         mask_with: NUM
       - pattern: '\b[0-9a-fA-F]{8,}\b'
