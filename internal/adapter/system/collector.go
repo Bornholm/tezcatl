@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/model"
@@ -258,15 +257,3 @@ func (c *Collector) load1() (float64, error) {
 	return load, nil
 }
 
-func diskUsedPercent(path string) (float64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return 0, errors.WithStack(err)
-	}
-
-	if stat.Blocks == 0 {
-		return 0, errors.Errorf("no blocks reported for %q", path)
-	}
-
-	return 100 * (1 - float64(stat.Bavail)/float64(stat.Blocks)), nil
-}
