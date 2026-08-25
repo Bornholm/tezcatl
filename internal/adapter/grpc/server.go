@@ -133,7 +133,7 @@ func (s *ServerIngester) StreamObservations(stream tezcatlv1.IngestService_Strea
 			return errors.WithStack(err)
 		}
 
-		obs := fromProtoObservation(proto, s.now())
+		obs := FromProtoObservation(proto, s.now())
 
 		select {
 		case s.out <- obs:

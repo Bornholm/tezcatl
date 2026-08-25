@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - sh -c "cd plugins/host && go mod tidy"
 
 builds:
   - id: tezcatl
@@ -19,8 +20,23 @@ builds:
     ldflags:
       - -w -s -X 'github.com/bornholm/tezcatl/internal/build.ShortVersion={{ .Version }}' -X 'github.com/bornholm/tezcatl/internal/build.LongVersion={{ .Version }} ({{ .Commit }})'
 
+  # Plugin source « host » : module Go séparé (plugins/host), binaire
+  # nommé selon la convention tezcatl-source-<name>.
+  - id: tezcatl-source-host
+    env:
+      - CGO_ENABLED=0
+    targets: [go_first_class]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./plugins/host
+    binary: tezcatl-source-host
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s
+
 archives:
   - id: tezcatl
+    ids: [tezcatl]
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -30,6 +46,18 @@ archives:
       - docs/ROADMAP.md
       - misc/config/standalone.yaml
       - misc/config/server.yaml
+
+  # Archive séparée pour le plugin, au format attendu par
+  # `tezcatl plugin install` (<name>_<version>_<os>_<arch>.tar.gz).
+  - id: tezcatl-source-host
+    ids: [tezcatl-source-host]
+    name_template: "tezcatl-source-host_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - none*
 
 nfpms:
   # Paquet client : le binaire seul. Suffit pour les hôtes qui envoient
@@ -94,6 +122,23 @@ nfpms:
       preremove: misc/packaging/preremove.sh
       postremove: misc/packaging/postremove.sh
 
+  # Plugin source host : le binaire seul, installé dans le répertoire de
+  # plugins standard.
+  - id: tezcatl-plugin-host
+    package_name: tezcatl-plugin-host
+    ids: [tezcatl-source-host]
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - plugin source host.
+      Collecte des métriques du système local (CPU, mémoire, charge,
+      disque) et des conteneurs Docker.
+    bindir: /usr/lib/tezcatl/plugins
+
   # Intégration Dokku : une unité systemd template (une instance par
   # application) qui pipe `dokku logs -t` vers l'ingestion, et un plugin
   # Dokku déclarant chaque déploiement comme changement corrélable.
@@ -112,6 +157,7 @@ nfpms:
       (tezcatl-ingest@) et hook de déploiement Dokku.
     dependencies:
       - tezcatl
+      - tezcatl-plugin-host
       - dokku
     contents:
       - src: misc/packaging/tezcatl-ingest@.service

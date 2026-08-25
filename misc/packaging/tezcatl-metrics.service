@@ -11,10 +11,12 @@ Environment=TEZCATL_ENVIRONMENT=production
 EnvironmentFile=-/etc/tezcatl/ingest.env
 # Root : la socket Docker l'exige. CPU/mémoire/charge/disque de l'hôte,
 # CPU/mémoire par conteneur et conteneurs par application (identité via
-# le label com.dokku.app-name).
-ExecStart=/usr/bin/tezcatl ingest host \
+# le label com.dokku.app-name). Le collecteur est le plugin source
+# « host » (paquet tezcatl-plugin-host).
+ExecStart=/usr/bin/tezcatl ingest source \
     --target ${TEZCATL_TARGET} \
-    --environment ${TEZCATL_ENVIRONMENT}
+    --environment ${TEZCATL_ENVIRONMENT} \
+    host
 Restart=always
 RestartSec=5
 

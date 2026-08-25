@@ -185,32 +185,6 @@ metrics:
         query: 100 * db_pool_in_use / db_pool_size
         service: app
 
-  # Collecteur du système local (Linux, via /proc — aucune dépendance) :
-  # CPU, mémoire, charge, remplissage disque. Comme le poller Prometheus,
-  # activé, il rend le processus persistant.
-  system:
-    enabled: false
-    interval: 30s
-    # Identité des métriques hôte.
-    service: host
-    environment: production
-    # Points de montage surveillés (system.disk.used_percent, label path).
-    disk_paths: ["/"]
-
-  # Collecteur Docker (API Engine sur la socket unix, sans client
-  # Docker) : CPU et mémoire par conteneur, nombre de conteneurs par
-  # service. L'utilisateur du processus doit pouvoir lire la socket.
-  docker:
-    enabled: false
-    interval: 30s
-    socket: /var/run/docker.sock
-    environment: production
-    # Le service est dérivé de ce label de conteneur ; à défaut, du nom
-    # du conteneur jusqu'au premier point (app.web.1 → app, la
-    # convention Dokku). Pour docker compose, utiliser
-    # com.docker.compose.project (ou .service).
-    service_label: com.dokku.app-name
-
   detection:
     # false : désactive la détection sur les métriques.
     enabled: true
@@ -233,6 +207,35 @@ metrics:
     # thresholds:
     #   - metric: pool_usage_percent
     #     max: 90
+
+# --- Plugins de sources d'ingestion --------------------------------------
+# Des sources supplémentaires (métriques hôte/Docker, API Kubernetes…)
+# sont fournies par des plugins : des binaires tezcatl-source-<name>
+# (hashicorp/go-plugin) installés dans le répertoire de plugins.
+# Gestion : tezcatl plugin install|list|remove. Un plugin actif rend le
+# processus persistant, comme le poller Prometheus.
+plugins:
+  # Répertoire des binaires ; vide = $TEZCATL_PLUGINS_DIR puis
+  # /usr/lib/tezcatl/plugins.
+  dir: ""
+  sources:
+    # Le plugin « host » (paquet tezcatl-plugin-host) collecte CPU,
+    # mémoire, charge et disque du système local, plus CPU/mémoire par
+    # conteneur Docker et le nombre de conteneurs par application
+    # (identité via le label com.dokku.app-name ; pour docker compose,
+    # utiliser com.docker.compose.project). La config est propre à
+    # chaque plugin, transmise en JSON.
+    host:
+      enabled: false
+      config:
+        interval: 30s
+        environment: production
+        # service: host
+        # disk_paths: ["/"]
+        # docker_socket: /var/run/docker.sock
+        # service_label: com.dokku.app-name
+        # no_system: false
+        # no_docker: false
 
 # --- Corrélation ---------------------------------------------------------
 correlation:

@@ -8,7 +8,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func toProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
+// ToProtoObservation converts a model observation to its wire form.
+func ToProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
 	proto := &tezcatlv1.Observation{
 		Id:          obs.ID,
 		Source:      obs.Source,
@@ -45,7 +46,7 @@ func toProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
 	return proto
 }
 
-func fromProtoObservation(proto *tezcatlv1.Observation, ingestedAt time.Time) model.Observation {
+func FromProtoObservation(proto *tezcatlv1.Observation, ingestedAt time.Time) model.Observation {
 	obs := model.Observation{
 		ID:          proto.GetId(),
 		Source:      proto.GetSource(),
