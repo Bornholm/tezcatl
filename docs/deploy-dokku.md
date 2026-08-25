@@ -125,10 +125,11 @@ sudo systemctl restart tezcatl-server
 ```
 
 **Métriques.** Le paquet `tezcatl-dokku` installe l'unité
-`tezcatl-metrics.service` : un collecteur qui échantillonne l'hôte
-(CPU, mémoire, charge, disque) et les conteneurs Docker (CPU et mémoire
-par conteneur, nombre de conteneurs par application) puis pousse le tout
-vers la même cible que les logs. L'identité des conteneurs vient du
+`tezcatl-metrics.service`, qui exécute le plugin source « host »
+(paquet `tezcatl-plugin-host`, installé automatiquement par dépendance) :
+il échantillonne l'hôte (CPU, mémoire, charge, disque) et les conteneurs
+Docker (CPU et mémoire par conteneur, nombre de conteneurs par
+application) puis pousse le tout vers la même cible que les logs. L'identité des conteneurs vient du
 label Dokku `com.dokku.app-name` : les métriques d'une application se
 corrèlent avec ses logs.
 

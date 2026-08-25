@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package tezcatl.v1;
+
+import "tezcatl/v1/ingest.proto";
+
+option go_package = "github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1";
+
+message SourceStreamRequest {
+  // config is the plugin-specific configuration, encoded as JSON. Each
+  // plugin documents its own schema.
+  bytes config = 1;
+}
+
+// SourceService is implemented by ingestion source plugins
+// (hashicorp/go-plugin subprocesses): the host opens one stream and the
+// plugin pushes observations until the stream is closed.
+service SourceService {
+  rpc Stream(SourceStreamRequest) returns (stream Observation);
+}

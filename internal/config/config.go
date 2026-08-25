@@ -41,6 +41,7 @@ type Config struct {
 	Pipeline    Pipeline    `yaml:"pipeline"`
 	Logs        Logs        `yaml:"logs"`
 	Metrics     Metrics     `yaml:"metrics"`
+	Plugins     Plugins     `yaml:"plugins"`
 	Correlation Correlation `yaml:"correlation"`
 	State       State       `yaml:"state"`
 	Sinks       Sinks       `yaml:"sinks"`
@@ -101,30 +102,23 @@ type LogDetection struct {
 type Metrics struct {
 	Detection  MetricDetection  `yaml:"detection"`
 	Prometheus PrometheusSource `yaml:"prometheus"`
-	System     SystemSource     `yaml:"system"`
-	Docker     DockerSource     `yaml:"docker"`
 }
 
-type SystemSource struct {
-	Enabled  bool     `yaml:"enabled"`
-	Interval Duration `yaml:"interval"`
-	// Service/Environment form the identity of the host metrics.
-	Service     string `yaml:"service"`
-	Environment string `yaml:"environment"`
-	// DiskPaths are the mount points whose usage is reported.
-	DiskPaths []string `yaml:"disk_paths"`
+// Plugins configures the ingestion source plugins (hashicorp/go-plugin
+// subprocesses named tezcatl-source-<name>).
+type Plugins struct {
+	// Dir is where plugin binaries are installed; empty falls back to
+	// $TEZCATL_PLUGINS_DIR then /usr/lib/tezcatl/plugins.
+	Dir string `yaml:"dir"`
+	// Sources maps a plugin name to its activation and configuration.
+	Sources map[string]PluginSource `yaml:"sources"`
 }
 
-type DockerSource struct {
-	Enabled  bool     `yaml:"enabled"`
-	Interval Duration `yaml:"interval"`
-	// Socket is the Docker Engine unix socket.
-	Socket      string `yaml:"socket"`
-	Environment string `yaml:"environment"`
-	// ServiceLabel derives the service from a container label
-	// (com.dokku.app-name by default); fallback: container name up to
-	// the first dot.
-	ServiceLabel string `yaml:"service_label"`
+type PluginSource struct {
+	Enabled bool `yaml:"enabled"`
+	// Config is passed to the plugin as JSON; each plugin documents its
+	// own schema.
+	Config map[string]any `yaml:"config"`
 }
 
 type PrometheusSource struct {
@@ -239,15 +233,6 @@ func Default() *Config {
 		Metrics: Metrics{
 			Prometheus: PrometheusSource{
 				Interval: Duration(30 * time.Second),
-			},
-			System: SystemSource{
-				Interval:  Duration(30 * time.Second),
-				Service:   "host",
-				DiskPaths: []string{"/"},
-			},
-			Docker: DockerSource{
-				Interval: Duration(30 * time.Second),
-				Socket:   "/var/run/docker.sock",
 			},
 			Detection: MetricDetection{
 				Enabled:        &enabled,

@@ -125,7 +125,7 @@ func (c *Client) Forward(ctx context.Context, observations <-chan model.Observat
 	}
 
 	for obs := range observations {
-		proto := toProtoObservation(&obs)
+		proto := ToProtoObservation(&obs)
 
 		for {
 			if stream == nil {

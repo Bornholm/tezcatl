@@ -2,15 +2,15 @@ package command
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"time"
 
-	"github.com/bornholm/tezcatl/internal/adapter/docker"
 	"github.com/bornholm/tezcatl/internal/adapter/grpc"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
-	"github.com/bornholm/tezcatl/internal/adapter/system"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/bornholm/tezcatl/internal/core/port"
+	"github.com/bornholm/tezcatl/internal/plugin"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
@@ -38,84 +38,41 @@ func NewIngestCommand() *cli.Command {
 				},
 			},
 			{
-				Name:  "host",
-				Usage: "Collect local system and docker metrics and forward them",
+				Name:      "source",
+				Usage:     "Run an ingestion source plugin and forward its observations",
+				ArgsUsage: "<plugin>",
 				Flags: append(targetFlags(),
 					&cli.StringFlag{
-						Name:  "service",
-						Usage: "identity of the host metrics",
-						Value: "host",
+						Name:  "plugins-dir",
+						Usage: "directory holding the plugin binaries (default: $TEZCATL_PLUGINS_DIR or /usr/lib/tezcatl/plugins)",
+					},
+					&cli.StringFlag{
+						Name:  "source-config",
+						Usage: "plugin configuration as JSON",
+						Value: "{}",
 					},
 					&cli.StringFlag{
 						Name:  "environment",
-						Usage: "deployment environment of the collected metrics",
-						Value: model.DefaultEnvironment,
-					},
-					&cli.DurationFlag{
-						Name:  "interval",
-						Usage: "collection interval",
-						Value: 30 * time.Second,
-					},
-					&cli.StringSliceFlag{
-						Name:  "disk-path",
-						Usage: "mount point whose usage is reported (repeatable)",
-						Value: cli.NewStringSlice("/"),
-					},
-					&cli.StringFlag{
-						Name:  "docker-socket",
-						Usage: "docker engine unix socket",
-						Value: "/var/run/docker.sock",
-					},
-					&cli.StringFlag{
-						Name:  "service-label",
-						Usage: "container label deriving the service identity",
-						Value: docker.DefaultServiceLabel,
-					},
-					&cli.BoolFlag{
-						Name:  "no-system",
-						Usage: "disable host metrics collection",
-					},
-					&cli.BoolFlag{
-						Name:  "no-docker",
-						Usage: "disable docker metrics collection",
+						Usage: "deployment environment, merged into the plugin configuration",
 					},
 				),
 				Action: func(ctx *cli.Context) error {
-					ingesters := []port.Ingester{}
-
-					if !ctx.Bool("no-system") {
-						collector, err := system.NewCollector(&system.Options{
-							Interval:    ctx.Duration("interval"),
-							Service:     ctx.String("service"),
-							Environment: ctx.String("environment"),
-							DiskPaths:   ctx.StringSlice("disk-path"),
-						})
-						if err != nil {
-							return errors.WithStack(err)
-						}
-
-						ingesters = append(ingesters, collector)
+					name := ctx.Args().First()
+					if name == "" {
+						return errors.New("missing plugin name, e.g.: tezcatl ingest source --target unix:///run/tezcatl/tezcatl.sock host")
 					}
 
-					if !ctx.Bool("no-docker") {
-						collector, err := docker.NewCollector(&docker.Options{
-							Socket:       ctx.String("docker-socket"),
-							Interval:     ctx.Duration("interval"),
-							Environment:  ctx.String("environment"),
-							ServiceLabel: ctx.String("service-label"),
-						})
-						if err != nil {
-							return errors.WithStack(err)
-						}
-
-						ingesters = append(ingesters, collector)
+					path, err := plugin.Lookup(plugin.Dir(ctx.String("plugins-dir")), name)
+					if err != nil {
+						return errors.WithStack(err)
 					}
 
-					if len(ingesters) == 0 {
-						return errors.New("both collectors are disabled")
+					sourceConfig, err := mergeSourceConfig(ctx.String("source-config"), ctx.String("environment"))
+					if err != nil {
+						return errors.WithStack(err)
 					}
 
-					return runIngest(ctx, ingesters...)
+					return runIngest(ctx, plugin.NewSourceIngester(name, path, sourceConfig))
 				},
 			},
 			{
@@ -243,4 +200,27 @@ func runIngest(ctx *cli.Context, ingesters ...port.Ingester) error {
 	}
 
 	return nil
+}
+
+// mergeSourceConfig merges the --environment convenience flag into the
+// plugin JSON configuration.
+func mergeSourceConfig(raw string, environment string) ([]byte, error) {
+	merged := map[string]any{}
+
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &merged); err != nil {
+			return nil, errors.Wrap(err, "malformed --source-config")
+		}
+	}
+
+	if environment != "" {
+		merged["environment"] = environment
+	}
+
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return encoded, nil
 }

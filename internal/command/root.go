@@ -17,6 +17,7 @@ func NewApp() *cli.App {
 			NewMarkCommand(),
 			NewTemplatesCommand(),
 			NewMetricsCommand(),
+			NewPluginCommand(),
 		},
 	}
 }

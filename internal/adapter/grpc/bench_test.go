@@ -54,7 +54,7 @@ func BenchmarkStreamObservations(b *testing.B) {
 		Log:         &model.LogRecord{Raw: "GET /api/users/42 returned 200 in 13 ms"},
 	}
 
-	proto := toProtoObservation(obs)
+	proto := ToProtoObservation(obs)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(len(obs.Log.Raw)))

@@ -91,8 +91,8 @@ Objectif de validation (à faire avec de vrais incidents) : rejouer trois incide
 
 - [x] `adapter/prometheus.Poller` : évaluation périodique de requêtes PromQL (`/api/v1/query`, vector et scalar), nom de métrique logique par requête, identité statique ou dérivée d'un label (`service_label`)
 - [x] Activable en standalone comme en serveur (`metrics.prometheus` dans la config, composé par `setup.Runtime`)
-- [x] Collecteurs intégrés sans infrastructure : `metrics.system` (CPU/mémoire/charge/disque via `/proc` et statfs, Linux) et `metrics.docker` (CPU/mémoire par conteneur + conteneurs par service via l'API Engine sur socket unix ; identité par label, `com.dokku.app-name` par défaut)
-- [x] Collecte côté client : `tezcatl ingest host` exécute les deux collecteurs et pousse vers un serveur (local ou distant) — livré en unité systemd `tezcatl-metrics.service` dans le paquet tezcatl-dokku
+- [x] Collecteurs hôte/Docker : CPU/mémoire/charge/disque via `/proc` et statfs (Linux), CPU/mémoire par conteneur + conteneurs par service via l'API Engine (identité par label, `com.dokku.app-name` par défaut) — portés par le **plugin source `host`** (voir « Système de plugins »)
+- [x] Collecte côté client : `tezcatl ingest source <plugin>` exécute un plugin et pousse vers un serveur (local ou distant) — livré en unité systemd `tezcatl-metrics.service` dans le paquet tezcatl-dokku
 - Note : un poller/collecteur actif rend le processus persistant (l'ingestion ne se termine plus à la fermeture de stdin) — arrêt par SIGINT/SIGTERM
 
 ### C3 — Modalité « changement » ✅
@@ -119,6 +119,8 @@ Objectif de validation (à faire avec de vrais incidents) : rejouer trois incide
 - [ ] Sink SQLite (alternative légère à PostgreSQL pour le mode personnel)
 
 ## Post-MVP réalisé
+
+- **Système de plugins de sources** ✅ (hashicorp/go-plugin) : un plugin est un binaire `tezcatl-source-<name>` (sous-processus gRPC, contrat `SourceService.Stream` streamant des `Observation` protobuf, config JSON opaque par plugin). SDK public dans `pkg/plugin` (`Serve`, interface `Source`) ; côté hôte, chargement via la config (`plugins.sources`) en serveur/standalone ou via `tezcatl ingest source <name>` en client, avec redémarrage à backoff en cas de crash. Installation depuis GitHub Releases : `tezcatl plugin install github.com/owner/repo` (archives goreleaser, vérification `checksums.txt`), plus `plugin list`/`remove`. Les plugins par défaut vivent dans des **modules Go séparés** (`plugins/*`, `replace` vers la racine) pour ne pas alourdir le go.mod principal — premier livré : `plugins/host` (paquet `tezcatl-plugin-host`, installé dans `/usr/lib/tezcatl/plugins`). Candidat suivant : `tezcatl-source-kubernetes` (watcher de déploiements/ressources, logs, métriques — chantier C4).
 
 - **Boucle de feedback dynamique** ✅ : marquages de templates modifiables au runtime, persistés avec l'état du détecteur (les marquages de la config restent la base, les marquages runtime les surchargent). `AdminService` gRPC servi sur les mêmes listeners que l'ingestion ; CLI `tezcatl templates` (liste partition/id/taille/marquage) et `tezcatl mark --template … --as normal|ignore|symptomatic` (`--clear` pour retirer), en live (`--target`) ou hors-ligne sur un état persisté (`--state-dir`).
 - **Saisonnalité horaire** ✅ (`logs.detection.seasonality: hourly`, défaut) : baselines de fréquence par heure de la journée (un pic quotidien à 9 h n'est plus un faux positif après une nuit calme, le même burst à 3 h l'est) ; un template jamais vu à une heure connue-active n'est pas attendu (cron nocturne non signalé « missing » à midi, seuil `seasonal_min_observations`).

@@ -2,16 +2,15 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
 
-	"github.com/bornholm/tezcatl/internal/adapter/docker"
 	"github.com/bornholm/tezcatl/internal/adapter/fs"
 	"github.com/bornholm/tezcatl/internal/adapter/postgres"
 	"github.com/bornholm/tezcatl/internal/adapter/prometheus"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
-	"github.com/bornholm/tezcatl/internal/adapter/system"
 	"github.com/bornholm/tezcatl/internal/adapter/webhook"
 	"github.com/bornholm/tezcatl/internal/config"
 	"github.com/bornholm/tezcatl/internal/core/admin"
@@ -23,6 +22,7 @@ import (
 	"github.com/bornholm/tezcatl/internal/core/processor"
 	"github.com/bornholm/tezcatl/internal/core/sink"
 	"github.com/bornholm/tezcatl/internal/core/state"
+	"github.com/bornholm/tezcatl/internal/plugin"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -156,32 +156,22 @@ func (r *Runtime) build(ctx context.Context) error {
 		r.ingesters = append(r.ingesters, poller)
 	}
 
-	if cfg.Metrics.System.Enabled {
-		collector, err := system.NewCollector(&system.Options{
-			Interval:    cfg.Metrics.System.Interval.AsDuration(),
-			Service:     cfg.Metrics.System.Service,
-			Environment: cfg.Metrics.System.Environment,
-			DiskPaths:   cfg.Metrics.System.DiskPaths,
-		})
-		if err != nil {
-			return errors.Wrap(err, "could not set up system metrics collector")
+	for name, source := range cfg.Plugins.Sources {
+		if !source.Enabled {
+			continue
 		}
 
-		r.ingesters = append(r.ingesters, collector)
-	}
-
-	if cfg.Metrics.Docker.Enabled {
-		collector, err := docker.NewCollector(&docker.Options{
-			Socket:       cfg.Metrics.Docker.Socket,
-			Interval:     cfg.Metrics.Docker.Interval.AsDuration(),
-			Environment:  cfg.Metrics.Docker.Environment,
-			ServiceLabel: cfg.Metrics.Docker.ServiceLabel,
-		})
+		path, err := plugin.Lookup(plugin.Dir(cfg.Plugins.Dir), name)
 		if err != nil {
-			return errors.Wrap(err, "could not set up docker metrics collector")
+			return errors.Wrapf(err, "could not set up source plugin %q", name)
 		}
 
-		r.ingesters = append(r.ingesters, collector)
+		pluginConfig, err := json.Marshal(source.Config)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		r.ingesters = append(r.ingesters, plugin.NewSourceIngester(name, path, pluginConfig))
 	}
 
 	// State persistence.
