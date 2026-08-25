@@ -89,15 +89,24 @@ logs:
     mask_suffix: ">"
     # Masquage des parties variables AVANT le mining : chaque motif
     # (syntaxe RE2 — pas de lookaround, utiliser \b) est remplacé par son
-    # nom de masque. L'ordre compte (appliqués séquentiellement).
+    # nom de masque. L'ordre compte (appliqués séquentiellement) : IP et
+    # UUID avant NUM (leurs chiffres seraient mangés), et NUM avant HEX —
+    # sinon un epoch comme 1787996498, entièrement composé de chiffres
+    # hexadécimaux valides, deviendrait <HEX>.
     # Défaut : aucun masque ; ceux-ci sont un point de départ raisonnable.
     masking:
       - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
         mask_with: IP
-      - pattern: '\b[0-9a-fA-F]{8,}\b'
-        mask_with: HEX
+      - pattern: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+        mask_with: UUID
       - pattern: '\b\d+\b'
         mask_with: NUM
+      - pattern: '\b[0-9a-fA-F]{8,}\b'
+        mask_with: HEX
+      # Pour des access logs (nginx, Caddy…), écraser les User-Agents
+      # évite l'explosion de templates par navigateur :
+      # - pattern: '"Mozilla/[^"]*"'
+      #   mask_with: UA
 
   detection:
     # false : désactive entièrement la détection sur les logs.

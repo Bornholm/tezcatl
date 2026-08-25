@@ -32,13 +32,16 @@ logs:
     sim_th: 0.4
     max_children: 100
     max_clusters: 0
+    # L'ordre compte : voir standalone.yaml.
     masking:
       - pattern: '\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b'
         mask_with: IP
-      - pattern: '\b[0-9a-fA-F]{8,}\b'
-        mask_with: HEX
+      - pattern: '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b'
+        mask_with: UUID
       - pattern: '\b\d+\b'
         mask_with: NUM
+      - pattern: '\b[0-9a-fA-F]{8,}\b'
+        mask_with: HEX
   detection:
     learning_period: 15m
 
