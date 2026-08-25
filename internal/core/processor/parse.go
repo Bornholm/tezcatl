@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,11 +12,14 @@ import (
 	"github.com/bornholm/tezcatl/internal/core/port"
 )
 
-// ParseLog extracts structure from raw log lines before template mining:
-// JSON envelopes (generic keys and journald -o json), normalized levels
-// and event timestamps (JSON fields, leading RFC3339 token as produced
-// by docker logs --timestamps). The mined message is the extracted
-// payload, not the envelope; the raw line is preserved.
+// ParseLog extracts structure from raw log lines before template mining.
+// The line is progressively unwrapped: ANSI color escapes are stripped,
+// a leading RFC3339 timestamp (docker logs --timestamps, dokku logs) is
+// extracted, a dokku/heroku-style process prefix ("app[web.1]:") becomes
+// an attribute, and the remaining payload is parsed as JSON when it is
+// one (generic keys and journald -o json), yielding message, normalized
+// level and event timestamp. The mined message is the unwrapped payload;
+// the raw line is preserved.
 type ParseLog struct{}
 
 func NewParseLog() *ParseLog {
@@ -26,11 +30,23 @@ func (p *ParseLog) Name() string {
 	return "parse-log"
 }
 
+// AttrLogProcess carries the emitter tag of a dokku/heroku-style prefix
+// (e.g. "app[web.1]").
+const AttrLogProcess = "log.process"
+
 var messageKeys = []string{"message", "msg", "log", "MESSAGE"}
 
 var levelKeys = []string{"level", "severity", "lvl", "loglevel"}
 
 var timeKeys = []string{"time", "ts", "timestamp", "@timestamp"}
+
+// ansiEscape matches CSI sequences (colors and cursor controls), the
+// kind emitted by dokku logs even without a TTY.
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[@-~]`)
+
+// processPrefix matches dokku/heroku log prefixes such as "app[web.1]: "
+// or "heroku[router]: ".
+var processPrefix = regexp.MustCompile(`^([A-Za-z0-9_.-]+)\[([^\]\s]+)\]:\s+`)
 
 func (p *ParseLog) Process(ctx context.Context, obs *model.Observation, emit port.EmitFunc) (bool, error) {
 	if obs.Modality != model.ModalityLog || obs.Log == nil {
@@ -39,14 +55,60 @@ func (p *ParseLog) Process(ctx context.Context, obs *model.Observation, emit por
 
 	line := strings.TrimSpace(obs.Log.Raw)
 
-	if strings.HasPrefix(line, "{") {
-		p.parseJSON(obs, line)
-		return true, nil
+	if strings.IndexByte(line, '\x1b') >= 0 {
+		line = strings.TrimSpace(ansiEscape.ReplaceAllString(line, ""))
 	}
 
-	p.parsePlain(obs, line)
+	line = p.stripTimestamp(obs, line)
+	line = p.stripProcess(obs, line)
+
+	// The unwrapped payload is what template mining should see, unless
+	// nothing was unwrapped (Message stays empty, Raw is used).
+	if line != strings.TrimSpace(obs.Log.Raw) {
+		obs.Log.Message = line
+	}
+
+	if strings.HasPrefix(line, "{") {
+		p.parseJSON(obs, line)
+	}
 
 	return true, nil
+}
+
+// stripTimestamp extracts a leading RFC3339 timestamp token.
+func (p *ParseLog) stripTimestamp(obs *model.Observation, line string) string {
+	token, rest, found := strings.Cut(line, " ")
+	if !found {
+		return line
+	}
+
+	timestamp, err := time.Parse(time.RFC3339Nano, token)
+	if err != nil {
+		return line
+	}
+
+	if obs.Timestamp.IsZero() {
+		obs.Timestamp = timestamp
+	}
+
+	return strings.TrimSpace(rest)
+}
+
+// stripProcess extracts a dokku/heroku-style process prefix into the
+// log.process attribute.
+func (p *ParseLog) stripProcess(obs *model.Observation, line string) string {
+	match := processPrefix.FindStringSubmatch(line)
+	if match == nil {
+		return line
+	}
+
+	if obs.Attributes == nil {
+		obs.Attributes = map[string]string{}
+	}
+
+	obs.Attributes[AttrLogProcess] = match[1] + "[" + match[2] + "]"
+
+	return line[len(match[0]):]
 }
 
 func (p *ParseLog) parseJSON(obs *model.Observation, line string) {
@@ -93,23 +155,6 @@ func (p *ParseLog) parseJSON(obs *model.Observation, line string) {
 				obs.Timestamp = time.UnixMicro(micros)
 			}
 		}
-	}
-}
-
-func (p *ParseLog) parsePlain(obs *model.Observation, line string) {
-	token, rest, found := strings.Cut(line, " ")
-	if !found {
-		return
-	}
-
-	// docker logs --timestamps and many structured formats prefix the
-	// line with an RFC3339 timestamp.
-	if timestamp, err := time.Parse(time.RFC3339Nano, token); err == nil {
-		if obs.Timestamp.IsZero() {
-			obs.Timestamp = timestamp
-		}
-
-		obs.Log.Message = strings.TrimSpace(rest)
 	}
 }
 
