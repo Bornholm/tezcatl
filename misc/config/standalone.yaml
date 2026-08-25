@@ -181,6 +181,32 @@ metrics:
         query: 100 * db_pool_in_use / db_pool_size
         service: app
 
+  # Collecteur du système local (Linux, via /proc — aucune dépendance) :
+  # CPU, mémoire, charge, remplissage disque. Comme le poller Prometheus,
+  # activé, il rend le processus persistant.
+  system:
+    enabled: false
+    interval: 30s
+    # Identité des métriques hôte.
+    service: host
+    environment: production
+    # Points de montage surveillés (system.disk.used_percent, label path).
+    disk_paths: ["/"]
+
+  # Collecteur Docker (API Engine sur la socket unix, sans client
+  # Docker) : CPU et mémoire par conteneur, nombre de conteneurs par
+  # service. L'utilisateur du processus doit pouvoir lire la socket.
+  docker:
+    enabled: false
+    interval: 30s
+    socket: /var/run/docker.sock
+    environment: production
+    # Le service est dérivé de ce label de conteneur ; à défaut, du nom
+    # du conteneur jusqu'au premier point (app.web.1 → app, la
+    # convention Dokku). Pour docker compose, utiliser
+    # com.docker.compose.project (ou .service).
+    service_label: com.dokku.app-name
+
   detection:
     # false : désactive la détection sur les métriques.
     enabled: true

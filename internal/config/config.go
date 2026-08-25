@@ -101,6 +101,30 @@ type LogDetection struct {
 type Metrics struct {
 	Detection  MetricDetection  `yaml:"detection"`
 	Prometheus PrometheusSource `yaml:"prometheus"`
+	System     SystemSource     `yaml:"system"`
+	Docker     DockerSource     `yaml:"docker"`
+}
+
+type SystemSource struct {
+	Enabled  bool     `yaml:"enabled"`
+	Interval Duration `yaml:"interval"`
+	// Service/Environment form the identity of the host metrics.
+	Service     string `yaml:"service"`
+	Environment string `yaml:"environment"`
+	// DiskPaths are the mount points whose usage is reported.
+	DiskPaths []string `yaml:"disk_paths"`
+}
+
+type DockerSource struct {
+	Enabled  bool     `yaml:"enabled"`
+	Interval Duration `yaml:"interval"`
+	// Socket is the Docker Engine unix socket.
+	Socket      string `yaml:"socket"`
+	Environment string `yaml:"environment"`
+	// ServiceLabel derives the service from a container label
+	// (com.dokku.app-name by default); fallback: container name up to
+	// the first dot.
+	ServiceLabel string `yaml:"service_label"`
 }
 
 type PrometheusSource struct {
@@ -215,6 +239,15 @@ func Default() *Config {
 		Metrics: Metrics{
 			Prometheus: PrometheusSource{
 				Interval: Duration(30 * time.Second),
+			},
+			System: SystemSource{
+				Interval:  Duration(30 * time.Second),
+				Service:   "host",
+				DiskPaths: []string{"/"},
+			},
+			Docker: DockerSource{
+				Interval: Duration(30 * time.Second),
+				Socket:   "/var/run/docker.sock",
 			},
 			Detection: MetricDetection{
 				Enabled:        &enabled,

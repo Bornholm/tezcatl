@@ -124,10 +124,15 @@ sinks:
 sudo systemctl restart tezcatl-server
 ```
 
-**Métriques (optionnel).** Si Prometheus (et par exemple cadvisor)
-tourne sur la machine, la section `metrics.prometheus` de la
-configuration suffit à corréler métriques et logs — rien d'autre à
-déployer.
+**Métriques (optionnel).** Sans rien installer, les collecteurs
+intégrés donnent la corrélation logs/métriques : `metrics.system`
+(CPU, mémoire, charge, disque de l'hôte) et `metrics.docker` (CPU et
+mémoire par conteneur, nombre de conteneurs par application — l'identité
+vient du label Dokku `com.dokku.app-name`, les métriques d'un conteneur
+se corrèlent donc avec les logs de la même application). Le service
+tourne sous l'utilisateur `tezcatl` : pour lire la socket Docker,
+l'ajouter au groupe `docker` (`usermod -aG docker tezcatl`). Si un
+Prometheus existe par ailleurs, `metrics.prometheus` reste disponible.
 
 ## 5. Mise à jour
 
