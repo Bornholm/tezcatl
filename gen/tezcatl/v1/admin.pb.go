@@ -266,6 +266,174 @@ func (x *ListTemplatesResponse) GetTemplates() []*TemplateInfo {
 	return nil
 }
 
+type ListMetricsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMetricsRequest) Reset() {
+	*x = ListMetricsRequest{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMetricsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMetricsRequest) ProtoMessage() {}
+
+func (x *ListMetricsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMetricsRequest.ProtoReflect.Descriptor instead.
+func (*ListMetricsRequest) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{5}
+}
+
+type MetricInfo struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// key is "source/metric{labels}".
+	Key     string  `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Samples int64   `protobuf:"varint,2,opt,name=samples,proto3" json:"samples,omitempty"`
+	Mean    float64 `protobuf:"fixed64,3,opt,name=mean,proto3" json:"mean,omitempty"`
+	StdDev  float64 `protobuf:"fixed64,4,opt,name=std_dev,json=stdDev,proto3" json:"std_dev,omitempty"`
+	// recent is the fast EWMA, the level of the latest samples.
+	Recent float64 `protobuf:"fixed64,5,opt,name=recent,proto3" json:"recent,omitempty"`
+	// warmup is true while the series has too few samples for
+	// statistical signals.
+	Warmup        bool `protobuf:"varint,6,opt,name=warmup,proto3" json:"warmup,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricInfo) Reset() {
+	*x = MetricInfo{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricInfo) ProtoMessage() {}
+
+func (x *MetricInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricInfo.ProtoReflect.Descriptor instead.
+func (*MetricInfo) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *MetricInfo) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *MetricInfo) GetSamples() int64 {
+	if x != nil {
+		return x.Samples
+	}
+	return 0
+}
+
+func (x *MetricInfo) GetMean() float64 {
+	if x != nil {
+		return x.Mean
+	}
+	return 0
+}
+
+func (x *MetricInfo) GetStdDev() float64 {
+	if x != nil {
+		return x.StdDev
+	}
+	return 0
+}
+
+func (x *MetricInfo) GetRecent() float64 {
+	if x != nil {
+		return x.Recent
+	}
+	return 0
+}
+
+func (x *MetricInfo) GetWarmup() bool {
+	if x != nil {
+		return x.Warmup
+	}
+	return false
+}
+
+type ListMetricsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Metrics       []*MetricInfo          `protobuf:"bytes,1,rep,name=metrics,proto3" json:"metrics,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMetricsResponse) Reset() {
+	*x = ListMetricsResponse{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMetricsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMetricsResponse) ProtoMessage() {}
+
+func (x *ListMetricsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMetricsResponse.ProtoReflect.Descriptor instead.
+func (*ListMetricsResponse) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListMetricsResponse) GetMetrics() []*MetricInfo {
+	if x != nil {
+		return x.Metrics
+	}
+	return nil
+}
+
 var File_tezcatl_v1_admin_proto protoreflect.FileDescriptor
 
 const file_tezcatl_v1_admin_proto_rawDesc = "" +
@@ -284,10 +452,22 @@ const file_tezcatl_v1_admin_proto_rawDesc = "" +
 	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x18\n" +
 	"\amarking\x18\x05 \x01(\tR\amarking\"O\n" +
 	"\x15ListTemplatesResponse\x126\n" +
-	"\ttemplates\x18\x01 \x03(\v2\x18.tezcatl.v1.TemplateInfoR\ttemplates2\xb7\x01\n" +
+	"\ttemplates\x18\x01 \x03(\v2\x18.tezcatl.v1.TemplateInfoR\ttemplates\"\x14\n" +
+	"\x12ListMetricsRequest\"\x95\x01\n" +
+	"\n" +
+	"MetricInfo\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
+	"\asamples\x18\x02 \x01(\x03R\asamples\x12\x12\n" +
+	"\x04mean\x18\x03 \x01(\x01R\x04mean\x12\x17\n" +
+	"\astd_dev\x18\x04 \x01(\x01R\x06stdDev\x12\x16\n" +
+	"\x06recent\x18\x05 \x01(\x01R\x06recent\x12\x16\n" +
+	"\x06warmup\x18\x06 \x01(\bR\x06warmup\"G\n" +
+	"\x13ListMetricsResponse\x120\n" +
+	"\ametrics\x18\x01 \x03(\v2\x16.tezcatl.v1.MetricInfoR\ametrics2\x87\x02\n" +
 	"\fAdminService\x12Q\n" +
 	"\fMarkTemplate\x12\x1f.tezcatl.v1.MarkTemplateRequest\x1a .tezcatl.v1.MarkTemplateResponse\x12T\n" +
-	"\rListTemplates\x12 .tezcatl.v1.ListTemplatesRequest\x1a!.tezcatl.v1.ListTemplatesResponseB6Z4github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1b\x06proto3"
+	"\rListTemplates\x12 .tezcatl.v1.ListTemplatesRequest\x1a!.tezcatl.v1.ListTemplatesResponse\x12N\n" +
+	"\vListMetrics\x12\x1e.tezcatl.v1.ListMetricsRequest\x1a\x1f.tezcatl.v1.ListMetricsResponseB6Z4github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1b\x06proto3"
 
 var (
 	file_tezcatl_v1_admin_proto_rawDescOnce sync.Once
@@ -301,25 +481,31 @@ func file_tezcatl_v1_admin_proto_rawDescGZIP() []byte {
 	return file_tezcatl_v1_admin_proto_rawDescData
 }
 
-var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_tezcatl_v1_admin_proto_goTypes = []any{
 	(*MarkTemplateRequest)(nil),   // 0: tezcatl.v1.MarkTemplateRequest
 	(*MarkTemplateResponse)(nil),  // 1: tezcatl.v1.MarkTemplateResponse
 	(*ListTemplatesRequest)(nil),  // 2: tezcatl.v1.ListTemplatesRequest
 	(*TemplateInfo)(nil),          // 3: tezcatl.v1.TemplateInfo
 	(*ListTemplatesResponse)(nil), // 4: tezcatl.v1.ListTemplatesResponse
+	(*ListMetricsRequest)(nil),    // 5: tezcatl.v1.ListMetricsRequest
+	(*MetricInfo)(nil),            // 6: tezcatl.v1.MetricInfo
+	(*ListMetricsResponse)(nil),   // 7: tezcatl.v1.ListMetricsResponse
 }
 var file_tezcatl_v1_admin_proto_depIdxs = []int32{
 	3, // 0: tezcatl.v1.ListTemplatesResponse.templates:type_name -> tezcatl.v1.TemplateInfo
-	0, // 1: tezcatl.v1.AdminService.MarkTemplate:input_type -> tezcatl.v1.MarkTemplateRequest
-	2, // 2: tezcatl.v1.AdminService.ListTemplates:input_type -> tezcatl.v1.ListTemplatesRequest
-	1, // 3: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
-	4, // 4: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	6, // 1: tezcatl.v1.ListMetricsResponse.metrics:type_name -> tezcatl.v1.MetricInfo
+	0, // 2: tezcatl.v1.AdminService.MarkTemplate:input_type -> tezcatl.v1.MarkTemplateRequest
+	2, // 3: tezcatl.v1.AdminService.ListTemplates:input_type -> tezcatl.v1.ListTemplatesRequest
+	5, // 4: tezcatl.v1.AdminService.ListMetrics:input_type -> tezcatl.v1.ListMetricsRequest
+	1, // 5: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
+	4, // 6: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
+	7, // 7: tezcatl.v1.AdminService.ListMetrics:output_type -> tezcatl.v1.ListMetricsResponse
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_tezcatl_v1_admin_proto_init() }
@@ -333,7 +519,7 @@ func file_tezcatl_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tezcatl_v1_admin_proto_rawDesc), len(file_tezcatl_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

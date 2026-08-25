@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"text/tabwriter"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
@@ -115,6 +116,92 @@ func NewTemplatesCommand() *cli.Command {
 	}
 }
 
+func NewMetricsCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "metrics",
+		Usage: "List the learned metric series with their baselines",
+		Flags: adminTargetFlags(),
+		Action: func(ctx *cli.Context) error {
+			var (
+				series []detect.SeriesInfo
+				err    error
+			)
+
+			if target := ctx.String("target"); target != "" {
+				series, err = listMetricsRemote(ctx.Context, target, ctx.String("tls-ca"))
+			} else if stateDir := ctx.String("state-dir"); stateDir != "" {
+				series, err = listMetricsOffline(ctx.Context, ctx.String("config"), stateDir)
+			} else {
+				return errors.New("either --target or --state-dir is required")
+			}
+
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(w, "SERIES\tSAMPLES\tMEAN\tSTDDEV\tRECENT\tSTATE")
+
+			for _, info := range series {
+				state := "ready"
+				if info.Warmup {
+					state = "warming up"
+				}
+
+				fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n",
+					info.Key, info.Samples,
+					formatValue(info.Mean), formatValue(info.StdDev), formatValue(info.Recent),
+					state)
+			}
+
+			return errors.WithStack(w.Flush())
+		},
+	}
+}
+
+func formatValue(value float64) string {
+	return strconv.FormatFloat(value, 'g', 4, 64)
+}
+
+func listMetricsRemote(ctx context.Context, target string, caFile string) ([]detect.SeriesInfo, error) {
+	conn, err := grpc.Dial(target, caFile)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer conn.Close()
+
+	client := tezcatlv1.NewAdminServiceClient(conn)
+
+	res, err := client.ListMetrics(ctx, &tezcatlv1.ListMetricsRequest{})
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	series := make([]detect.SeriesInfo, 0, len(res.GetMetrics()))
+	for _, info := range res.GetMetrics() {
+		series = append(series, detect.SeriesInfo{
+			Key:     info.GetKey(),
+			Samples: info.GetSamples(),
+			Mean:    info.GetMean(),
+			StdDev:  info.GetStdDev(),
+			Recent:  info.GetRecent(),
+			Warmup:  info.GetWarmup(),
+		})
+	}
+
+	return series, nil
+}
+
+func listMetricsOffline(ctx context.Context, configPath string, stateDir string) ([]detect.SeriesInfo, error) {
+	service, _, store, err := offlineService(ctx, configPath, stateDir)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer store.Close()
+
+	return service.Metrics(), nil
+}
+
 func markRemote(ctx context.Context, target string, caFile string, template string, marking detect.Marking) error {
 	conn, err := grpc.Dial(target, caFile)
 	if err != nil {
@@ -193,7 +280,16 @@ func offlineService(ctx context.Context, configPath string, stateDir string) (*a
 		return nil, nil, nil, errors.WithStack(err)
 	}
 
-	return admin.NewService(miner, detector), detector, store, nil
+	metricDetector := detect.NewMetricDetector(cfg.MetricDetectionConfig())
+	if data, err := store.Load(ctx, metricDetector.SnapshotKey()); err == nil {
+		if err := metricDetector.Restore(data); err != nil {
+			return nil, nil, nil, errors.WithStack(err)
+		}
+	} else if !errors.Is(err, port.ErrStateNotFound) {
+		return nil, nil, nil, errors.WithStack(err)
+	}
+
+	return admin.NewService(miner, detector, metricDetector), detector, store, nil
 }
 
 func markOffline(ctx context.Context, configPath string, stateDir string, template string, marking detect.Marking) error {

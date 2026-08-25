@@ -39,14 +39,15 @@ type Runtime struct {
 	stateStore   port.StateStore
 	eventsOut    io.Writer
 
-	miner       *drain.PartitionedMiner
-	logDetector *detect.LogDetector
+	miner          *drain.PartitionedMiner
+	logDetector    *detect.LogDetector
+	metricDetector *detect.MetricDetector
 }
 
-// AdminService exposes the runtime feedback operations of this pipeline
-// (template inspection and marking).
+// AdminService exposes the runtime inspection and feedback operations
+// of this pipeline (templates, markings, metric series).
 func (r *Runtime) AdminService() *admin.Service {
-	return admin.NewService(r.miner, r.logDetector)
+	return admin.NewService(r.miner, r.logDetector, r.metricDetector)
 }
 
 type RuntimeOptionFunc func(r *Runtime)
@@ -102,9 +103,9 @@ func (r *Runtime) build(ctx context.Context) error {
 	}
 
 	if cfg.Metrics.Detection.Enabled == nil || *cfg.Metrics.Detection.Enabled {
-		metricDetector := detect.NewMetricDetector(cfg.MetricDetectionConfig())
-		detectors = append(detectors, metricDetector)
-		r.snapshotters = append(r.snapshotters, metricDetector)
+		r.metricDetector = detect.NewMetricDetector(cfg.MetricDetectionConfig())
+		detectors = append(detectors, r.metricDetector)
+		r.snapshotters = append(r.snapshotters, r.metricDetector)
 	}
 
 	if len(detectors) > 0 {

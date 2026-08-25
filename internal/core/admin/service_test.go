@@ -26,7 +26,7 @@ func TestServiceMarkAndListTemplates(t *testing.T) {
 
 	detector := detect.NewLogDetector(logConfig)
 
-	service := NewService(miner, detector)
+	service := NewService(miner, detector, nil)
 
 	if err := service.MarkTemplate("connection reset by peer", detect.MarkingIgnore); err != nil {
 		t.Fatalf("unexpected error: %+v", err)
@@ -83,5 +83,45 @@ func TestServiceMarkAndListTemplates(t *testing.T) {
 
 	if marking := detector.Markings()["connection reset by peer"]; marking != "" {
 		t.Fatalf("expected marking to be cleared, got %q", marking)
+	}
+}
+
+func TestServiceMetrics(t *testing.T) {
+	metricDetector := detect.NewMetricDetector(nil)
+
+	for i := range 40 {
+		metricDetector.Detect(&model.Observation{
+			ID:        model.NewID(),
+			Source:    "prod/api",
+			Modality:  model.ModalityMetric,
+			Timestamp: time.Now(),
+			Metric:    &model.MetricSample{Name: "latency_ms", Value: 100 + float64(i%5)},
+		})
+	}
+
+	service := NewService(nil, nil, metricDetector)
+
+	series := service.Metrics()
+	if len(series) != 1 {
+		t.Fatalf("expected 1 series, got %+v", series)
+	}
+
+	info := series[0]
+
+	if info.Key != "prod/api/latency_ms" || info.Samples != 40 {
+		t.Fatalf("unexpected series: %+v", info)
+	}
+
+	if info.Mean < 99 || info.Mean > 105 {
+		t.Errorf("unexpected mean: %f", info.Mean)
+	}
+
+	if info.Warmup {
+		t.Error("expected series to be past warmup")
+	}
+
+	// Without a metric detector (detection disabled), Metrics is empty.
+	if series := NewService(nil, nil, nil).Metrics(); series != nil {
+		t.Fatalf("expected no series, got %+v", series)
 	}
 }

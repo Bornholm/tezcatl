@@ -21,17 +21,19 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	AdminService_MarkTemplate_FullMethodName  = "/tezcatl.v1.AdminService/MarkTemplate"
 	AdminService_ListTemplates_FullMethodName = "/tezcatl.v1.AdminService/ListTemplates"
+	AdminService_ListMetrics_FullMethodName   = "/tezcatl.v1.AdminService/ListMetrics"
 )
 
 // AdminServiceClient is the client API for AdminService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// AdminService is the runtime feedback loop: inspect what has been
-// learned and mark templates without restarting the server.
+// AdminService is the runtime inspection and feedback loop: see what
+// has been learned and mark templates without restarting the server.
 type AdminServiceClient interface {
 	MarkTemplate(ctx context.Context, in *MarkTemplateRequest, opts ...grpc.CallOption) (*MarkTemplateResponse, error)
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
+	ListMetrics(ctx context.Context, in *ListMetricsRequest, opts ...grpc.CallOption) (*ListMetricsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -62,15 +64,26 @@ func (c *adminServiceClient) ListTemplates(ctx context.Context, in *ListTemplate
 	return out, nil
 }
 
+func (c *adminServiceClient) ListMetrics(ctx context.Context, in *ListMetricsRequest, opts ...grpc.CallOption) (*ListMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMetricsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
 //
-// AdminService is the runtime feedback loop: inspect what has been
-// learned and mark templates without restarting the server.
+// AdminService is the runtime inspection and feedback loop: see what
+// has been learned and mark templates without restarting the server.
 type AdminServiceServer interface {
 	MarkTemplate(context.Context, *MarkTemplateRequest) (*MarkTemplateResponse, error)
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
+	ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -86,6 +99,9 @@ func (UnimplementedAdminServiceServer) MarkTemplate(context.Context, *MarkTempla
 }
 func (UnimplementedAdminServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTemplates not implemented")
+}
+func (UnimplementedAdminServiceServer) ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMetrics not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -144,6 +160,24 @@ func _AdminService_ListTemplates_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ListMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListMetrics(ctx, req.(*ListMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -158,6 +192,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTemplates",
 			Handler:    _AdminService_ListTemplates_Handler,
+		},
+		{
+			MethodName: "ListMetrics",
+			Handler:    _AdminService_ListMetrics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

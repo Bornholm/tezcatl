@@ -26,9 +26,29 @@ message ListTemplatesResponse {
   repeated TemplateInfo templates = 1;
 }
 
-// AdminService is the runtime feedback loop: inspect what has been
-// learned and mark templates without restarting the server.
+message ListMetricsRequest {}
+
+message MetricInfo {
+  // key is "source/metric{labels}".
+  string key = 1;
+  int64 samples = 2;
+  double mean = 3;
+  double std_dev = 4;
+  // recent is the fast EWMA, the level of the latest samples.
+  double recent = 5;
+  // warmup is true while the series has too few samples for
+  // statistical signals.
+  bool warmup = 6;
+}
+
+message ListMetricsResponse {
+  repeated MetricInfo metrics = 1;
+}
+
+// AdminService is the runtime inspection and feedback loop: see what
+// has been learned and mark templates without restarting the server.
 service AdminService {
   rpc MarkTemplate(MarkTemplateRequest) returns (MarkTemplateResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+  rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse);
 }
