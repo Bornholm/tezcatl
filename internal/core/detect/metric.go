@@ -240,6 +240,44 @@ func seriesKey(source string, metric *model.MetricSample) string {
 	return b.String()
 }
 
+// SeriesInfo is the learned state of one metric series, for inspection.
+type SeriesInfo struct {
+	// Key is "source/metric{labels}".
+	Key     string  `json:"key"`
+	Samples int64   `json:"samples"`
+	Mean    float64 `json:"mean"`
+	StdDev  float64 `json:"std_dev"`
+	// Recent is the fast EWMA: the level of the latest samples, to
+	// compare with Mean at a glance.
+	Recent float64 `json:"recent"`
+	// Warmup is true while the series has too few samples for
+	// statistical signals.
+	Warmup bool `json:"warmup"`
+}
+
+// Series lists the learned metric series, sorted by key.
+func (d *MetricDetector) Series() []SeriesInfo {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	series := make([]SeriesInfo, 0, len(d.series))
+
+	for key, stats := range d.series {
+		series = append(series, SeriesInfo{
+			Key:     key,
+			Samples: stats.Count,
+			Mean:    stats.Mean,
+			StdDev:  math.Sqrt(stats.Variance),
+			Recent:  stats.FastEWMA,
+			Warmup:  stats.Count < d.config.WarmupSamples,
+		})
+	}
+
+	sort.Slice(series, func(i, j int) bool { return series[i].Key < series[j].Key })
+
+	return series
+}
+
 func (d *MetricDetector) SnapshotKey() string {
 	return "detect-metric"
 }

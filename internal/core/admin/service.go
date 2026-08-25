@@ -8,12 +8,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Service exposes the runtime feedback operations: inspecting learned
-// templates and marking them. It is transport-agnostic; the gRPC admin
-// server and the offline CLI both compose it.
+// Service exposes the runtime inspection and feedback operations:
+// learned templates and their markings, learned metric series. It is
+// transport-agnostic; the gRPC admin server and the offline CLI both
+// compose it.
 type Service struct {
-	miner       *drain.PartitionedMiner
-	logDetector *detect.LogDetector
+	miner          *drain.PartitionedMiner
+	logDetector    *detect.LogDetector
+	metricDetector *detect.MetricDetector
 }
 
 type TemplateInfo struct {
@@ -24,11 +26,21 @@ type TemplateInfo struct {
 	Marking   detect.Marking `json:"marking,omitempty"`
 }
 
-func NewService(miner *drain.PartitionedMiner, logDetector *detect.LogDetector) *Service {
+func NewService(miner *drain.PartitionedMiner, logDetector *detect.LogDetector, metricDetector *detect.MetricDetector) *Service {
 	return &Service{
-		miner:       miner,
-		logDetector: logDetector,
+		miner:          miner,
+		logDetector:    logDetector,
+		metricDetector: metricDetector,
 	}
+}
+
+// Metrics lists the learned metric series with their baselines.
+func (s *Service) Metrics() []detect.SeriesInfo {
+	if s.metricDetector == nil {
+		return nil
+	}
+
+	return s.metricDetector.Series()
 }
 
 // MarkTemplate overrides the behavior of a template at runtime. An empty

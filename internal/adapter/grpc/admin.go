@@ -34,6 +34,27 @@ func (s *AdminServer) MarkTemplate(ctx context.Context, req *tezcatlv1.MarkTempl
 	return &tezcatlv1.MarkTemplateResponse{}, nil
 }
 
+func (s *AdminServer) ListMetrics(ctx context.Context, req *tezcatlv1.ListMetricsRequest) (*tezcatlv1.ListMetricsResponse, error) {
+	series := s.service.Metrics()
+
+	res := &tezcatlv1.ListMetricsResponse{
+		Metrics: make([]*tezcatlv1.MetricInfo, 0, len(series)),
+	}
+
+	for _, info := range series {
+		res.Metrics = append(res.Metrics, &tezcatlv1.MetricInfo{
+			Key:     info.Key,
+			Samples: info.Samples,
+			Mean:    info.Mean,
+			StdDev:  info.StdDev,
+			Recent:  info.Recent,
+			Warmup:  info.Warmup,
+		})
+	}
+
+	return res, nil
+}
+
 func (s *AdminServer) ListTemplates(ctx context.Context, req *tezcatlv1.ListTemplatesRequest) (*tezcatlv1.ListTemplatesResponse, error) {
 	templates := s.service.Templates()
 

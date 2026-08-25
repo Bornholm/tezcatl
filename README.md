@@ -41,6 +41,7 @@ tezcatl ingest change --target tcp://host:4242 \
 
 # Boucle de feedback : inspecter ce qui a été appris, marquer le bruit
 tezcatl templates --target unix:///run/tezcatl.sock
+tezcatl metrics --target unix:///run/tezcatl.sock
 tezcatl mark --target unix:///run/tezcatl.sock \
   --template "connection reset by peer" --as ignore
 ```
