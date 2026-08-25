@@ -77,16 +77,20 @@ func (c *Config) normalized() (*Config, error) {
 type Result struct {
 	Cluster    *Cluster
 	ChangeType ChangeType
+	// Tokens are the masked tokens of the mined message, positionally
+	// aligned with the cluster template.
+	Tokens []string
 }
 
 // TemplateMiner combines masking and the DRAIN tree, exactly like
 // drain3's TemplateMiner. It is safe for concurrent use, though within a
 // pipeline each partition owns its own miner.
 type TemplateMiner struct {
-	mu     sync.Mutex
-	config *Config
-	masker *Masker
-	drain  *Drain
+	mu        sync.Mutex
+	config    *Config
+	masker    *Masker
+	maskNames map[string]struct{}
+	drain     *Drain
 }
 
 func NewTemplateMiner(config *Config) (*TemplateMiner, error) {
@@ -100,25 +104,44 @@ func NewTemplateMiner(config *Config) (*TemplateMiner, error) {
 		return nil, errors.WithStack(err)
 	}
 
+	maskNames := map[string]struct{}{}
+	for _, name := range masker.MaskNames() {
+		maskNames[name] = struct{}{}
+	}
+
 	return &TemplateMiner{
-		config: normalized,
-		masker: masker,
-		drain:  NewDrain(normalized),
+		config:    normalized,
+		masker:    masker,
+		maskNames: maskNames,
+		drain:     NewDrain(normalized),
 	}, nil
 }
 
 // AddLogMessage learns from a raw log message: masking is applied, then
-// the DRAIN tree is updated.
+// the DRAIN tree is updated. The masked tokens are returned in the
+// result so parameters can be extracted without re-masking.
 func (m *TemplateMiner) AddLogMessage(message string) Result {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	cluster, changeType := m.drain.AddLogMessage(m.masker.Mask(message))
+	tokens := m.drain.tokenize(m.masker.Mask(message))
+	cluster, changeType := m.drain.addTokens(tokens)
 
 	return Result{
 		Cluster:    cluster,
 		ChangeType: changeType,
+		Tokens:     tokens,
 	}
+}
+
+// Parameters returns the parameter values (wildcards and masked values)
+// of a mining result, by aligning the already-masked tokens with the
+// cluster template — no masking or tokenization is redone.
+func (m *TemplateMiner) Parameters(result Result) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.alignParameters(result.Cluster.TemplateTokens, result.Tokens)
 }
 
 // Match finds the cluster matching a raw log message without learning.
@@ -138,30 +161,31 @@ func (m *TemplateMiner) Clusters() []*Cluster {
 }
 
 // ExtractParameters returns the values of the template parameters
-// (wildcards and masked values) for a message matching the cluster, by
-// aligning the masked token sequences.
+// (wildcards and masked values) for an arbitrary message matching the
+// cluster. Prefer Parameters when the message was just mined: it skips
+// the masking and tokenization.
 func (m *TemplateMiner) ExtractParameters(cluster *Cluster, message string) []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	tokens := m.drain.tokenize(m.masker.Mask(message))
-	if len(tokens) != len(cluster.TemplateTokens) {
+
+	return m.alignParameters(cluster.TemplateTokens, tokens)
+}
+
+func (m *TemplateMiner) alignParameters(template []string, tokens []string) []string {
+	if len(tokens) != len(template) {
 		return nil
 	}
 
-	maskNames := map[string]struct{}{}
-	for _, name := range m.masker.MaskNames() {
-		maskNames[name] = struct{}{}
-	}
-
 	parameters := []string{}
-	for i, templateToken := range cluster.TemplateTokens {
+	for i, templateToken := range template {
 		if templateToken == m.config.ParamStr {
 			parameters = append(parameters, tokens[i])
 			continue
 		}
 
-		if _, isMask := maskNames[templateToken]; isMask {
+		if _, isMask := m.maskNames[templateToken]; isMask {
 			parameters = append(parameters, tokens[i])
 		}
 	}
