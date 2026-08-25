@@ -91,7 +91,8 @@ Objectif de validation (à faire avec de vrais incidents) : rejouer trois incide
 
 - [x] `adapter/prometheus.Poller` : évaluation périodique de requêtes PromQL (`/api/v1/query`, vector et scalar), nom de métrique logique par requête, identité statique ou dérivée d'un label (`service_label`)
 - [x] Activable en standalone comme en serveur (`metrics.prometheus` dans la config, composé par `setup.Runtime`)
-- Note : un poller actif rend le processus persistant (l'ingestion ne se termine plus à la fermeture de stdin) — arrêt par SIGINT/SIGTERM
+- [x] Collecteurs intégrés sans infrastructure : `metrics.system` (CPU/mémoire/charge/disque via `/proc` et statfs, Linux) et `metrics.docker` (CPU/mémoire par conteneur + conteneurs par service via l'API Engine sur socket unix ; identité par label, `com.dokku.app-name` par défaut)
+- Note : un poller/collecteur actif rend le processus persistant (l'ingestion ne se termine plus à la fermeture de stdin) — arrêt par SIGINT/SIGTERM
 
 ### C3 — Modalité « changement » ✅
 
