@@ -1,0 +1,22 @@
+[Unit]
+Description=Tezcatl host and Docker metrics collection
+Documentation=https://github.com/bornholm/tezcatl
+After=docker.service tezcatl-server.service
+
+[Service]
+# Cible et environnement par défaut, surchargables dans
+# /etc/tezcatl/ingest.env (mêmes variables que tezcatl-ingest@).
+Environment=TEZCATL_TARGET=unix:///run/tezcatl/tezcatl.sock
+Environment=TEZCATL_ENVIRONMENT=production
+EnvironmentFile=-/etc/tezcatl/ingest.env
+# Root : la socket Docker l'exige. CPU/mémoire/charge/disque de l'hôte,
+# CPU/mémoire par conteneur et conteneurs par application (identité via
+# le label com.dokku.app-name).
+ExecStart=/usr/bin/tezcatl ingest host \
+    --target ${TEZCATL_TARGET} \
+    --environment ${TEZCATL_ENVIRONMENT}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -117,6 +117,9 @@ nfpms:
       - src: misc/packaging/tezcatl-ingest@.service
         dst: /usr/lib/systemd/system/tezcatl-ingest@.service
         file_info: { mode: 0644 }
+      - src: misc/packaging/tezcatl-metrics.service
+        dst: /usr/lib/systemd/system/tezcatl-metrics.service
+        file_info: { mode: 0644 }
       - src: misc/packaging/ingest.env
         dst: /etc/tezcatl/ingest.env
         type: config|noreplace
@@ -129,6 +132,7 @@ nfpms:
         file_info: { mode: 0755 }
     scripts:
       postinstall: misc/packaging/dokku-postinstall.sh
+      preremove: misc/packaging/dokku-preremove.sh
       postremove: misc/packaging/dokku-postremove.sh
 
 # Image de conteneur (serveur en Kubernetes, jobs one-shot ingest/mark)

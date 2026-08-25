@@ -124,15 +124,24 @@ sinks:
 sudo systemctl restart tezcatl-server
 ```
 
-**Métriques (optionnel).** Sans rien installer, les collecteurs
-intégrés donnent la corrélation logs/métriques : `metrics.system`
-(CPU, mémoire, charge, disque de l'hôte) et `metrics.docker` (CPU et
-mémoire par conteneur, nombre de conteneurs par application — l'identité
-vient du label Dokku `com.dokku.app-name`, les métriques d'un conteneur
-se corrèlent donc avec les logs de la même application). Le service
-tourne sous l'utilisateur `tezcatl` : pour lire la socket Docker,
-l'ajouter au groupe `docker` (`usermod -aG docker tezcatl`). Si un
-Prometheus existe par ailleurs, `metrics.prometheus` reste disponible.
+**Métriques.** Le paquet `tezcatl-dokku` installe l'unité
+`tezcatl-metrics.service` : un collecteur qui échantillonne l'hôte
+(CPU, mémoire, charge, disque) et les conteneurs Docker (CPU et mémoire
+par conteneur, nombre de conteneurs par application) puis pousse le tout
+vers la même cible que les logs. L'identité des conteneurs vient du
+label Dokku `com.dokku.app-name` : les métriques d'une application se
+corrèlent avec ses logs.
+
+```bash
+sudo systemctl enable --now tezcatl-metrics
+```
+
+Comme les unités d'ingestion, la cible se règle dans
+`/etc/tezcatl/ingest.env` — le collecteur fonctionne donc aussi vers un
+serveur distant. Ne pas activer en double : si vous utilisez cette
+unité, laissez `metrics.system`/`metrics.docker` désactivés dans
+`/etc/tezcatl/server.yaml` (et réciproquement). Si un Prometheus existe
+par ailleurs, `metrics.prometheus` reste disponible côté serveur.
 
 ## 5. Mise à jour
 
