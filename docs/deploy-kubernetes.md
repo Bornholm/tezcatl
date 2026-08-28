@@ -126,34 +126,65 @@ le PVC.
 
 ## 2. Métriques : brancher Prometheus
 
-C'est l'entrée la plus rentable sur Kubernetes — aucun agent à déployer,
-tezcatl interroge l'API Prometheus existante. Dans la ConfigMap :
+C'est l'entrée la plus rentable sur Kubernetes — aucun agent à
+déployer, le plugin `tezcatl-source-prometheus` interroge l'API
+Prometheus existante. Le plus simple est de l'héberger dans le pod
+collecteur de la section 3 : ajoutez le téléchargement du binaire à
+son initContainer…
+
+```yaml
+            - … &&
+              curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl-source-prometheus_${VERSION}_linux_amd64.tar.gz
+              | tar -xz -C /opt/tezcatl tezcatl-source-prometheus
+```
+
+… et un second conteneur qui exécute le plugin (la configuration est
+du JSON, propre au plugin) :
+
+```yaml
+        - name: metrics
+          image: busybox:1.36
+          command: ["/opt/tezcatl/tezcatl"]
+          args:
+            - ingest
+            - source
+            - --target=tcp://tezcatl.tezcatl:4242
+            - --plugins-dir=/opt/tezcatl
+            - |-
+              --source-config={
+                "url": "http://prometheus-server.monitoring:9090",
+                "interval": "30s",
+                "environment": "prod",
+                "queries": [
+                  {"name": "latency_p95_s",
+                   "query": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))",
+                   "service_label": "service"},
+                  {"name": "pod_restarts",
+                   "query": "sum(increase(kube_pod_container_status_restarts_total[5m])) by (namespace)",
+                   "service_label": "namespace"}
+                ]
+              }
+            - prometheus
+          volumeMounts:
+            - { name: bin, mountPath: /opt/tezcatl }
+```
+
+(Avec kube-prometheus-stack, l'URL est
+`http://prometheus-operated.monitoring:9090`.)
+
+`service_label` fait de chaque valeur du label une source distincte —
+les anomalies de métriques se corrèlent alors avec les logs et
+déploiements du même service. Les seuils de détection, eux, restent
+côté serveur, dans la ConfigMap :
 
 ```yaml
     metrics:
-      prometheus:
-        enabled: true
-        # kube-prometheus-stack : http://prometheus-operated.monitoring:9090
-        url: http://prometheus-server.monitoring:9090
-        interval: 30s
-        environment: prod
-        queries:
-          - name: latency_p95_s
-            query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
-            service_label: service
-          - name: pod_restarts
-            query: sum(increase(kube_pod_container_status_restarts_total[5m])) by (namespace)
-            service_label: namespace
       detection:
         z_threshold: 3
         # thresholds:
         #   - metric: latency_p95_s
         #     max: 1.5
 ```
-
-`service_label` fait de chaque valeur du label une source distincte —
-les anomalies de métriques se corrèlent alors avec les logs et
-déploiements du même service.
 
 ## 3. Logs, events et déploiements : le plugin kubernetes
 

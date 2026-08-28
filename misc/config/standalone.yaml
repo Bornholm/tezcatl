@@ -157,34 +157,9 @@ logs:
     #   "disk failure on <*>": symptomatic
 
 # --- Métriques -----------------------------------------------------------
+# L'interrogation périodique de l'API Prometheus est assurée par le
+# plugin « prometheus » (voir plugins.sources plus bas).
 metrics:
-  # Interrogation périodique de l'API Prometheus (aucun agent requis).
-  # Désactivé par défaut. Attention : activé, le processus ne se termine
-  # plus à la fermeture de stdin (arrêt par SIGINT/SIGTERM).
-  prometheus:
-    enabled: false
-    # URL de base de Prometheus.
-    url: http://localhost:9090
-    # Cadence d'évaluation des requêtes.
-    interval: 30s
-    # Identité par défaut des métriques collectées (surchargable par
-    # requête). La corrélation logs/métriques exige la même identité
-    # environnement/service que les logs.
-    service: app
-    environment: production
-    queries:
-        # name : nom logique de la métrique dans les observations.
-        # query : requête PromQL instantanée (vector ou scalar).
-        # service_label : dérive le service d'un label du résultat
-        #   (prioritaire sur service) — chaque valeur du label devient
-        #   une source distincte.
-      - name: latency_p95
-        query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
-        service_label: service
-      - name: pool_usage_percent
-        query: 100 * db_pool_in_use / db_pool_size
-        service: app
-
   detection:
     # false : désactive la détection sur les métriques.
     enabled: true
@@ -269,6 +244,32 @@ plugins:
         # no_events: false
         # no_logs: false
         # no_changes: false
+
+    # Le plugin « prometheus » (paquet tezcatl-plugin-prometheus)
+    # évalue périodiquement des requêtes PromQL instantanées via l'API
+    # HTTP de Prometheus (aucun agent requis) ; chaque échantillon du
+    # résultat devient une observation métrique. La corrélation
+    # logs/métriques exige la même identité environnement/service que
+    # les logs ; service_label dérive le service d'un label du
+    # résultat (prioritaire sur service) — chaque valeur du label
+    # devient une source distincte.
+    prometheus:
+      enabled: false
+      config:
+        url: http://localhost:9090
+        interval: 30s
+        # Identité par défaut, surchargable par requête.
+        service: app
+        environment: production
+        queries:
+          # name : nom logique de la métrique dans les observations.
+          # query : requête PromQL instantanée (vector ou scalar).
+          - name: latency_p95
+            query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+            service_label: service
+          - name: pool_usage_percent
+            query: 100 * db_pool_in_use / db_pool_size
+            service: app
 
 # --- Corrélation ---------------------------------------------------------
 correlation:

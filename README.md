@@ -48,7 +48,7 @@ tezcatl mark --target unix:///run/tezcatl.sock \
 
 Les marquages (`normal`, `ignore`, `symptomatic`) prennent effet immédiatement et sont persistés avec l'état. La détection apprend des baselines par heure de la journée (`seasonality: hourly`) : un cron nocturne ou un pic de trafic quotidien n'est pas une anomalie. Le transport accepte `unix://`, `tcp://` et `tls://` (certificat côté serveur, `--tls-ca` côté client).
 
-Les logs JSON (dont `journalctl -o json`) sont parsés automatiquement : message, niveau et timestamp sont extraits, et la découverte de templates porte sur le message. Les métriques peuvent aussi être tirées de l'API Prometheus (`metrics.prometheus` dans la configuration, requêtes PromQL périodiques).
+Les logs JSON (dont `journalctl -o json`) sont parsés automatiquement : message, niveau et timestamp sont extraits, et la découverte de templates porte sur le message. Les métriques peuvent aussi être tirées de l'API Prometheus (plugin `tezcatl-source-prometheus`, requêtes PromQL périodiques via `plugins.sources.prometheus` dans la configuration).
 
 Exemple d'événement produit (une ligne JSON par événement) :
 

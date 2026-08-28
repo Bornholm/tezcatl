@@ -5,6 +5,7 @@ before:
     - go mod tidy
     - sh -c "cd plugins/host && go mod tidy"
     - sh -c "cd plugins/kubernetes && go mod tidy"
+    - sh -c "cd plugins/prometheus && go mod tidy"
 
 builds:
   - id: tezcatl
@@ -49,6 +50,20 @@ builds:
     ldflags:
       - -w -s
 
+  # Plugin source « prometheus » : requêtes PromQL périodiques via
+  # l'API HTTP de Prometheus.
+  - id: tezcatl-source-prometheus
+    env:
+      - CGO_ENABLED=0
+    targets: [go_first_class]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./plugins/prometheus
+    binary: tezcatl-source-prometheus
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s
+
 archives:
   - id: tezcatl
     ids: [tezcatl]
@@ -77,6 +92,16 @@ archives:
   - id: tezcatl-source-kubernetes
     ids: [tezcatl-source-kubernetes]
     name_template: "tezcatl-source-kubernetes_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - none*
+
+  - id: tezcatl-source-prometheus
+    ids: [tezcatl-source-prometheus]
+    name_template: "tezcatl-source-prometheus_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -180,6 +205,22 @@ nfpms:
       Tezcatl - plugin source kubernetes.
       Events du cluster, logs de pods et changements de workloads
       (images, restarts, scaling) en continu via l'API Kubernetes.
+    bindir: /usr/lib/tezcatl/plugins
+
+  # Plugin source prometheus : requêtes PromQL périodiques.
+  - id: tezcatl-plugin-prometheus
+    package_name: tezcatl-plugin-prometheus
+    ids: [tezcatl-source-prometheus]
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - plugin source prometheus.
+      Evaluation periodique de requetes PromQL via l'API HTTP de
+      Prometheus, chaque echantillon devenant une metrique.
     bindir: /usr/lib/tezcatl/plugins
 
   # Intégration Dokku : une unité systemd template (une instance par

@@ -140,9 +140,10 @@ sudo systemctl enable --now tezcatl-metrics
 Comme les unités d'ingestion, la cible se règle dans
 `/etc/tezcatl/ingest.env` — le collecteur fonctionne donc aussi vers un
 serveur distant. Ne pas activer en double : si vous utilisez cette
-unité, laissez `metrics.system`/`metrics.docker` désactivés dans
+unité, laissez le plugin `host` désactivé dans `plugins.sources` de
 `/etc/tezcatl/server.yaml` (et réciproquement). Si un Prometheus existe
-par ailleurs, `metrics.prometheus` reste disponible côté serveur.
+par ailleurs, le plugin `prometheus` (paquet `tezcatl-plugin-prometheus`,
+`plugins.sources.prometheus`) reste disponible côté serveur.
 
 ## 5. Mise à jour
 

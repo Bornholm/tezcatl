@@ -9,7 +9,6 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/adapter/fs"
 	"github.com/bornholm/tezcatl/internal/adapter/postgres"
-	"github.com/bornholm/tezcatl/internal/adapter/prometheus"
 	"github.com/bornholm/tezcatl/internal/adapter/stdio"
 	"github.com/bornholm/tezcatl/internal/adapter/webhook"
 	"github.com/bornholm/tezcatl/internal/config"
@@ -145,17 +144,8 @@ func (r *Runtime) build(ctx context.Context) error {
 	}
 
 	// Configuration-driven ingesters, added to the ones the command
-	// provides (both server and standalone modes poll metrics
-	// themselves).
-	if cfg.Metrics.Prometheus.Enabled {
-		poller, err := prometheus.NewPoller(cfg.PrometheusOptions())
-		if err != nil {
-			return errors.Wrap(err, "could not set up prometheus poller")
-		}
-
-		r.ingesters = append(r.ingesters, poller)
-	}
-
+	// provides. Active sources (Prometheus polling, host or Kubernetes
+	// collection…) are plugins.
 	for name, source := range cfg.Plugins.Sources {
 		if !source.Enabled {
 			continue
