@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/url"
+	"os"
 
 	"github.com/pkg/errors"
 )
@@ -52,9 +53,27 @@ func Listen(target string, certificate *tls.Certificate) (net.Listener, error) {
 		return nil, errors.WithStack(err)
 	}
 
+	// A socket left over by a crashed process prevents binding; only an
+	// actual socket is removed, a regular file still fails the listen.
+	if network == "unix" {
+		if info, err := os.Stat(address); err == nil && info.Mode()&os.ModeSocket != 0 {
+			os.Remove(address)
+		}
+	}
+
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+
+	// The unix socket is a local ingestion endpoint shared with other
+	// users (dokku deploy hooks, per-app ingest units): world-writable,
+	// access is restricted by the parent directory mode when needed.
+	if network == "unix" {
+		if err := os.Chmod(address, 0o666); err != nil {
+			listener.Close()
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	if !secure {
