@@ -237,6 +237,39 @@ plugins:
         # no_system: false
         # no_docker: false
 
+    # Le plugin « kubernetes » (paquet tezcatl-plugin-kubernetes) suit
+    # en continu les events du cluster (flux de logs, identité
+    # k8s-events), les logs de tous les pods (un stream par conteneur,
+    # service dérivé des labels app.kubernetes.io/name/app puis du
+    # workload propriétaire, environnement = namespace par défaut) et
+    # les mises à jour de spec des workloads — converties en
+    # changements corrélables : image (deployment), rollout restart
+    # (restart), réplicas (scale), autre (config) —, directement via
+    # l'API server. Sans api_server ni
+    # kubeconfig : identifiants in-cluster (serviceaccount)
+    # autodétectés, puis $KUBECONFIG et ~/.kube/config. Un kubeconfig
+    # fournit serveur, CA et identifiants (token, tokenFile,
+    # certificat client — pas les plugins exec type EKS/GKE : utiliser
+    # un token, un certificat ou `kubectl proxy` + api_server).
+    kubernetes:
+      enabled: false
+      config:
+        environment: prod
+        # kubeconfig: ~/.kube/config
+        # context: ""               # défaut : current-context
+        # api_server: http://127.0.0.1:8001
+        # token: "…"                # ou token_file
+        # token_file: /path/to/token
+        # ca_file: /path/to/ca.crt
+        # insecure_skip_verify: false
+        # namespaces: ["default"]   # défaut : tous
+        # label_selector: app=checkout
+        # service_labels: ["app.kubernetes.io/name", "app"]
+        # events_service: k8s-events
+        # no_events: false
+        # no_logs: false
+        # no_changes: false
+
 # --- Corrélation ---------------------------------------------------------
 correlation:
   # Fenêtre d'agrégation : les signaux d'une même source émis dans cette
