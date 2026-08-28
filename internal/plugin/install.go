@@ -25,6 +25,9 @@ type InstallOptions struct {
 	// Repo is the GitHub project: github.com/owner/repo, a full URL or
 	// owner/repo.
 	Repo string
+	// Name selects the plugin when the release ships several
+	// (tezcatl-source-<name>_… archives); optional otherwise.
+	Name string
 	// Version is a release tag (vX.Y.Z); empty means the latest release.
 	Version string
 	// Dir is the plugins directory.
@@ -68,7 +71,7 @@ func Install(ctx context.Context, opts InstallOptions) (string, error) {
 		return "", errors.Wrapf(err, "could not resolve release of %s/%s", owner, repo)
 	}
 
-	assetName, assetURL, err := selectAsset(rel, opts.OS, opts.Arch)
+	assetName, assetURL, err := selectAsset(rel, opts.OS, opts.Arch, opts.Name)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -113,10 +116,14 @@ func parseRepo(raw string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func selectAsset(rel release, targetOS string, targetArch string) (string, string, error) {
+// selectAsset picks the release archive for the target platform. When
+// the release ships several plugins (tezcatl-source-<name>_… archives,
+// like the main tezcatl repository), pluginName disambiguates.
+func selectAsset(rel release, targetOS string, targetArch string, pluginName string) (string, string, error) {
 	names := []string{}
+	candidates := []int{}
 
-	for _, asset := range rel.Assets {
+	for i, asset := range rel.Assets {
 		name := strings.ToLower(asset.Name)
 		names = append(names, asset.Name)
 
@@ -125,11 +132,60 @@ func selectAsset(rel release, targetOS string, targetArch string) (string, strin
 		}
 
 		if strings.Contains(name, targetOS) && (strings.Contains(name, targetArch) || strings.Contains(name, archAlias(targetArch))) {
-			return asset.Name, asset.BrowserDownloadURL, nil
+			candidates = append(candidates, i)
 		}
 	}
 
-	return "", "", errors.Errorf("no %s/%s .tar.gz asset in release %s (assets: %s)", targetOS, targetArch, rel.TagName, strings.Join(names, ", "))
+	if len(candidates) == 0 {
+		return "", "", errors.Errorf("no %s/%s .tar.gz asset in release %s (assets: %s)", targetOS, targetArch, rel.TagName, strings.Join(names, ", "))
+	}
+
+	if pluginName != "" {
+		prefix := Prefix + pluginName + "_"
+		for _, i := range candidates {
+			if strings.HasPrefix(rel.Assets[i].Name, prefix) {
+				return rel.Assets[i].Name, rel.Assets[i].BrowserDownloadURL, nil
+			}
+		}
+
+		return "", "", errors.Errorf("no plugin %q in release %s (plugins: %s)", pluginName, rel.TagName, strings.Join(pluginAssetNames(rel, candidates), ", "))
+	}
+
+	plugins := []int{}
+	for _, i := range candidates {
+		if strings.HasPrefix(rel.Assets[i].Name, Prefix) {
+			plugins = append(plugins, i)
+		}
+	}
+
+	switch len(plugins) {
+	case 1:
+		return rel.Assets[plugins[0]].Name, rel.Assets[plugins[0]].BrowserDownloadURL, nil
+	case 0:
+		// Dedicated plugin repository: a single conventional archive.
+		return rel.Assets[candidates[0]].Name, rel.Assets[candidates[0]].BrowserDownloadURL, nil
+	default:
+		return "", "", errors.Errorf("release %s ships several plugins (%s): pass the plugin name, e.g. tezcatl plugin install <repo> <name>", rel.TagName, strings.Join(pluginAssetNames(rel, candidates), ", "))
+	}
+}
+
+// pluginAssetNames lists the plugin names found among the candidate
+// assets (tezcatl-source-<name>_… → <name>).
+func pluginAssetNames(rel release, candidates []int) []string {
+	names := []string{}
+
+	for _, i := range candidates {
+		name := rel.Assets[i].Name
+		if !strings.HasPrefix(name, Prefix) {
+			continue
+		}
+
+		if base, _, found := strings.Cut(strings.TrimPrefix(name, Prefix), "_"); found {
+			names = append(names, base)
+		}
+	}
+
+	return names
 }
 
 func archAlias(arch string) string {

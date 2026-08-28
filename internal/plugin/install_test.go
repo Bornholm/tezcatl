@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -114,6 +115,71 @@ func TestInstallFromGitHubRelease(t *testing.T) {
 
 	if plugins["kubernetes"] != installed {
 		t.Errorf("expected the plugin to be discoverable, got %+v", plugins)
+	}
+}
+
+// TestInstallFromMultiPluginRelease covers the main tezcatl repository
+// shape: one release shipping tezcatl itself plus several plugins. The
+// plugin name selects the archive; without it, the ambiguity is an
+// error listing the choices.
+func TestInstallFromMultiPluginRelease(t *testing.T) {
+	archive := pluginArchive(t, "tezcatl-source-prometheus")
+
+	mux := http.NewServeMux()
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	mux.HandleFunc("/repos/bornholm/tezcatl/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `{
+			"tag_name": "v1.0.0",
+			"assets": [
+				{"name": "tezcatl_1.0.0_linux_amd64.tar.gz", "browser_download_url": "%[1]s/dl/tezcatl.tar.gz"},
+				{"name": "tezcatl-source-host_1.0.0_linux_amd64.tar.gz", "browser_download_url": "%[1]s/dl/host.tar.gz"},
+				{"name": "tezcatl-source-prometheus_1.0.0_linux_amd64.tar.gz", "browser_download_url": "%[1]s/dl/prometheus.tar.gz"}
+			]
+		}`, server.URL)
+	})
+
+	mux.HandleFunc("/dl/prometheus.tar.gz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(archive)
+	})
+
+	name, err := Install(context.Background(), InstallOptions{
+		Repo:       "github.com/bornholm/tezcatl",
+		Name:       "prometheus",
+		Dir:        filepath.Join(t.TempDir(), "plugins"),
+		OS:         "linux",
+		Arch:       "amd64",
+		APIBaseURL: server.URL,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if name != "prometheus" {
+		t.Errorf("unexpected plugin name: %q", name)
+	}
+
+	if _, err := Install(context.Background(), InstallOptions{
+		Repo:       "github.com/bornholm/tezcatl",
+		Dir:        t.TempDir(),
+		OS:         "linux",
+		Arch:       "amd64",
+		APIBaseURL: server.URL,
+	}); err == nil || !strings.Contains(err.Error(), "several plugins") {
+		t.Errorf("expected an ambiguity error, got %v", err)
+	}
+
+	if _, err := Install(context.Background(), InstallOptions{
+		Repo:       "github.com/bornholm/tezcatl",
+		Name:       "unknown",
+		Dir:        t.TempDir(),
+		OS:         "linux",
+		Arch:       "amd64",
+		APIBaseURL: server.URL,
+	}); err == nil {
+		t.Error("expected an error for an unknown plugin name")
 	}
 }
 

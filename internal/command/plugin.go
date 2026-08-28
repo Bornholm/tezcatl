@@ -28,7 +28,7 @@ func NewPluginCommand() *cli.Command {
 			{
 				Name:      "install",
 				Usage:     "Install a source plugin from a GitHub repository releasing goreleaser archives",
-				ArgsUsage: "<github.com/owner/repo>",
+				ArgsUsage: "<github.com/owner/repo> [plugin]",
 				Flags: []cli.Flag{
 					pluginsDirFlag(),
 					&cli.StringFlag{
@@ -39,11 +39,12 @@ func NewPluginCommand() *cli.Command {
 				Action: func(ctx *cli.Context) error {
 					repo := ctx.Args().First()
 					if repo == "" {
-						return errors.New("missing repository, e.g.: tezcatl plugin install github.com/bornholm/tezcatl-source-kubernetes")
+						return errors.New("missing repository, e.g.: tezcatl plugin install github.com/bornholm/tezcatl prometheus")
 					}
 
 					name, err := plugin.Install(ctx.Context, plugin.InstallOptions{
 						Repo:    repo,
+						Name:    ctx.Args().Get(1),
 						Version: ctx.String("version"),
 						Dir:     plugin.Dir(ctx.String("plugins-dir")),
 						OS:      runtime.GOOS,

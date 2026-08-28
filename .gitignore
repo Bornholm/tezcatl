@@ -4,3 +4,4 @@
 *.test
 coverage.out
 tools/
+/tezcatl-state/
