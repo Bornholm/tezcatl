@@ -48,16 +48,23 @@ logs:
     learning_period: 15m
 
 metrics:
-  prometheus:
-    enabled: false
-    url: http://prometheus:9090
-    interval: 30s
-    queries:
-      - name: latency_p95
-        query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
-        service_label: service
   detection:
     warmup_samples: 30
+
+# Les sources actives (API Prometheus, métriques hôte/Docker, cluster
+# Kubernetes) sont des plugins : binaires tezcatl-source-<name> dans le
+# répertoire de plugins (tezcatl plugin install|list|remove).
+plugins:
+  sources:
+    prometheus:
+      enabled: false
+      config:
+        url: http://prometheus:9090
+        interval: 30s
+        queries:
+          - name: latency_p95
+            query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, service))
+            service_label: service
 
 correlation:
   window: 30s

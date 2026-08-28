@@ -1,4 +1,4 @@
-package prometheus
+package poller
 
 import (
 	"context"
@@ -19,14 +19,14 @@ const requestTimeout = 15 * time.Second
 // Query is one PromQL query evaluated at every polling interval. Name
 // becomes the logical metric name of the produced observations.
 type Query struct {
-	Name  string `yaml:"name"`
-	Query string `yaml:"query"`
+	Name  string `json:"name"`
+	Query string `json:"query"`
 	// Service/Environment override the poller defaults for this query.
-	Service     string `yaml:"service"`
-	Environment string `yaml:"environment"`
+	Service     string `json:"service"`
+	Environment string `json:"environment"`
 	// ServiceLabel derives the service from a label of each result
 	// sample (e.g. "service" or "job"), taking precedence over Service.
-	ServiceLabel string `yaml:"service_label"`
+	ServiceLabel string `json:"service_label"`
 }
 
 type Options struct {

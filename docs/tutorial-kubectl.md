@@ -109,7 +109,10 @@ Après apprentissage, un `Warning` d'un genre nouveau (première
 ## 4. Ajouter les métriques : Prometheus via port-forward
 
 Si le cluster héberge un Prometheus, un port-forward suffit pour
-corréler métriques et logs — toujours sans rien déployer :
+corréler métriques et logs — toujours sans rien déployer. Le poller
+est fourni par le plugin `tezcatl-source-prometheus`, à installer une
+fois (paquet `tezcatl-plugin-prometheus`, ou
+`tezcatl plugin install github.com/bornholm/tezcatl`) :
 
 ```bash
 kubectl -n monitoring port-forward svc/prometheus-server 9090:80 &
@@ -117,16 +120,18 @@ kubectl -n monitoring port-forward svc/prometheus-server 9090:80 &
 
 ```yaml
 # tezcatl.yaml (local)
-metrics:
-  prometheus:
-    enabled: true
-    url: http://127.0.0.1:9090
-    interval: 30s
-    environment: prod
-    queries:
-      - name: latency_p95_s
-        query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="checkout"}[5m])) by (le))
-        service: checkout
+plugins:
+  sources:
+    prometheus:
+      enabled: true
+      config:
+        url: http://127.0.0.1:9090
+        interval: 30s
+        environment: prod
+        queries:
+          - name: latency_p95_s
+            query: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service="checkout"}[5m])) by (le))
+            service: checkout
 state:
   dir: /home/moi/.local/state/tezcatl
 ```
