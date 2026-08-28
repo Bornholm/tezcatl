@@ -100,8 +100,19 @@ func NewIngestCommand() *cli.Command {
 						Name:  "summary",
 						Usage: "human readable description of the change",
 					},
+					&cli.DurationFlag{
+						Name:  "timeout",
+						Usage: "give up when the server stays unreachable (0 disables) — a deploy hook must never hang",
+						Value: 15 * time.Second,
+					},
 				),
 				Action: func(ctx *cli.Context) error {
+					if timeout := ctx.Duration("timeout"); timeout > 0 {
+						timeoutCtx, cancel := context.WithTimeout(ctx.Context, timeout)
+						defer cancel()
+						ctx.Context = timeoutCtx
+					}
+
 					now := time.Now()
 
 					obs := model.Observation{
