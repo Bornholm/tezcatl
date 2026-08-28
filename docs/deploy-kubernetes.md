@@ -1,16 +1,18 @@
 # Déployer tezcatl sur Kubernetes
 
 Cette procédure déploie le serveur tezcatl dans un cluster, le branche
-sur Prometheus, remonte les logs d'applications choisies et signale les
-déploiements depuis la CI. Elle s'appuie sur l'image publiée à chaque
-release : `ghcr.io/bornholm/tezcatl:<version>` (distroless statique,
-amd64/arm64, le binaire en entrypoint).
+sur Prometheus, remonte les logs des pods et les events du cluster via
+le plugin kubernetes, et signale les déploiements depuis la CI. Elle
+s'appuie sur l'image publiée à chaque release :
+`ghcr.io/bornholm/tezcatl:<version>` (distroless statique, amd64/arm64,
+le binaire en entrypoint).
 
-> **Périmètre actuel** : pas encore d'opérateur ni de collecteur
-> DaemonSet (voir la roadmap, chantier C4). Le déploiement ci-dessous
-> est volontairement simple : un serveur central, les métriques par
-> l'API Prometheus, et les logs des applications *critiques* via un
-> forwarder. C'est suffisant pour valider la valeur avant d'industrialiser.
+> **Périmètre actuel** : pas encore d'opérateur (voir la roadmap,
+> chantier C4). Le déploiement ci-dessous est volontairement simple :
+> un serveur central, les métriques par l'API Prometheus, et un
+> collecteur unique (plugin `tezcatl-source-kubernetes`) pour les logs
+> de pods et les events. C'est suffisant pour valider la valeur avant
+> d'industrialiser.
 
 ## 1. Le serveur
 
@@ -153,12 +155,125 @@ tezcatl interroge l'API Prometheus existante. Dans la ConfigMap :
 les anomalies de métriques se corrèlent alors avec les logs et
 déploiements du même service.
 
-## 3. Logs des applications critiques
+## 3. Logs, events et déploiements : le plugin kubernetes
 
-En attendant le collecteur natif, un *forwarder* par application suit
-les pods d'un sélecteur et pousse vers le serveur. RBAC minimal + un pod
-qui pipe `kubectl logs` vers `tezcatl ingest logs` (le binaire est
-téléchargé depuis la release, l'image tezcatl étant distroless) :
+Le plugin `tezcatl-source-kubernetes` parle directement à l'API server
+(pas de kubectl) : il suit les events du cluster (BackOff, Killing,
+FailedScheduling… — un flux de logs sous l'identité `k8s-events`), les
+logs de **tous** les pods, y compris ceux créés après son démarrage —
+la limite de `kubectl logs --selector` ne s'applique pas — et les
+mises à jour de spec des workloads (Deployments, StatefulSets,
+DaemonSets), converties en **changements** corrélables : nouvelle
+image (`type: deployment`, version `checkout:v1.8.2`),
+`kubectl rollout restart` (`restart`), variation de réplicas
+(`scale`), autre modification de spec (`config`). Le churn de status
+d'un rollout (generation inchangée) est ignoré. Le service est dérivé
+des labels (`app.kubernetes.io/name`, `app`) puis du workload
+propriétaire, et le namespace devient l'environnement sauf override.
+
+Un collecteur unique dans le cluster : RBAC en lecture seule + un pod
+qui exécute `tezcatl ingest source kubernetes` vers le serveur (les
+binaires sont téléchargés depuis la release, l'image tezcatl étant
+distroless) :
+
+```yaml
+# collector.yaml — namespace tezcatl
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tezcatl-collector
+  namespace: tezcatl
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tezcatl-collector
+rules:
+  - apiGroups: [""]
+    resources: [pods, events]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tezcatl-collector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tezcatl-collector
+subjects:
+  - kind: ServiceAccount
+    name: tezcatl-collector
+    namespace: tezcatl
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tezcatl-collector
+  namespace: tezcatl
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: tezcatl-collector }
+  template:
+    metadata:
+      labels: { app: tezcatl-collector }
+    spec:
+      serviceAccountName: tezcatl-collector
+      initContainers:
+        - name: fetch
+          image: curlimages/curl:8.10.1
+          command: ["sh", "-c"]
+          args:
+            - VERSION=0.5.0 &&
+              curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl_${VERSION}_linux_amd64.tar.gz
+              | tar -xz -C /opt/tezcatl tezcatl &&
+              curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl-source-kubernetes_${VERSION}_linux_amd64.tar.gz
+              | tar -xz -C /opt/tezcatl tezcatl-source-kubernetes
+          volumeMounts:
+            - { name: bin, mountPath: /opt/tezcatl }
+      containers:
+        - name: collect
+          image: busybox:1.36
+          command: ["/opt/tezcatl/tezcatl"]
+          args:
+            - ingest
+            - source
+            - --target=tcp://tezcatl.tezcatl:4242
+            - --plugins-dir=/opt/tezcatl
+            - '--source-config={"environment":"prod"}'
+            - kubernetes
+          volumeMounts:
+            - { name: bin, mountPath: /opt/tezcatl }
+      volumes:
+        - name: bin
+          emptyDir: {}
+```
+
+Les identifiants in-cluster (token du serviceaccount, CA) sont
+autodétectés ; la config JSON du plugin permet de restreindre
+(`namespaces`, `label_selector`), de couper une des deux sources
+(`no_events`, `no_logs`) ou de changer la dérivation d'identité
+(`service_labels`) — schéma complet dans `misc/config/standalone.yaml`.
+Depuis un poste de travail, le même plugin fonctionne sans rien
+déployer : sans configuration il lit `$KUBECONFIG` puis
+`~/.kube/config` (`--source-config='{"context":"prod"}'` pour choisir
+un contexte ; tokens et certificats clients sont supportés, pas les
+plugins d'authentification `exec` type EKS/GKE — dans ce cas,
+`kubectl proxy` puis
+`--source-config='{"api_server":"http://127.0.0.1:8001"}'`).
+
+### Variante : un forwarder kubectl par application
+
+L'ancienne approche reste valable pour ne suivre qu'une application
+sans droits cluster : RBAC minimal + un pod qui pipe `kubectl logs`
+vers `tezcatl ingest logs` :
 
 ```yaml
 # forwarder-checkout.yaml — à créer dans le namespace de l'application
@@ -239,8 +354,12 @@ logs JSON sont parsés automatiquement.
 
 ## 4. Signaler les déploiements depuis la CI
 
-Après chaque déploiement, un job one-shot dans le cluster (l'image sert
-de client) :
+Le plugin détecte déjà les rollouts au niveau du cluster (section 3).
+Un signalement depuis la CI reste utile pour porter une version plus
+riche que le tag d'image (SHA du commit, lien de pipeline) ou couvrir
+des changements que l'API ne voit pas (migration de schéma, feature
+flag). Après chaque déploiement, un job one-shot dans le cluster
+(l'image sert de client) :
 
 ```bash
 kubectl run tezcatl-change-$RANDOM --rm -i --restart=Never \
@@ -282,9 +401,9 @@ Les marquages sont persistés dans le PVC avec le reste de l'état.
 
 ## Limites et suite
 
-Une seule réplique (l'état n'est pas partagé), pas de TLS entre pods
-(rajouter `tls://` + certificat si le trafic sort du cluster), et la
-collecte de logs reste par-application. La suite naturelle (roadmap
-C4) : regroupement par workload/namespace, événements multi-services et
-collecteur de logs natif — ce déploiement minimal sert précisément à
-valider ce qui mérite d'y être industrialisé.
+Une seule réplique (l'état n'est pas partagé) et pas de TLS entre pods
+(rajouter `tls://` + certificat si le trafic sort du cluster). La suite
+naturelle (roadmap C4) : regroupement par workload/namespace,
+événements multi-services et corrélation des déploiements collectés
+automatiquement — ce déploiement minimal sert précisément à valider ce
+qui mérite d'y être industrialisé.
