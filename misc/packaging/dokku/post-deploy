@@ -13,12 +13,15 @@ TEZCATL_ENVIRONMENT="production"
 
 SHA="$(dokku git:report "$APP" --git-sha 2>/dev/null || true)"
 
-tezcatl ingest change \
+# --timeout borne le client, timeout(1) borne aussi les vieux binaires :
+# quoi qu'il arrive, le hook rend la main.
+timeout 20 tezcatl ingest change \
     --target "$TEZCATL_TARGET" \
     --service "$APP" \
     --environment "$TEZCATL_ENVIRONMENT" \
     --type deployment \
     --change-version "$APP:${SHA:-unknown}" \
-    --summary "dokku deploy" || true
+    --summary "dokku deploy" \
+    --timeout 10s || true
 
 exit 0
