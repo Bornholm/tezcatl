@@ -7,24 +7,39 @@ en place la boucle de feedback. Les paquets sont téléchargés depuis les
 
 ## 1. Installation des paquets
 
-Trois paquets Debian sont publiés à chaque release :
+Quatre paquets Debian sont publiés à chaque release :
 
 - **`tezcatl`** — le binaire (`/usr/bin/tezcatl`) : ingestion, mode
   standalone, commandes de feedback ;
 - **`tezcatl-server`** — l'intégration système du serveur : unité
   systemd, configuration `/etc/tezcatl`, utilisateur dédié ;
+- **`tezcatl-plugin-host`** — le plugin de métriques hôte + conteneurs
+  Docker (requis par l'unité `tezcatl-metrics`) ;
 - **`tezcatl-dokku`** — l'intégration Dokku : unité d'ingestion par
-  application et hook de déploiement.
+  application, collecteur de métriques et hook de déploiement.
+
+Le plus simple est le script d'installation (variante `dokku`), qui
+télécharge la dernière release, vérifie les sommes de contrôle et
+installe les quatre paquets — le relancer plus tard met à jour :
 
 ```bash
-VERSION=0.1.0  # voir la dernière release
+curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sudo sh -s -- --variant dokku
 
-for pkg in "tezcatl_${VERSION}_linux_amd64" "tezcatl-server_${VERSION}_linux_all" "tezcatl-dokku_${VERSION}_linux_all"; do
+sudo systemctl enable --now tezcatl-server
+```
+
+Ou manuellement :
+
+```bash
+VERSION=0.7.0  # voir la dernière release
+
+for pkg in "tezcatl_${VERSION}_linux_amd64" "tezcatl-server_${VERSION}_linux_all" \
+           "tezcatl-plugin-host_${VERSION}_linux_amd64" "tezcatl-dokku_${VERSION}_linux_all"; do
   curl -fsSLO "https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/${pkg}.deb"
 done
 
 # apt résout les dépendances tezcatl-server/tezcatl-dokku → tezcatl
-sudo apt install ./tezcatl_*.deb ./tezcatl-server_*.deb ./tezcatl-dokku_*.deb
+sudo apt install ./tezcatl*.deb
 
 sudo systemctl enable --now tezcatl-server
 ```

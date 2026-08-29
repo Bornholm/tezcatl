@@ -82,9 +82,22 @@ L'état appris (templates Drain3, baselines des détecteurs) est persisté dans 
 
 ## Déploiement
 
-Des paquets Debian/Arch (`tezcatl`, `tezcatl-server`, `tezcatl-dokku`) et
-une image de conteneur (`ghcr.io/bornholm/tezcatl`) sont publiés à chaque
-release. Guides pas à pas :
+Des paquets Debian/Arch (`tezcatl`, `tezcatl-server`, plugins,
+`tezcatl-dokku`) et une image de conteneur (`ghcr.io/bornholm/tezcatl`)
+sont publiés à chaque release. Le script [install.sh](./install.sh)
+installe (ou met à jour) le jeu de paquets d'une variante, avec
+vérification des sommes de contrôle :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sh -s -- --variant dokku
+```
+
+Variantes : `client` (CLI seule, défaut), `server`, `docker` (+ plugin
+host), `dokku` (+ ingestion par app et hook de déploiement),
+`kubernetes` (+ plugin kubernetes, pour superviser un cluster depuis la
+machine). Relancer le même script met à jour vers la dernière release
+(`--version vX.Y.Z` pour épingler, `--download-only` pour récupérer les
+paquets sans installer). Guides pas à pas :
 
 - [Serveur Dokku/Ubuntu](./docs/deploy-dokku.md) — paquets, ingestion des
   logs par application, hook de déploiement ;
