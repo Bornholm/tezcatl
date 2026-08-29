@@ -9,6 +9,19 @@ fi
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
+
+    # Mise à jour : relance les unités d'ingestion activées (une par
+    # application) et le collecteur de métriques, pour prendre le
+    # nouveau binaire — et rattraper les arrêts faits par les anciens
+    # preremove qui stoppaient aussi sur upgrade.
+    for link in /etc/systemd/system/multi-user.target.wants/tezcatl-ingest@*.service; do
+        [ -e "$link" ] || continue
+        systemctl restart "$(basename "$link")" 2>/dev/null || true
+    done
+
+    if systemctl is-enabled --quiet tezcatl-metrics 2>/dev/null; then
+        systemctl restart tezcatl-metrics || true
+    fi
 fi
 
 echo "tezcatl-dokku installé :"

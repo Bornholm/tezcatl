@@ -24,7 +24,14 @@ fi
 
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
-    echo "tezcatl-server installé : systemctl enable --now tezcatl-server"
+
+    # Mise à jour : redémarre le serveur activé pour prendre le nouveau
+    # binaire ; à l'installation initiale rien n'est encore activé.
+    if systemctl is-enabled --quiet tezcatl-server 2>/dev/null; then
+        systemctl restart tezcatl-server || true
+    else
+        echo "tezcatl-server installé : systemctl enable --now tezcatl-server"
+    fi
 fi
 
 exit 0
