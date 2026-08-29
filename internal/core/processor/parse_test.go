@@ -164,6 +164,63 @@ func TestParseLogDokku(t *testing.T) {
 	})
 }
 
+// TestParseLogKeepsSourceParsing covers the contract that lets a source
+// own its own format: what it already extracted is taken as given, so
+// the server never re-guesses a message it did not have to flatten.
+func TestParseLogKeepsSourceParsing(t *testing.T) {
+	cases := []struct {
+		name    string
+		record  *model.LogRecord
+		message string
+		level   string
+	}{
+		{
+			name:    "message and level are kept",
+			record:  &model.LogRecord{Raw: `{"MESSAGE":"disk almost full","PRIORITY":"4"}`, Message: "disk almost full", Level: "warn"},
+			message: "disk almost full",
+			level:   "warn",
+		},
+		{
+			name:    "a level is mapped onto the normalized vocabulary",
+			record:  &model.LogRecord{Raw: "whatever", Message: "boot finished", Level: "NOTICE"},
+			message: "boot finished",
+			level:   "info",
+		},
+		{
+			name:    "an unrecognized level is kept rather than dropped",
+			record:  &model.LogRecord{Raw: "whatever", Message: "boot finished", Level: "verbose"},
+			message: "boot finished",
+			level:   "verbose",
+		},
+		{
+			name: "a message that looks like json is not unwrapped again",
+			record: &model.LogRecord{
+				Raw:     `{"msg":"outer"}`,
+				Message: `{"msg":"outer"}`,
+			},
+			message: `{"msg":"outer"}`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			obs := &model.Observation{Service: "api", Modality: model.ModalityLog, Log: tc.record}
+
+			if _, err := NewParseLog().Process(context.Background(), obs, nil); err != nil {
+				t.Fatalf("unexpected error: %+v", err)
+			}
+
+			if obs.Log.Message != tc.message {
+				t.Errorf("expected message %q, got %q", tc.message, obs.Log.Message)
+			}
+
+			if obs.Log.Level != tc.level {
+				t.Errorf("expected level %q, got %q", tc.level, obs.Log.Level)
+			}
+		})
+	}
+}
+
 func TestParseLogMalformedJSON(t *testing.T) {
 	obs := parseLine(t, `{"broken json`)
 

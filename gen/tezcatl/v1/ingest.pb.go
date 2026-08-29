@@ -78,8 +78,15 @@ func (Modality) EnumDescriptor() ([]byte, []int) {
 }
 
 type LogRecord struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Raw           string                 `protobuf:"bytes,1,opt,name=raw,proto3" json:"raw,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Raw   string                 `protobuf:"bytes,1,opt,name=raw,proto3" json:"raw,omitempty"`
+	// message and level are for a source that already knows them, because
+	// it read them from a structured feed rather than from a line of
+	// text. Both are optional: left empty, the server falls back to
+	// parsing raw. Filled, they are taken as given, which is how a source
+	// keeps the knowledge of its own format out of the server.
+	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,6 +124,20 @@ func (*LogRecord) Descriptor() ([]byte, []int) {
 func (x *LogRecord) GetRaw() string {
 	if x != nil {
 		return x.Raw
+	}
+	return ""
+}
+
+func (x *LogRecord) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogRecord) GetLevel() string {
+	if x != nil {
+		return x.Level
 	}
 	return ""
 }
@@ -406,9 +427,11 @@ var File_tezcatl_v1_ingest_proto protoreflect.FileDescriptor
 const file_tezcatl_v1_ingest_proto_rawDesc = "" +
 	"\n" +
 	"\x17tezcatl/v1/ingest.proto\x12\n" +
-	"tezcatl.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1d\n" +
+	"tezcatl.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"M\n" +
 	"\tLogRecord\x12\x10\n" +
-	"\x03raw\x18\x01 \x01(\tR\x03raw\"\xb1\x01\n" +
+	"\x03raw\x18\x01 \x01(\tR\x03raw\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
+	"\x05level\x18\x03 \x01(\tR\x05level\"\xb1\x01\n" +
 	"\fMetricSample\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value\x12<\n" +

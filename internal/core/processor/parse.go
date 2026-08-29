@@ -54,6 +54,20 @@ func (p *ParseLog) Process(ctx context.Context, obs *model.Observation, emit por
 		return true, nil
 	}
 
+	// A source that read its logs from a structured feed knows the
+	// message better than any heuristic applied to a flattened line.
+	// Parsing it again would only be a chance to get it wrong.
+	if obs.Log.Message != "" {
+		// Map the level onto the normalized vocabulary when it fits,
+		// and keep the source's own word when it does not: an
+		// unrecognized level is still more than no level.
+		if normalized := normalizeLevel(obs.Log.Level); normalized != "" {
+			obs.Log.Level = normalized
+		}
+
+		return true, nil
+	}
+
 	line := strings.TrimSpace(obs.Log.Raw)
 
 	if strings.IndexByte(line, '\x1b') >= 0 {

@@ -24,7 +24,11 @@ func ToProtoObservation(obs *model.Observation) *tezcatlv1.Observation {
 	}
 
 	if obs.Log != nil {
-		proto.Log = &tezcatlv1.LogRecord{Raw: obs.Log.Raw}
+		proto.Log = &tezcatlv1.LogRecord{
+			Raw:     obs.Log.Raw,
+			Message: obs.Log.Message,
+			Level:   obs.Log.Level,
+		}
 	}
 
 	if obs.Metric != nil {
@@ -62,7 +66,11 @@ func FromProtoObservation(proto *tezcatlv1.Observation, ingestedAt time.Time) mo
 	}
 
 	if log := proto.GetLog(); log != nil {
-		obs.Log = &model.LogRecord{Raw: log.GetRaw()}
+		obs.Log = &model.LogRecord{
+			Raw:     log.GetRaw(),
+			Message: log.GetMessage(),
+			Level:   log.GetLevel(),
+		}
 	}
 
 	if metric := proto.GetMetric(); metric != nil {

@@ -16,6 +16,13 @@ enum Modality {
 
 message LogRecord {
   string raw = 1;
+  // message and level are for a source that already knows them, because
+  // it read them from a structured feed rather than from a line of
+  // text. Both are optional: left empty, the server falls back to
+  // parsing raw. Filled, they are taken as given, which is how a source
+  // keeps the knowledge of its own format out of the server.
+  string message = 2;
+  string level = 3;
 }
 
 message MetricSample {

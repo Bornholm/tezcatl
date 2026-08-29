@@ -41,6 +41,12 @@ type EmitFunc func(obs *tezcatlv1.Observation) error
 // Source is implemented by plugin authors: stream observations until
 // the context is canceled. config is the plugin-specific configuration
 // as JSON, coming from the tezcatl configuration or CLI.
+//
+// A source that reads structured logs should fill LogRecord.Message and
+// LogRecord.Level itself rather than flattening everything into Raw:
+// the server takes those fields as given and skips its own parsing
+// heuristics. That is how the knowledge of a particular log format
+// stays in the plugin that reads it instead of leaking into tezcatl.
 type Source interface {
 	Stream(ctx context.Context, config []byte, emit EmitFunc) error
 }
