@@ -18,6 +18,7 @@ func NewApp() *cli.App {
 			NewTemplatesCommand(),
 			NewMetricsCommand(),
 			NewEventsCommand(),
+			NewIncidentsCommand(),
 			NewTopCommand(),
 			NewPluginCommand(),
 		},

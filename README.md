@@ -42,6 +42,11 @@ tezcatl ingest change --target tcp://host:4242 \
 # Relire les événements passés (journal local du serveur, JSONL)
 tezcatl events --since 24h | jq .summary
 
+# Assembler les anomalies d'une période en briefings d'incident :
+# déclencheur, propagation, preuves agrégées, changements corrélés
+tezcatl incidents --since 24h
+tezcatl incidents --since 24h --format json   # pour un agent LLM
+
 # Boucle de feedback : inspecter ce qui a été appris, marquer le bruit.
 # --target vaut unix:///run/tezcatl/tezcatl.sock par défaut, le socket
 # du paquet, et lit aussi $TEZCATL_TARGET
