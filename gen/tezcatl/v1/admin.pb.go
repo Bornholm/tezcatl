@@ -434,6 +434,111 @@ func (x *ListMetricsResponse) GetMetrics() []*MetricInfo {
 	return nil
 }
 
+type StreamEventsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// history is how many recent events to replay before live ones; 0
+	// replays everything the server still holds.
+	History       int32 `protobuf:"varint,1,opt,name=history,proto3" json:"history,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamEventsRequest) Reset() {
+	*x = StreamEventsRequest{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamEventsRequest) ProtoMessage() {}
+
+func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamEventsRequest.ProtoReflect.Descriptor instead.
+func (*StreamEventsRequest) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *StreamEventsRequest) GetHistory() int32 {
+	if x != nil {
+		return x.History
+	}
+	return 0
+}
+
+// EventEnvelope carries an event in the same JSON form the stdout and
+// webhook sinks emit. The event schema is nested and evolving, and that
+// JSON is already the documented contract, so it is not restated field
+// by field here.
+type EventEnvelope struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Json  string                 `protobuf:"bytes,1,opt,name=json,proto3" json:"json,omitempty"`
+	// ready marks the end of the replayed history: it carries no event,
+	// and everything after it is live. It is sent even when there is no
+	// history, so a client can tell "connected" from "still waiting".
+	Ready         bool `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EventEnvelope) Reset() {
+	*x = EventEnvelope{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EventEnvelope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EventEnvelope) ProtoMessage() {}
+
+func (x *EventEnvelope) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EventEnvelope.ProtoReflect.Descriptor instead.
+func (*EventEnvelope) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *EventEnvelope) GetJson() string {
+	if x != nil {
+		return x.Json
+	}
+	return ""
+}
+
+func (x *EventEnvelope) GetReady() bool {
+	if x != nil {
+		return x.Ready
+	}
+	return false
+}
+
 var File_tezcatl_v1_admin_proto protoreflect.FileDescriptor
 
 const file_tezcatl_v1_admin_proto_rawDesc = "" +
@@ -463,11 +568,17 @@ const file_tezcatl_v1_admin_proto_rawDesc = "" +
 	"\x06recent\x18\x05 \x01(\x01R\x06recent\x12\x16\n" +
 	"\x06warmup\x18\x06 \x01(\bR\x06warmup\"G\n" +
 	"\x13ListMetricsResponse\x120\n" +
-	"\ametrics\x18\x01 \x03(\v2\x16.tezcatl.v1.MetricInfoR\ametrics2\x87\x02\n" +
+	"\ametrics\x18\x01 \x03(\v2\x16.tezcatl.v1.MetricInfoR\ametrics\"/\n" +
+	"\x13StreamEventsRequest\x12\x18\n" +
+	"\ahistory\x18\x01 \x01(\x05R\ahistory\"9\n" +
+	"\rEventEnvelope\x12\x12\n" +
+	"\x04json\x18\x01 \x01(\tR\x04json\x12\x14\n" +
+	"\x05ready\x18\x02 \x01(\bR\x05ready2\xd5\x02\n" +
 	"\fAdminService\x12Q\n" +
 	"\fMarkTemplate\x12\x1f.tezcatl.v1.MarkTemplateRequest\x1a .tezcatl.v1.MarkTemplateResponse\x12T\n" +
 	"\rListTemplates\x12 .tezcatl.v1.ListTemplatesRequest\x1a!.tezcatl.v1.ListTemplatesResponse\x12N\n" +
-	"\vListMetrics\x12\x1e.tezcatl.v1.ListMetricsRequest\x1a\x1f.tezcatl.v1.ListMetricsResponseB6Z4github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1b\x06proto3"
+	"\vListMetrics\x12\x1e.tezcatl.v1.ListMetricsRequest\x1a\x1f.tezcatl.v1.ListMetricsResponse\x12L\n" +
+	"\fStreamEvents\x12\x1f.tezcatl.v1.StreamEventsRequest\x1a\x19.tezcatl.v1.EventEnvelope0\x01B6Z4github.com/bornholm/tezcatl/gen/tezcatl/v1;tezcatlv1b\x06proto3"
 
 var (
 	file_tezcatl_v1_admin_proto_rawDescOnce sync.Once
@@ -481,7 +592,7 @@ func file_tezcatl_v1_admin_proto_rawDescGZIP() []byte {
 	return file_tezcatl_v1_admin_proto_rawDescData
 }
 
-var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_tezcatl_v1_admin_proto_goTypes = []any{
 	(*MarkTemplateRequest)(nil),   // 0: tezcatl.v1.MarkTemplateRequest
 	(*MarkTemplateResponse)(nil),  // 1: tezcatl.v1.MarkTemplateResponse
@@ -491,6 +602,8 @@ var file_tezcatl_v1_admin_proto_goTypes = []any{
 	(*ListMetricsRequest)(nil),    // 5: tezcatl.v1.ListMetricsRequest
 	(*MetricInfo)(nil),            // 6: tezcatl.v1.MetricInfo
 	(*ListMetricsResponse)(nil),   // 7: tezcatl.v1.ListMetricsResponse
+	(*StreamEventsRequest)(nil),   // 8: tezcatl.v1.StreamEventsRequest
+	(*EventEnvelope)(nil),         // 9: tezcatl.v1.EventEnvelope
 }
 var file_tezcatl_v1_admin_proto_depIdxs = []int32{
 	3, // 0: tezcatl.v1.ListTemplatesResponse.templates:type_name -> tezcatl.v1.TemplateInfo
@@ -498,11 +611,13 @@ var file_tezcatl_v1_admin_proto_depIdxs = []int32{
 	0, // 2: tezcatl.v1.AdminService.MarkTemplate:input_type -> tezcatl.v1.MarkTemplateRequest
 	2, // 3: tezcatl.v1.AdminService.ListTemplates:input_type -> tezcatl.v1.ListTemplatesRequest
 	5, // 4: tezcatl.v1.AdminService.ListMetrics:input_type -> tezcatl.v1.ListMetricsRequest
-	1, // 5: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
-	4, // 6: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
-	7, // 7: tezcatl.v1.AdminService.ListMetrics:output_type -> tezcatl.v1.ListMetricsResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
+	8, // 5: tezcatl.v1.AdminService.StreamEvents:input_type -> tezcatl.v1.StreamEventsRequest
+	1, // 6: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
+	4, // 7: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
+	7, // 8: tezcatl.v1.AdminService.ListMetrics:output_type -> tezcatl.v1.ListMetricsResponse
+	9, // 9: tezcatl.v1.AdminService.StreamEvents:output_type -> tezcatl.v1.EventEnvelope
+	6, // [6:10] is the sub-list for method output_type
+	2, // [2:6] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -519,7 +634,7 @@ func file_tezcatl_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tezcatl_v1_admin_proto_rawDesc), len(file_tezcatl_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

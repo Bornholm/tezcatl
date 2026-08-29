@@ -5,6 +5,7 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
+	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/pkg/errors"
 )
 
@@ -16,6 +17,25 @@ type Service struct {
 	miner          *drain.PartitionedMiner
 	logDetector    *detect.LogDetector
 	metricDetector *detect.MetricDetector
+	events         EventStream
+}
+
+// EventStream is the live feed of published events, for interactive
+// inspection. The broadcast sink implements it; offline callers, which
+// have no running pipeline, leave it nil.
+type EventStream interface {
+	// Subscribe returns the recent events and a channel carrying the
+	// ones published afterwards, plus a cancel function.
+	Subscribe(history int, buffer int) ([]model.Event, <-chan model.Event, func())
+}
+
+type ServiceOption func(s *Service)
+
+// WithEventStream attaches the live event feed served by StreamEvents.
+func WithEventStream(events EventStream) ServiceOption {
+	return func(s *Service) {
+		s.events = events
+	}
 }
 
 type TemplateInfo struct {
@@ -26,12 +46,30 @@ type TemplateInfo struct {
 	Marking   detect.Marking `json:"marking,omitempty"`
 }
 
-func NewService(miner *drain.PartitionedMiner, logDetector *detect.LogDetector, metricDetector *detect.MetricDetector) *Service {
-	return &Service{
+func NewService(miner *drain.PartitionedMiner, logDetector *detect.LogDetector, metricDetector *detect.MetricDetector, opts ...ServiceOption) *Service {
+	s := &Service{
 		miner:          miner,
 		logDetector:    logDetector,
 		metricDetector: metricDetector,
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
+}
+
+// SubscribeEvents follows the events the pipeline publishes, starting
+// with the last history ones.
+func (s *Service) SubscribeEvents(history int, buffer int) ([]model.Event, <-chan model.Event, func(), error) {
+	if s.events == nil {
+		return nil, nil, nil, errors.New("event streaming is only available on a running server")
+	}
+
+	recent, events, cancel := s.events.Subscribe(history, buffer)
+
+	return recent, events, cancel, nil
 }
 
 // Metrics lists the learned metric series with their baselines.

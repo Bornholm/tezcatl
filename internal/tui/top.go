@@ -2,14 +2,17 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/gdamore/tcell/v2"
 	"github.com/pkg/errors"
 	"github.com/rivo/tview"
@@ -20,6 +23,10 @@ type Source interface {
 	Templates(ctx context.Context) ([]admin.TemplateInfo, error)
 	Metrics(ctx context.Context) ([]detect.SeriesInfo, error)
 	Mark(ctx context.Context, template string, marking detect.Marking) error
+	// Events follows the published events, starting with the recent
+	// ones. It calls connected once the stream is established, and
+	// returns when the context is cancelled or the server goes away.
+	Events(ctx context.Context, history int, out chan<- model.Event, connected func()) error
 }
 
 type Options struct {
@@ -29,13 +36,21 @@ type Options struct {
 }
 
 const (
+	pageEvents    = "events"
 	pageTemplates = "templates"
 	pageMetrics   = "metrics"
 	pageDetail    = "detail"
 
 	requestTimeout = 10 * time.Second
 	messageTTL     = 5 * time.Second
+	// eventHistory is how many past events to ask the server for, and
+	// how many the view keeps in memory.
+	eventHistory = 500
 )
+
+// eventReconnectDelay spaces out reconnection attempts when the server
+// restarts under us. It is a variable so tests can shorten it.
+var eventReconnectDelay = 3 * time.Second
 
 type top struct {
 	app    *tview.Application
@@ -43,6 +58,7 @@ type top struct {
 	status *tview.TextView
 	filter *tview.InputField
 
+	eventsTable    *tview.Table
 	templatesTable *tview.Table
 	metricsTable   *tview.Table
 
@@ -52,13 +68,17 @@ type top struct {
 	mu        sync.Mutex
 	templates []admin.TemplateInfo
 	metrics   []detect.SeriesInfo
-	// visible mirrors the rows currently shown by templatesTable, so
-	// key handlers can map a selected row back to its template.
-	visible   []admin.TemplateInfo
-	query     string
-	fetchedAt time.Time
-	message   string
-	messageAt time.Time
+	events    []model.Event
+	// visible mirrors the rows currently shown by templatesTable, and
+	// visibleEvents those of eventsTable, so key handlers can map a
+	// selected row back to its object.
+	visible       []admin.TemplateInfo
+	visibleEvents []model.Event
+	query         string
+	fetchedAt     time.Time
+	streaming     bool
+	message       string
+	messageAt     time.Time
 }
 
 // Run displays the interactive top view until the user quits or the
@@ -75,6 +95,7 @@ func Run(ctx context.Context, source Source, opts Options) error {
 	defer cancel()
 
 	go t.refreshLoop(ctx)
+	go t.streamLoop(ctx)
 	go func() {
 		<-ctx.Done()
 		t.app.Stop()
@@ -89,14 +110,17 @@ func (t *top) build() {
 	header := tview.NewTextView().SetDynamicColors(true)
 	fmt.Fprintf(header, " [::b]tezcatl top[::-] %s  [gray]target=%s refresh=%s[-]\n",
 		t.opts.Version, tview.Escape(t.opts.Target), t.opts.Refresh)
-	fmt.Fprintf(header, " [yellow]1[-] templates  [yellow]2[-] metrics  [yellow]/[-] filter  [yellow]n/i/s/c[-] mark  [yellow]enter[-] detail  [yellow]r[-] refresh  [yellow]q[-] quit")
+	fmt.Fprintf(header, " [yellow]1[-] events  [yellow]2[-] templates  [yellow]3[-] metrics  [yellow]/[-] filter  [yellow]n/i/s/c[-] mark  [yellow]enter[-] detail  [yellow]r[-] refresh  [yellow]q[-] quit")
 
+	t.eventsTable = newTable()
+	t.eventsTable.SetSelectedFunc(func(row, col int) { t.showDetail() })
 	t.templatesTable = newTable()
 	t.templatesTable.SetSelectedFunc(func(row, col int) { t.showDetail() })
 	t.metricsTable = newTable()
 
 	t.pages = tview.NewPages().
-		AddPage(pageTemplates, t.templatesTable, true, true).
+		AddPage(pageEvents, t.eventsTable, true, true).
+		AddPage(pageTemplates, t.templatesTable, true, false).
 		AddPage(pageMetrics, t.metricsTable, true, false)
 
 	t.filter = tview.NewInputField().SetLabel(" / ")
@@ -154,10 +178,14 @@ func (t *top) onKey(event *tcell.EventKey) *tcell.EventKey {
 		t.app.Stop()
 		return nil
 	case '1':
+		t.pages.SwitchToPage(pageEvents)
+		t.app.SetFocus(t.eventsTable)
+		return nil
+	case '2':
 		t.pages.SwitchToPage(pageTemplates)
 		t.app.SetFocus(t.templatesTable)
 		return nil
-	case '2':
+	case '3':
 		t.pages.SwitchToPage(pageMetrics)
 		t.app.SetFocus(t.metricsTable)
 		return nil
@@ -185,11 +213,33 @@ func (t *top) onKey(event *tcell.EventKey) *tcell.EventKey {
 }
 
 func (t *top) currentTable() tview.Primitive {
-	if name, _ := t.pages.GetFrontPage(); name == pageMetrics {
+	switch name, _ := t.pages.GetFrontPage(); name {
+	case pageMetrics:
 		return t.metricsTable
+	case pageTemplates:
+		return t.templatesTable
+	default:
+		return t.eventsTable
+	}
+}
+
+// selectedEvent returns the event behind the selected table row.
+func (t *top) selectedEvent() (model.Event, bool) {
+	if name, _ := t.pages.GetFrontPage(); name != pageEvents {
+		return model.Event{}, false
 	}
 
-	return t.templatesTable
+	row, _ := t.eventsTable.GetSelection()
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	index := row - 1
+	if index < 0 || index >= len(t.visibleEvents) {
+		return model.Event{}, false
+	}
+
+	return t.visibleEvents[index], true
 }
 
 // selectedTemplate returns the template behind the selected table row.
@@ -238,15 +288,28 @@ func (t *top) markSelected(marking detect.Marking) {
 }
 
 func (t *top) showDetail() {
+	if event, ok := t.selectedEvent(); ok {
+		t.openDetail(
+			fmt.Sprintf(" %s · %s · %s ", event.Kind, event.Source, event.Timestamp.Local().Format(time.RFC3339)),
+			eventDetail(event))
+
+		return
+	}
+
 	template, ok := t.selectedTemplate()
 	if !ok {
 		return
 	}
 
+	t.openDetail(
+		fmt.Sprintf(" %s/%d · size %d · %s ", template.Partition, template.ID, template.Size, markingLabel(template.Marking)),
+		template.Template)
+}
+
+func (t *top) openDetail(title string, body string) {
 	detail := tview.NewTextView().SetWrap(true)
-	detail.SetBorder(true).SetTitle(fmt.Sprintf(" %s/%d — size %d — %s ",
-		template.Partition, template.ID, template.Size, markingLabel(template.Marking)))
-	detail.SetText(template.Template)
+	detail.SetBorder(true).SetTitle(title)
+	detail.SetText(body)
 
 	t.pages.AddPage(pageDetail, detail, true, true)
 	t.app.SetFocus(detail)
@@ -305,6 +368,63 @@ func (t *top) refresh() {
 	t.app.QueueUpdateDraw(t.render)
 }
 
+// streamLoop follows the server's event feed, reconnecting when the
+// server restarts. It runs outside the UI goroutine.
+func (t *top) streamLoop(ctx context.Context) {
+	for ctx.Err() == nil {
+		events := make(chan model.Event, 64)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+
+			for event := range events {
+				t.appendEvent(event)
+			}
+		}()
+
+		err := t.source.Events(ctx, eventHistory, events, func() { t.setStreaming(true) })
+		close(events)
+		<-done
+
+		t.setStreaming(false)
+
+		if ctx.Err() != nil {
+			return
+		}
+
+		if err != nil {
+			t.setMessage(fmt.Sprintf("[red]event stream lost: %v[-]", err))
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(eventReconnectDelay):
+		}
+	}
+}
+
+// appendEvent adds one event to the ring kept in memory, newest last.
+func (t *top) appendEvent(event model.Event) {
+	t.mu.Lock()
+	t.events = append(t.events, event)
+	if len(t.events) > eventHistory {
+		t.events = t.events[len(t.events)-eventHistory:]
+	}
+	t.mu.Unlock()
+
+	t.app.QueueUpdateDraw(t.render)
+}
+
+func (t *top) setStreaming(streaming bool) {
+	t.mu.Lock()
+	t.streaming = streaming
+	t.mu.Unlock()
+
+	t.app.QueueUpdateDraw(t.render)
+}
+
 // setMessage records a transient status message; it runs outside the
 // UI goroutine.
 func (t *top) setMessage(message string) {
@@ -322,18 +442,27 @@ func (t *top) render() {
 	t.mu.Lock()
 	templates := templateRows(t.templates, t.query)
 	metrics := metricRows(t.metrics, t.query)
+	events := eventRows(t.events, t.query)
 	t.visible = templates
+	t.visibleEvents = events
 	fetchedAt := t.fetchedAt
+	streaming := t.streaming
 	message := t.message
 	if time.Since(t.messageAt) > messageTTL {
 		message = ""
 	}
 	t.mu.Unlock()
 
+	renderEvents(t.eventsTable, events)
 	renderTemplates(t.templatesTable, templates)
 	renderMetrics(t.metricsTable, metrics)
 
-	status := fmt.Sprintf(" %d templates · %d series", len(templates), len(metrics))
+	feed := "[red]disconnected[-]"
+	if streaming {
+		feed = "live"
+	}
+
+	status := fmt.Sprintf(" %d events (%s) · %d templates · %d series", len(events), feed, len(templates), len(metrics))
 	if !fetchedAt.IsZero() {
 		status += " · refreshed " + fetchedAt.Format("15:04:05")
 	}
@@ -342,6 +471,80 @@ func (t *top) render() {
 	}
 
 	t.status.SetText(status)
+}
+
+func renderEvents(table *tview.Table, events []model.Event) {
+	table.Clear()
+
+	setHeader(table, "TIME", "SEVERITY", "KIND", "SOURCE", "SUMMARY")
+
+	for i, event := range events {
+		row := i + 1
+
+		color := severityColor(event.Severity)
+
+		table.SetCell(row, 0, tview.NewTableCell(event.Timestamp.Local().Format("15:04:05")).SetTextColor(color))
+		table.SetCell(row, 1, tview.NewTableCell(string(event.Severity)).SetTextColor(color))
+		table.SetCell(row, 2, tview.NewTableCell(tview.Escape(event.Kind)).SetTextColor(color))
+		table.SetCell(row, 3, tview.NewTableCell(tview.Escape(event.Source)).SetTextColor(color))
+		table.SetCell(row, 4, tview.NewTableCell(tview.Escape(event.Summary)).SetTextColor(color).SetMaxWidth(100).SetExpansion(1))
+	}
+
+	clampSelection(table, len(events))
+}
+
+func severityColor(severity model.Severity) tcell.Color {
+	switch severity {
+	case model.SeverityCritical:
+		return tcell.ColorRed
+	case model.SeverityWarning:
+		return tcell.ColorYellow
+	default:
+		return tcell.ColorDefault
+	}
+}
+
+// eventDetail lays out one event for the detail pane: the summary, the
+// signals that triggered it and the changes it correlates with, then
+// the raw JSON.
+func eventDetail(event model.Event) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "%s\n\n", event.Summary)
+	fmt.Fprintf(&b, "severity   %s (confidence %.2f)\n", event.Severity, event.Confidence)
+	fmt.Fprintf(&b, "service    %s / %s\n", valueOr(event.Environment, "-"), valueOr(event.Service, "-"))
+	fmt.Fprintf(&b, "timestamp  %s\n", event.Timestamp.Local().Format(time.RFC3339))
+
+	if len(event.Signals) > 0 {
+		b.WriteString("\nsignals\n")
+
+		for _, signal := range event.Signals {
+			fmt.Fprintf(&b, "  %-28s score %.2f  %s\n", signal.Kind, signal.Score, signal.Summary)
+		}
+	}
+
+	if len(event.RelatedChanges) > 0 {
+		b.WriteString("\nrelated changes (correlation, not causation)\n")
+
+		for _, related := range event.RelatedChanges {
+			fmt.Fprintf(&b, "  %+.0fs  %s %s %s\n", related.OffsetSeconds,
+				related.Change.Type, valueOr(related.Change.Version, ""), related.Change.Summary)
+		}
+	}
+
+	if encoded, err := json.MarshalIndent(event, "", "  "); err == nil {
+		fmt.Fprintf(&b, "\njson\n%s\n", encoded)
+	}
+
+	return b.String()
+}
+
+func valueOr(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+
+	return value
 }
 
 func renderTemplates(table *tview.Table, templates []admin.TemplateInfo) {

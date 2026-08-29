@@ -22,6 +22,7 @@ const (
 	AdminService_MarkTemplate_FullMethodName  = "/tezcatl.v1.AdminService/MarkTemplate"
 	AdminService_ListTemplates_FullMethodName = "/tezcatl.v1.AdminService/ListTemplates"
 	AdminService_ListMetrics_FullMethodName   = "/tezcatl.v1.AdminService/ListMetrics"
+	AdminService_StreamEvents_FullMethodName  = "/tezcatl.v1.AdminService/StreamEvents"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -34,6 +35,7 @@ type AdminServiceClient interface {
 	MarkTemplate(ctx context.Context, in *MarkTemplateRequest, opts ...grpc.CallOption) (*MarkTemplateResponse, error)
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	ListMetrics(ctx context.Context, in *ListMetricsRequest, opts ...grpc.CallOption) (*ListMetricsResponse, error)
+	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventEnvelope], error)
 }
 
 type adminServiceClient struct {
@@ -74,6 +76,25 @@ func (c *adminServiceClient) ListMetrics(ctx context.Context, in *ListMetricsReq
 	return out, nil
 }
 
+func (c *adminServiceClient) StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventEnvelope], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &AdminService_ServiceDesc.Streams[0], AdminService_StreamEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamEventsRequest, EventEnvelope]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_StreamEventsClient = grpc.ServerStreamingClient[EventEnvelope]
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -84,6 +105,7 @@ type AdminServiceServer interface {
 	MarkTemplate(context.Context, *MarkTemplateRequest) (*MarkTemplateResponse, error)
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error)
+	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[EventEnvelope]) error
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -102,6 +124,9 @@ func (UnimplementedAdminServiceServer) ListTemplates(context.Context, *ListTempl
 }
 func (UnimplementedAdminServiceServer) ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMetrics not implemented")
+}
+func (UnimplementedAdminServiceServer) StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[EventEnvelope]) error {
+	return status.Error(codes.Unimplemented, "method StreamEvents not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -178,6 +203,17 @@ func _AdminService_ListMetrics_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_StreamEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(AdminServiceServer).StreamEvents(m, &grpc.GenericServerStream[StreamEventsRequest, EventEnvelope]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type AdminService_StreamEventsServer = grpc.ServerStreamingServer[EventEnvelope]
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -198,6 +234,12 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_ListMetrics_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamEvents",
+			Handler:       _AdminService_StreamEvents_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "tezcatl/v1/admin.proto",
 }

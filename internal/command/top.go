@@ -2,6 +2,8 @@ package command
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"time"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
@@ -9,6 +11,7 @@ import (
 	"github.com/bornholm/tezcatl/internal/build"
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/bornholm/tezcatl/internal/tui"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -78,6 +81,44 @@ func (s *grpcSource) Metrics(ctx context.Context) ([]detect.SeriesInfo, error) {
 	}
 
 	return seriesFromProto(res.GetMetrics()), nil
+}
+
+// Events follows the server feed, decoding the JSON envelopes back
+// into events. It returns when the stream ends, which the caller
+// treats as a disconnection worth retrying.
+func (s *grpcSource) Events(ctx context.Context, history int, out chan<- model.Event, connected func()) error {
+	stream, err := s.client.StreamEvents(ctx, &tezcatlv1.StreamEventsRequest{History: int32(history)})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	for {
+		envelope, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) || ctx.Err() != nil {
+				return nil
+			}
+
+			return errors.WithStack(err)
+		}
+
+		if envelope.GetReady() {
+			connected()
+
+			continue
+		}
+
+		var event model.Event
+		if err := json.Unmarshal([]byte(envelope.GetJson()), &event); err != nil {
+			return errors.WithStack(err)
+		}
+
+		select {
+		case out <- event:
+		case <-ctx.Done():
+			return nil
+		}
+	}
 }
 
 func (s *grpcSource) Mark(ctx context.Context, template string, marking detect.Marking) error {

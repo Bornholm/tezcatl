@@ -45,10 +45,29 @@ message ListMetricsResponse {
   repeated MetricInfo metrics = 1;
 }
 
+message StreamEventsRequest {
+  // history is how many recent events to replay before live ones; 0
+  // replays everything the server still holds.
+  int32 history = 1;
+}
+
+// EventEnvelope carries an event in the same JSON form the stdout and
+// webhook sinks emit. The event schema is nested and evolving, and that
+// JSON is already the documented contract, so it is not restated field
+// by field here.
+message EventEnvelope {
+  string json = 1;
+  // ready marks the end of the replayed history: it carries no event,
+  // and everything after it is live. It is sent even when there is no
+  // history, so a client can tell "connected" from "still waiting".
+  bool ready = 2;
+}
+
 // AdminService is the runtime inspection and feedback loop: see what
 // has been learned and mark templates without restarting the server.
 service AdminService {
   rpc MarkTemplate(MarkTemplateRequest) returns (MarkTemplateResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
   rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse);
+  rpc StreamEvents(StreamEventsRequest) returns (stream EventEnvelope);
 }

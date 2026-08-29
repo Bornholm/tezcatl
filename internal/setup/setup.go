@@ -41,12 +41,14 @@ type Runtime struct {
 	miner          *drain.PartitionedMiner
 	logDetector    *detect.LogDetector
 	metricDetector *detect.MetricDetector
+	broadcast      *sink.Broadcast
 }
 
 // AdminService exposes the runtime inspection and feedback operations
-// of this pipeline (templates, markings, metric series).
+// of this pipeline (templates, markings, metric series, live events).
 func (r *Runtime) AdminService() *admin.Service {
-	return admin.NewService(r.miner, r.logDetector, r.metricDetector)
+	return admin.NewService(r.miner, r.logDetector, r.metricDetector,
+		admin.WithEventStream(r.broadcast))
 }
 
 type RuntimeOptionFunc func(r *Runtime)
@@ -142,6 +144,12 @@ func (r *Runtime) build(ctx context.Context) error {
 	if len(r.sinks) == 0 {
 		return errors.New("no sink enabled")
 	}
+
+	// Last, and never counted as an enabled sink: the in-memory feed
+	// backing "tezcatl top". It keeps a bounded history and drops
+	// events rather than slowing the pipeline down.
+	r.broadcast = sink.NewBroadcast(sink.DefaultHistorySize)
+	r.sinks = append(r.sinks, r.broadcast)
 
 	// Configuration-driven ingesters, added to the ones the command
 	// provides. Active sources (Prometheus polling, host or Kubernetes

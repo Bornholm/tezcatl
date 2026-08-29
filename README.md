@@ -46,7 +46,8 @@ tezcatl templates
 tezcatl metrics
 tezcatl mark --template "connection reset by peer" --as ignore
 
-# Ou en interactif : TUI façon k9s, marquage au clavier, filtre, baselines
+# Ou en interactif : TUI façon k9s. Trois onglets, événements en direct,
+# marquage au clavier, filtre, baselines apprises
 tezcatl top
 ```
 
@@ -81,6 +82,8 @@ Voici un événement produit, une ligne JSON par événement :
 Le `related_changes` dit qu'un déploiement a eu lieu 180 secondes avant l'anomalie. C'est une corrélation, pas une preuve de causalité, et Tezcatl s'arrête là volontairement.
 
 Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.dir` et le recharge au démarrage. Un redémarrage ne relance donc pas une salve de fausses alertes sur des templates déjà connus.
+
+`tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue les 500 derniers, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline, ce qui sert à régler les planchers `min_deltas`. L'historique des événements vit en mémoire dans le serveur, donc il repart à zéro à chaque redémarrage.
 
 ## Déploiement
 

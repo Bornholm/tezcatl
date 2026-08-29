@@ -7,7 +7,28 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/model"
 )
+
+// eventRows filters events and orders them newest first, so the last
+// thing that happened is the first thing on screen.
+func eventRows(events []model.Event, filter string) []model.Event {
+	rows := make([]model.Event, 0, len(events))
+
+	for _, event := range events {
+		if !matchesFilter(filter, event.Kind, event.Source, event.Service, string(event.Severity), event.Summary) {
+			continue
+		}
+
+		rows = append(rows, event)
+	}
+
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].Timestamp.After(rows[j].Timestamp)
+	})
+
+	return rows
+}
 
 // templateRows filters and orders templates for display: grouped by
 // partition, biggest clusters first so the dominant traffic is on top.

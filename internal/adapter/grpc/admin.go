@@ -2,10 +2,12 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -24,6 +26,55 @@ func NewAdminServer(service *admin.Service) *AdminServer {
 // Register makes the admin server attachable to the ingestion listener.
 func (s *AdminServer) Register(server *grpc.Server) {
 	tezcatlv1.RegisterAdminServiceServer(server, s)
+}
+
+// streamBuffer is how many events a subscriber may fall behind before
+// the server starts dropping its events.
+const streamBuffer = 256
+
+// StreamEvents replays the recent events, then follows the live ones
+// until the client goes away or the server stops.
+func (s *AdminServer) StreamEvents(req *tezcatlv1.StreamEventsRequest, stream tezcatlv1.AdminService_StreamEventsServer) error {
+	recent, events, cancel, err := s.service.SubscribeEvents(int(req.GetHistory()), streamBuffer)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	defer cancel()
+
+	for _, event := range recent {
+		if err := sendEvent(stream, event); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	if err := stream.Send(&tezcatlv1.EventEnvelope{Ready: true}); err != nil {
+		return errors.WithStack(err)
+	}
+
+	for {
+		select {
+		case event, open := <-events:
+			if !open {
+				return nil
+			}
+
+			if err := sendEvent(stream, event); err != nil {
+				return errors.WithStack(err)
+			}
+		case <-stream.Context().Done():
+			return nil
+		}
+	}
+}
+
+func sendEvent(stream tezcatlv1.AdminService_StreamEventsServer, event model.Event) error {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	return errors.WithStack(stream.Send(&tezcatlv1.EventEnvelope{Json: string(encoded)}))
 }
 
 func (s *AdminServer) MarkTemplate(ctx context.Context, req *tezcatlv1.MarkTemplateRequest) (*tezcatlv1.MarkTemplateResponse, error) {
