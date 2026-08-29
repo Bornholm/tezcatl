@@ -85,7 +85,11 @@ func (r *Runtime) build(ctx context.Context) error {
 	r.processors = []port.Processor{}
 
 	if cfg.Logs.Parsing.Enabled == nil || *cfg.Logs.Parsing.Enabled {
-		r.processors = append(r.processors, processor.NewParseLog())
+		r.processors = append(r.processors, processor.NewParseLog(
+			processor.WithMessageKeys(cfg.Logs.Parsing.MessageKeys...),
+			processor.WithLevelKeys(cfg.Logs.Parsing.LevelKeys...),
+			processor.WithTimeKeys(cfg.Logs.Parsing.TimeKeys...),
+		))
 	}
 
 	r.processors = append(r.processors, processor.NewNormalize(processor.WithMaxLogLength(cfg.Pipeline.MaxLogLength)))

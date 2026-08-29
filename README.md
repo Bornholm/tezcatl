@@ -12,7 +12,7 @@ Un binaire, trois modes.
 
 ```bash
 # Traitement local autonome : stdin, détection, événements JSONL sur stdout
-journalctl -o json -fu payment-api.service |
+journalctl -o cat -fu payment-api.service |
   tezcatl standalone logs \
     --config misc/config/standalone.yaml \
     --service payment-api --environment production
@@ -53,7 +53,7 @@ tezcatl top
 
 Les marquages `normal`, `ignore` et `symptomatic` prennent effet tout de suite et sont persistés avec l'état. La détection apprend une baseline par heure de la journée (`seasonality: hourly`), donc un cron nocturne ou un pic de trafic quotidien ne déclenche rien, alors que le même pic à 3 h du matin est signalé. Le transport accepte `unix://`, `tcp://` et `tls://`, avec certificat côté serveur et `--tls-ca` côté client.
 
-Tezcatl parse les logs JSON tout seul, y compris ceux de `journalctl -o json` : il extrait le message, le niveau et le timestamp, puis fait porter la découverte de templates sur le message plutôt que sur l'enveloppe. Le plugin `tezcatl-source-prometheus` évalue des requêtes PromQL à intervalle régulier pour alimenter les métriques.
+Tezcatl parse les logs JSON tout seul : il extrait le message, le niveau et le timestamp, puis fait porter la découverte de templates sur le message plutôt que sur l'enveloppe. Il reconnaît des formes, pas des produits, et cherche les noms de clés que les journaliseurs JSON ont en commun. Un flux qui nomme les siennes autrement, comme `journalctl -o json`, se déclare en trois lignes dans `logs.parsing` (voir `standalone.yaml`). Mieux encore, une source peut remplir elle-même le message et le niveau : le serveur les prend tels quels, et la connaissance du format reste dans le plugin qui lit ce format.
 
 Voici un événement produit, une ligne JSON par événement :
 

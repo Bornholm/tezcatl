@@ -5,9 +5,11 @@
 # sont rejetées au démarrage (validation stricte).
 #
 # Usage :
-#   journalctl -o json -fu app.service |
+#   journalctl -o cat -fu app.service |
 #     tezcatl standalone logs --config standalone.yaml \
 #       --service app --environment production
+#
+# (-o json fonctionne aussi, en nommant ses clés dans logs.parsing.)
 #
 # Le même fichier sert au mode serveur (tezcatl server --config …), seule
 # la section `server` diffère. Les durées s'écrivent "30s", "5m", "1h".
@@ -53,13 +55,28 @@ pipeline:
 logs:
   parsing:
     # Parsing structurel avant la découverte de templates :
-    #   - enveloppes JSON (clés message/msg/log, level/severity/lvl,
-    #     time/ts/timestamp/@timestamp) ;
-    #   - journald -o json (MESSAGE, PRIORITY syslog, __REALTIME_TIMESTAMP) ;
-    #   - timestamp RFC3339 en tête de ligne (docker logs --timestamps).
+    #   - échappements ANSI retirés ;
+    #   - timestamp RFC3339 en tête de ligne ;
+    #   - préfixe d'émetteur entre crochets ("app[web.1]: ") ;
+    #   - enveloppe JSON, si la charge utile en est une.
     # Le timestamp extrait devient l'heure de l'événement ; le mining
-    # porte sur le message, pas sur l'enveloppe.
+    # porte sur le message, pas sur l'enveloppe. Un niveau numérique est
+    # lu comme une priorité syslog, une époque comme un timestamp, que
+    # la valeur soit un nombre ou une chaîne.
     enabled: true
+    # Clés cherchées dans l'enveloppe JSON, dans l'ordre, première
+    # trouvée gagne. Les défauts sont les noms que les journaliseurs
+    # JSON ont en commun ; nommez ici les clés d'un flux qui a les
+    # siennes. Remplacer une liste la remplace entièrement : répétez
+    # les défauts que vous voulez garder.
+    # message_keys: [message, msg, log]
+    # level_keys: [level, severity, lvl, loglevel]
+    # time_keys: [time, ts, timestamp, "@timestamp"]
+    #
+    # Pour ingérer `journalctl -o json` :
+    # message_keys: [message, msg, log, MESSAGE]
+    # level_keys: [level, severity, lvl, loglevel, PRIORITY]
+    # time_keys: [time, ts, timestamp, "@timestamp", __REALTIME_TIMESTAMP]
 
   # Découverte de templates : port Go compatible drain3
   # (https://github.com/logpai/Drain3). Chaque source a sa partition

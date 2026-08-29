@@ -12,18 +12,63 @@ import (
 	"github.com/bornholm/tezcatl/internal/core/port"
 )
 
-// ParseLog extracts structure from raw log lines before template mining.
-// The line is progressively unwrapped: ANSI color escapes are stripped,
-// a leading RFC3339 timestamp (docker logs --timestamps, dokku logs) is
-// extracted, a dokku/heroku-style process prefix ("app[web.1]:") becomes
-// an attribute, and the remaining payload is parsed as JSON when it is
-// one (generic keys and journald -o json), yielding message, normalized
-// level and event timestamp. The mined message is the unwrapped payload;
-// the raw line is preserved.
-type ParseLog struct{}
+// ParseLog unwraps a log line into a message, a level and a timestamp
+// before template mining, preserving the raw line. The line is peeled in
+// order: ANSI escapes, a leading RFC3339 timestamp, a bracketed emitter
+// prefix, then a JSON envelope when the payload is one.
+//
+// It knows shapes, not products: a JSON envelope, an RFC3339 prefix, a
+// bracketed emitter tag, a numeric level read as a syslog priority. The
+// field names it looks for are data rather than code, so ingesting a
+// feed that names them differently is a matter of configuration, and
+// teaching tezcatl a format never means editing this file.
+type ParseLog struct {
+	messageKeys []string
+	levelKeys   []string
+	timeKeys    []string
+}
 
-func NewParseLog() *ParseLog {
-	return &ParseLog{}
+type ParseLogOptionFunc func(p *ParseLog)
+
+// WithMessageKeys overrides the JSON keys holding the message.
+func WithMessageKeys(keys ...string) ParseLogOptionFunc {
+	return func(p *ParseLog) {
+		if len(keys) > 0 {
+			p.messageKeys = keys
+		}
+	}
+}
+
+// WithLevelKeys overrides the JSON keys holding the level.
+func WithLevelKeys(keys ...string) ParseLogOptionFunc {
+	return func(p *ParseLog) {
+		if len(keys) > 0 {
+			p.levelKeys = keys
+		}
+	}
+}
+
+// WithTimeKeys overrides the JSON keys holding the timestamp.
+func WithTimeKeys(keys ...string) ParseLogOptionFunc {
+	return func(p *ParseLog) {
+		if len(keys) > 0 {
+			p.timeKeys = keys
+		}
+	}
+}
+
+func NewParseLog(opts ...ParseLogOptionFunc) *ParseLog {
+	p := &ParseLog{
+		messageKeys: DefaultMessageKeys(),
+		levelKeys:   DefaultLevelKeys(),
+		timeKeys:    DefaultTimeKeys(),
+	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	return p
 }
 
 func (p *ParseLog) Name() string {
@@ -34,11 +79,22 @@ func (p *ParseLog) Name() string {
 // shape PaaS log drains and syslog share (e.g. "app[web.1]").
 const AttrLogProcess = "log.process"
 
-var messageKeys = []string{"message", "msg", "log", "MESSAGE"}
+// The default key sets stay to what JSON loggers have in common. A feed
+// with names of its own (journald's MESSAGE, PRIORITY and
+// __REALTIME_TIMESTAMP, for instance) is a matter of adding them in
+// logs.parsing, or better, of a source plugin filling the message and
+// the level itself.
+func DefaultMessageKeys() []string {
+	return []string{"message", "msg", "log"}
+}
 
-var levelKeys = []string{"level", "severity", "lvl", "loglevel"}
+func DefaultLevelKeys() []string {
+	return []string{"level", "severity", "lvl", "loglevel"}
+}
 
-var timeKeys = []string{"time", "ts", "timestamp", "@timestamp"}
+func DefaultTimeKeys() []string {
+	return []string{"time", "ts", "timestamp", "@timestamp"}
+}
 
 // ansiEscape matches CSI sequences (colors and cursor controls), which
 // log tails keep even when nothing is attached to a terminal.
@@ -109,8 +165,8 @@ func (p *ParseLog) stripTimestamp(obs *model.Observation, line string) string {
 	return strings.TrimSpace(rest)
 }
 
-// stripProcess extracts a dokku/heroku-style process prefix into the
-// log.process attribute.
+// stripProcess moves a bracketed emitter prefix into the log.process
+// attribute.
 func (p *ParseLog) stripProcess(obs *model.Observation, line string) string {
 	match := processPrefix.FindStringSubmatch(line)
 	if match == nil {
@@ -133,41 +189,25 @@ func (p *ParseLog) parseJSON(obs *model.Observation, line string) {
 		return
 	}
 
-	for _, key := range messageKeys {
+	for _, key := range p.messageKeys {
 		if message, ok := fields[key].(string); ok && message != "" {
 			obs.Log.Message = strings.TrimSpace(message)
 			break
 		}
 	}
 
-	for _, key := range levelKeys {
+	for _, key := range p.levelKeys {
 		if level := normalizeLevel(fields[key]); level != "" {
 			obs.Log.Level = level
 			break
 		}
 	}
 
-	// journald: PRIORITY is a syslog level ("0".."7").
-	if obs.Log.Level == "" {
-		if priority, ok := fields["PRIORITY"]; ok {
-			obs.Log.Level = syslogLevel(priority)
-		}
-	}
-
 	if obs.Timestamp.IsZero() {
-		for _, key := range timeKeys {
+		for _, key := range p.timeKeys {
 			if timestamp, ok := parseTimeValue(fields[key]); ok {
 				obs.Timestamp = timestamp
 				break
-			}
-		}
-	}
-
-	// journald: __REALTIME_TIMESTAMP is epoch microseconds as a string.
-	if obs.Timestamp.IsZero() {
-		if raw, ok := fields["__REALTIME_TIMESTAMP"].(string); ok {
-			if micros, err := strconv.ParseInt(raw, 10, 64); err == nil {
-				obs.Timestamp = time.UnixMicro(micros)
 			}
 		}
 	}
@@ -176,7 +216,15 @@ func (p *ParseLog) parseJSON(obs *model.Observation, line string) {
 func normalizeLevel(value any) string {
 	level, ok := value.(string)
 	if !ok {
-		return ""
+		// A numeric level is a syslog priority: that is what RFC 5424
+		// says, and every producer that emits a number follows it.
+		return syslogLevel(value)
+	}
+
+	// A level quoted as a string is still a priority when it reads as
+	// a number ("4"), and a word otherwise.
+	if _, err := strconv.ParseInt(level, 10, 64); err == nil {
+		return syslogLevel(level)
 	}
 
 	switch strings.ToLower(level) {
@@ -234,6 +282,12 @@ func parseTimeValue(value any) (time.Time, bool) {
 			if timestamp, err := time.Parse(layout, v); err == nil {
 				return timestamp, true
 			}
+		}
+
+		// An epoch quoted as a string, which any producer may do to
+		// keep the full precision of a 64-bit integer through JSON.
+		if epoch, err := strconv.ParseFloat(v, 64); err == nil {
+			return parseTimeValue(epoch)
 		}
 
 		return time.Time{}, false

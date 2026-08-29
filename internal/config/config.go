@@ -81,6 +81,15 @@ type LogParsing struct {
 	// Enabled turns structured parsing (JSON, timestamps, levels) on;
 	// defaults to true.
 	Enabled *bool `yaml:"enabled"`
+	// MessageKeys, LevelKeys and TimeKeys are the JSON keys looked up
+	// in a log envelope, in order, first match wins. Each defaults to
+	// the names JSON loggers have in common; set one to name the keys
+	// of a feed that uses its own (journald's MESSAGE, PRIORITY and
+	// __REALTIME_TIMESTAMP, for instance). Replacing a list replaces
+	// it whole, so repeat the defaults you want to keep.
+	MessageKeys []string `yaml:"message_keys"`
+	LevelKeys   []string `yaml:"level_keys"`
+	TimeKeys    []string `yaml:"time_keys"`
 }
 
 type LogDetection struct {

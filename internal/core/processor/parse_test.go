@@ -58,19 +58,71 @@ func TestParseLogJSONEpochAndAliases(t *testing.T) {
 	}
 }
 
-func TestParseLogJournald(t *testing.T) {
-	obs := parseLine(t, `{"MESSAGE":"Failed to start unit","PRIORITY":"3","__REALTIME_TIMESTAMP":"1787200920000000","_SYSTEMD_UNIT":"app.service"}`)
+// TestParseLogNamedKeys takes a feed whose envelope uses names of its
+// own (here journald's) and shows that reading it is a matter of naming
+// the keys, not of teaching the parser about a product. The defaults
+// deliberately ignore it: see TestParseLogUnknownKeysIgnored.
+func TestParseLogNamedKeys(t *testing.T) {
+	line := `{"MESSAGE":"Failed to start unit","PRIORITY":"3","__REALTIME_TIMESTAMP":"1787200920000000","_SYSTEMD_UNIT":"app.service"}`
+
+	obs := &model.Observation{Service: "api", Modality: model.ModalityLog, Log: &model.LogRecord{Raw: line}}
+
+	parser := NewParseLog(
+		WithMessageKeys("MESSAGE"),
+		WithLevelKeys("PRIORITY"),
+		WithTimeKeys("__REALTIME_TIMESTAMP"),
+	)
+
+	if _, err := parser.Process(context.Background(), obs, nil); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
 
 	if obs.Log.Message != "Failed to start unit" {
 		t.Errorf("unexpected message: %q", obs.Log.Message)
 	}
 
+	// "3" is a syslog priority, decoded from the shape of the value.
 	if obs.Log.Level != "error" {
 		t.Errorf("unexpected level: %q", obs.Log.Level)
 	}
 
+	// Epoch microseconds quoted as a string.
 	if obs.Timestamp.Unix() != 1787200920 {
 		t.Errorf("unexpected timestamp: %v", obs.Timestamp)
+	}
+}
+
+// TestParseLogUnknownKeysIgnored states the flip side: the core ships
+// the key names JSON loggers share, and nobody else's.
+func TestParseLogUnknownKeysIgnored(t *testing.T) {
+	obs := parseLine(t, `{"MESSAGE":"Failed to start unit","PRIORITY":"3"}`)
+
+	if obs.Log.Message != "" || obs.Log.Level != "" {
+		t.Errorf("expected a feed's own key names to need configuring, got %+v", obs.Log)
+	}
+}
+
+// TestParseLogNumericLevel covers the value-shape decoding that made
+// the product-specific branches unnecessary.
+func TestParseLogNumericLevel(t *testing.T) {
+	cases := map[string]string{
+		`{"msg":"x","level":3}`:              "error",
+		`{"msg":"x","level":"4"}`:            "warn",
+		`{"msg":"x","level":"warning"}`:      "warn",
+		`{"msg":"x","severity":7}`:           "debug",
+		`{"msg":"x","level":"not-a-level"}`:  "",
+		`{"msg":"x","time":"1787200920000"}`: "",
+	}
+
+	for line, expected := range cases {
+		if got := parseLine(t, line).Log.Level; got != expected {
+			t.Errorf("%s: expected level %q, got %q", line, expected, got)
+		}
+	}
+
+	// An epoch quoted as a string is still a timestamp.
+	if got := parseLine(t, `{"msg":"x","time":"1787200920000"}`).Timestamp.Unix(); got != 1787200920 {
+		t.Errorf("expected a quoted epoch to be read, got %d", got)
 	}
 }
 
