@@ -339,6 +339,19 @@ state:
   # Cadence de sauvegarde (plus une sauvegarde finale à l'arrêt).
   save_interval: 30s
 
+# Journal local des événements : la mémoire interrogeable du serveur
+# (tezcatl events, l'onglet événements de tezcatl top, l'API admin),
+# indépendante des sinks d'export. Fichiers JSONL, un par jour, lisibles
+# avec n'importe quel outil texte.
+events:
+  enabled: true
+  # Répertoire ; vide : <state.dir>/events (rien n'est écrit si aucune
+  # persistance n'est configurée).
+  dir: ""
+  # Les jours entiers plus vieux que cette durée sont supprimés ;
+  # 0 conserve tout.
+  retention: 360h # 15 jours
+
 # --- Destinations des événements -----------------------------------------
 sinks:
   # JSON Lines sur stdout — un événement par ligne. Les logs internes

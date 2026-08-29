@@ -121,6 +121,26 @@ func (s *grpcSource) Events(ctx context.Context, history int, out chan<- model.E
 	}
 }
 
+// ListEvents pulls the persistent history backing the events tab.
+func (s *grpcSource) ListEvents(ctx context.Context, limit int) ([]model.Event, error) {
+	res, err := s.client.ListEvents(ctx, &tezcatlv1.ListEventsRequest{Limit: int32(limit)})
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	events := make([]model.Event, 0, len(res.GetEvents()))
+	for _, envelope := range res.GetEvents() {
+		var event model.Event
+		if err := json.Unmarshal([]byte(envelope.GetJson()), &event); err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		events = append(events, event)
+	}
+
+	return events, nil
+}
+
 func (s *grpcSource) Mark(ctx context.Context, template string, marking detect.Marking) error {
 	if _, err := s.client.MarkTemplate(ctx, &tezcatlv1.MarkTemplateRequest{
 		Template: template,

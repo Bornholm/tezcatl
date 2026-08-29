@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
 	"github.com/bornholm/tezcatl/internal/core/admin"
@@ -75,6 +76,49 @@ func sendEvent(stream tezcatlv1.AdminService_StreamEventsServer, event model.Eve
 	}
 
 	return errors.WithStack(stream.Send(&tezcatlv1.EventEnvelope{Json: string(encoded)}))
+}
+
+// ListEvents returns past events from the server's local event log.
+func (s *AdminServer) ListEvents(ctx context.Context, req *tezcatlv1.ListEventsRequest) (*tezcatlv1.ListEventsResponse, error) {
+	since, err := parseEventBound(req.GetSince())
+	if err != nil {
+		return nil, errors.Wrap(err, "malformed since")
+	}
+
+	until, err := parseEventBound(req.GetUntil())
+	if err != nil {
+		return nil, errors.Wrap(err, "malformed until")
+	}
+
+	events, err := s.service.ListEvents(since, until, int(req.GetLimit()))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	res := &tezcatlv1.ListEventsResponse{
+		Events: make([]*tezcatlv1.EventEnvelope, 0, len(events)),
+	}
+
+	for _, event := range events {
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+
+		res.Events = append(res.Events, &tezcatlv1.EventEnvelope{Json: string(encoded)})
+	}
+
+	return res, nil
+}
+
+func parseEventBound(raw string) (time.Time, error) {
+	if raw == "" {
+		return time.Time{}, nil
+	}
+
+	bound, err := time.Parse(time.RFC3339Nano, raw)
+
+	return bound, errors.WithStack(err)
 }
 
 func (s *AdminServer) MarkTemplate(ctx context.Context, req *tezcatlv1.MarkTemplateRequest) (*tezcatlv1.MarkTemplateResponse, error) {

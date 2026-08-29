@@ -39,6 +39,9 @@ tezcatl ingest change --target tcp://host:4242 \
   --service checkout --environment prod \
   --type deployment --change-version checkout:v1.8.2
 
+# Relire les événements passés (journal local du serveur, JSONL)
+tezcatl events --since 24h | jq .summary
+
 # Boucle de feedback : inspecter ce qui a été appris, marquer le bruit.
 # --target vaut unix:///run/tezcatl/tezcatl.sock par défaut, le socket
 # du paquet, et lit aussi $TEZCATL_TARGET

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"sort"
+	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
@@ -18,6 +19,7 @@ type Service struct {
 	logDetector    *detect.LogDetector
 	metricDetector *detect.MetricDetector
 	events         EventStream
+	eventLog       EventLog
 }
 
 // EventStream is the live feed of published events, for interactive
@@ -28,6 +30,26 @@ type EventStream interface {
 	// ones published afterwards, plus a cancel function.
 	Subscribe(history int, buffer int) ([]model.Event, <-chan model.Event, func())
 }
+
+// EventLog is the persistent memory of published events. The file
+// event log implements it; it is absent when nothing is configured to
+// keep events.
+type EventLog interface {
+	// Query returns the events in [since, until] oldest first; zero
+	// bounds are unbounded, a positive limit keeps the newest events.
+	Query(since time.Time, until time.Time, limit int) ([]model.Event, error)
+}
+
+// WithEventLog attaches the persistent event history served by
+// ListEvents.
+func WithEventLog(events EventLog) ServiceOption {
+	return func(s *Service) {
+		s.eventLog = events
+	}
+}
+
+// DefaultListLimit bounds ListEvents when the caller does not.
+const DefaultListLimit = 500
 
 type ServiceOption func(s *Service)
 
@@ -58,6 +80,43 @@ func NewService(miner *drain.PartitionedMiner, logDetector *detect.LogDetector, 
 	}
 
 	return s
+}
+
+// ListEvents returns past events from the persistent log; the ring of
+// the live stream fills in when nothing persists events, so a fresh
+// server still answers with what it has.
+func (s *Service) ListEvents(since time.Time, until time.Time, limit int) ([]model.Event, error) {
+	if limit <= 0 {
+		limit = DefaultListLimit
+	}
+
+	if s.eventLog != nil {
+		events, err := s.eventLog.Query(since, until, limit)
+
+		return events, errors.WithStack(err)
+	}
+
+	if s.events == nil {
+		return nil, errors.New("event history is only available on a running server")
+	}
+
+	recent, _, cancel := s.events.Subscribe(limit, 1)
+	cancel()
+
+	events := make([]model.Event, 0, len(recent))
+	for _, event := range recent {
+		if !since.IsZero() && event.Timestamp.Before(since) {
+			continue
+		}
+
+		if !until.IsZero() && event.Timestamp.After(until) {
+			continue
+		}
+
+		events = append(events, event)
+	}
+
+	return events, nil
 }
 
 // SubscribeEvents follows the events the pipeline publishes, starting

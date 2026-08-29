@@ -42,13 +42,19 @@ type Runtime struct {
 	logDetector    *detect.LogDetector
 	metricDetector *detect.MetricDetector
 	broadcast      *sink.Broadcast
+	eventLog       *fs.EventLog
 }
 
 // AdminService exposes the runtime inspection and feedback operations
-// of this pipeline (templates, markings, metric series, live events).
+// of this pipeline (templates, markings, metric series, events).
 func (r *Runtime) AdminService() *admin.Service {
-	return admin.NewService(r.miner, r.logDetector, r.metricDetector,
-		admin.WithEventStream(r.broadcast))
+	opts := []admin.ServiceOption{admin.WithEventStream(r.broadcast)}
+
+	if r.eventLog != nil {
+		opts = append(opts, admin.WithEventLog(r.eventLog))
+	}
+
+	return admin.NewService(r.miner, r.logDetector, r.metricDetector, opts...)
 }
 
 type RuntimeOptionFunc func(r *Runtime)
@@ -149,11 +155,23 @@ func (r *Runtime) build(ctx context.Context) error {
 		return errors.New("no sink enabled")
 	}
 
-	// Last, and never counted as an enabled sink: the in-memory feed
-	// backing "tezcatl top". It keeps a bounded history and drops
-	// events rather than slowing the pipeline down.
+	// Last, and never counted as enabled sinks: the server's own
+	// memory of what it published. The in-memory feed backs the live
+	// stream of "tezcatl top" (bounded, drops rather than slows the
+	// pipeline down); the on-disk event log backs "tezcatl events" and
+	// survives restarts.
 	r.broadcast = sink.NewBroadcast(sink.DefaultHistorySize)
 	r.sinks = append(r.sinks, r.broadcast)
+
+	if dir := cfg.Events.LogDir(cfg.State.Dir); dir != "" {
+		eventLog, err := fs.NewEventLog(dir, cfg.Events.Retention.AsDuration())
+		if err != nil {
+			return errors.Wrap(err, "could not open the event log")
+		}
+
+		r.eventLog = eventLog
+		r.sinks = append(r.sinks, eventLog)
+	}
 
 	// Configuration-driven ingesters, added to the ones the command
 	// provides. Active sources (Prometheus polling, host or Kubernetes

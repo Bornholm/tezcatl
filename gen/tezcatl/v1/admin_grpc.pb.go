@@ -23,6 +23,7 @@ const (
 	AdminService_ListTemplates_FullMethodName = "/tezcatl.v1.AdminService/ListTemplates"
 	AdminService_ListMetrics_FullMethodName   = "/tezcatl.v1.AdminService/ListMetrics"
 	AdminService_StreamEvents_FullMethodName  = "/tezcatl.v1.AdminService/StreamEvents"
+	AdminService_ListEvents_FullMethodName    = "/tezcatl.v1.AdminService/ListEvents"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -36,6 +37,7 @@ type AdminServiceClient interface {
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	ListMetrics(ctx context.Context, in *ListMetricsRequest, opts ...grpc.CallOption) (*ListMetricsResponse, error)
 	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventEnvelope], error)
+	ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -95,6 +97,16 @@ func (c *adminServiceClient) StreamEvents(ctx context.Context, in *StreamEventsR
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AdminService_StreamEventsClient = grpc.ServerStreamingClient[EventEnvelope]
 
+func (c *adminServiceClient) ListEvents(ctx context.Context, in *ListEventsRequest, opts ...grpc.CallOption) (*ListEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListEventsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility.
@@ -106,6 +118,7 @@ type AdminServiceServer interface {
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error)
 	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[EventEnvelope]) error
+	ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -127,6 +140,9 @@ func (UnimplementedAdminServiceServer) ListMetrics(context.Context, *ListMetrics
 }
 func (UnimplementedAdminServiceServer) StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[EventEnvelope]) error {
 	return status.Error(codes.Unimplemented, "method StreamEvents not implemented")
+}
+func (UnimplementedAdminServiceServer) ListEvents(context.Context, *ListEventsRequest) (*ListEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListEvents not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 func (UnimplementedAdminServiceServer) testEmbeddedByValue()                      {}
@@ -214,6 +230,24 @@ func _AdminService_StreamEvents_Handler(srv interface{}, stream grpc.ServerStrea
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AdminService_StreamEventsServer = grpc.ServerStreamingServer[EventEnvelope]
 
+func _AdminService_ListEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListEvents(ctx, req.(*ListEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -232,6 +266,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMetrics",
 			Handler:    _AdminService_ListMetrics_Handler,
+		},
+		{
+			MethodName: "ListEvents",
+			Handler:    _AdminService_ListEvents_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

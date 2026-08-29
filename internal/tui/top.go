@@ -27,6 +27,9 @@ type Source interface {
 	// ones. It calls connected once the stream is established, and
 	// returns when the context is cancelled or the server goes away.
 	Events(ctx context.Context, history int, out chan<- model.Event, connected func()) error
+	// ListEvents returns past events from the server's persistent log,
+	// oldest first, so the view has history beyond the live ring.
+	ListEvents(ctx context.Context, limit int) ([]model.Event, error)
 }
 
 type Options struct {
@@ -69,6 +72,9 @@ type top struct {
 	templates []admin.TemplateInfo
 	metrics   []detect.SeriesInfo
 	events    []model.Event
+	// seen dedups events between the persistent history and the live
+	// stream, which overlap on purpose rather than risking a gap.
+	seen map[string]bool
 	// visible mirrors the rows currently shown by templatesTable, and
 	// visibleEvents those of eventsTable, so key handlers can map a
 	// selected row back to its object.
@@ -371,6 +377,16 @@ func (t *top) refresh() {
 // streamLoop follows the server's event feed, reconnecting when the
 // server restarts. It runs outside the UI goroutine.
 func (t *top) streamLoop(ctx context.Context) {
+	// Seed from the persistent log first: the live ring only remembers
+	// since the server started. Failing is fine, the stream fills in.
+	if history, err := t.source.ListEvents(ctx, eventHistory); err == nil {
+		for _, event := range history {
+			t.rememberEvent(event)
+		}
+
+		t.app.QueueUpdateDraw(t.render)
+	}
+
 	for ctx.Err() == nil {
 		events := make(chan model.Event, 64)
 
@@ -407,14 +423,41 @@ func (t *top) streamLoop(ctx context.Context) {
 
 // appendEvent adds one event to the ring kept in memory, newest last.
 func (t *top) appendEvent(event model.Event) {
-	t.mu.Lock()
-	t.events = append(t.events, event)
-	if len(t.events) > eventHistory {
-		t.events = t.events[len(t.events)-eventHistory:]
+	if !t.rememberEvent(event) {
+		return
 	}
-	t.mu.Unlock()
 
 	t.app.QueueUpdateDraw(t.render)
+}
+
+// rememberEvent stores an event unless it is already known; it reports
+// whether the view changed.
+func (t *top) rememberEvent(event model.Event) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.seen == nil {
+		t.seen = map[string]bool{}
+	}
+
+	if event.ID != "" && t.seen[event.ID] {
+		return false
+	}
+
+	if event.ID != "" {
+		t.seen[event.ID] = true
+	}
+
+	t.events = append(t.events, event)
+	if len(t.events) > eventHistory {
+		for _, dropped := range t.events[:len(t.events)-eventHistory] {
+			delete(t.seen, dropped.ID)
+		}
+
+		t.events = t.events[len(t.events)-eventHistory:]
+	}
+
+	return true
 }
 
 func (t *top) setStreaming(streaming bool) {

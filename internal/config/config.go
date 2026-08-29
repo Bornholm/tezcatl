@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ type Config struct {
 	Plugins     Plugins     `yaml:"plugins"`
 	Correlation Correlation `yaml:"correlation"`
 	State       State       `yaml:"state"`
+	Events      Events      `yaml:"events"`
 	Sinks       Sinks       `yaml:"sinks"`
 	Logging     Logging     `yaml:"logging"`
 }
@@ -160,6 +162,37 @@ type State struct {
 	SaveInterval Duration `yaml:"save_interval"`
 }
 
+// Events configures the local event log: the server's own queryable
+// memory of what it published (tezcatl events, tezcatl top, the admin
+// API), independent from the export sinks.
+type Events struct {
+	// Enabled defaults to true; the log still needs a directory, which
+	// defaults to <state.dir>/events. With neither, nothing is kept.
+	Enabled *bool  `yaml:"enabled"`
+	Dir     string `yaml:"dir"`
+	// Retention prunes whole days of events past this age; 0 keeps
+	// everything.
+	Retention Duration `yaml:"retention"`
+}
+
+// LogDir resolves the directory of the event log; empty means the log
+// is off (disabled, or nowhere to write).
+func (e *Events) LogDir(stateDir string) string {
+	if e.Enabled != nil && !*e.Enabled {
+		return ""
+	}
+
+	if e.Dir != "" {
+		return e.Dir
+	}
+
+	if stateDir == "" {
+		return ""
+	}
+
+	return filepath.Join(stateDir, "events")
+}
+
 type Sinks struct {
 	Stdout   StdoutSink   `yaml:"stdout"`
 	Postgres PostgresSink `yaml:"postgres"`
@@ -251,6 +284,12 @@ func Default() *Config {
 		},
 		State: State{
 			SaveInterval: Duration(30 * time.Second),
+		},
+		Events: Events{
+			// Two weeks of local memory by default: enough to look back
+			// at an incident, small at the scale of an event stream that
+			// is already deduplicated and correlated.
+			Retention: Duration(15 * 24 * time.Hour),
 		},
 		Sinks: Sinks{
 			Stdout: StdoutSink{Enabled: &enabled},

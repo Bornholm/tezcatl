@@ -20,6 +20,11 @@ type fakeSource struct {
 	mu       sync.Mutex
 	sessions []func(ctx context.Context, out chan<- model.Event, connected func()) error
 	calls    int
+	history  []model.Event
+}
+
+func (s *fakeSource) ListEvents(ctx context.Context, limit int) ([]model.Event, error) {
+	return s.history, nil
 }
 
 func (s *fakeSource) Templates(ctx context.Context) ([]admin.TemplateInfo, error) {
@@ -154,6 +159,42 @@ func TestStreamLoopReportsDisconnection(t *testing.T) {
 	// The event received before the disconnection is still there.
 	if got := view.eventCount(); got != 1 {
 		t.Errorf("expected the view to keep its events across a reconnection, got %d", got)
+	}
+}
+
+// TestStreamLoopDedupsHistoryAndLive covers the deliberate overlap
+// between the persistent history and the live ring: the same event must
+// not appear twice in the view.
+func TestStreamLoopDedupsHistoryAndLive(t *testing.T) {
+	base := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	source := &fakeSource{
+		history: []model.Event{
+			{ID: "e1", Kind: "anomaly.log", Source: "prod/api", Timestamp: base},
+		},
+		sessions: []func(ctx context.Context, out chan<- model.Event, connected func()) error{
+			func(ctx context.Context, out chan<- model.Event, connected func()) error {
+				connected()
+				// The ring replays e1 too, then a fresh event arrives.
+				out <- model.Event{ID: "e1", Kind: "anomaly.log", Source: "prod/api", Timestamp: base}
+				out <- model.Event{ID: "e2", Kind: "anomaly.log", Source: "prod/api", Timestamp: base.Add(time.Minute)}
+				<-ctx.Done()
+
+				return nil
+			},
+		},
+	}
+
+	view, stop := runView(t, source)
+	defer stop()
+
+	waitFor(t, "both events to be visible", func() bool { return view.eventCount() == 2 })
+
+	// Give the duplicate a chance to slip in before asserting.
+	time.Sleep(50 * time.Millisecond)
+
+	if got := view.eventCount(); got != 2 {
+		t.Errorf("expected e1 to be deduplicated, got %d events", got)
 	}
 }
 
