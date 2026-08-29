@@ -73,7 +73,6 @@ archives:
         formats: [zip]
     files:
       - README.md
-      - docs/ROADMAP.md
       - misc/config/standalone.yaml
       - misc/config/server.yaml
 
