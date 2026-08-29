@@ -13,6 +13,11 @@ ExecStart=/usr/bin/tezcatl server --config /etc/tezcatl/server.yaml
 Restart=on-failure
 RestartSec=5s
 
+# Le serveur ferme lui-même les flux d'ingestion encore ouverts après
+# quelques secondes ; ce plafond évite d'attendre les 90 s par défaut si
+# l'arrêt coince malgré tout (un SIGKILL perdrait l'état appris).
+TimeoutStopSec=30s
+
 # /run/tezcatl (socket unix) et /var/lib/tezcatl (état appris).
 RuntimeDirectory=tezcatl
 StateDirectory=tezcatl

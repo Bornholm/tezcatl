@@ -2,12 +2,14 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"golang.org/x/sync/errgroup"
 )
@@ -101,6 +103,67 @@ func TestClientServerRoundTrip(t *testing.T) {
 
 	if obs.IngestedAt.IsZero() {
 		t.Fatal("expected ingestion timestamp to be set server-side")
+	}
+}
+
+// TestShutdownWithOpenStream covers the packaging hang: a client
+// tailing logs holds its stream open forever, so shutdown must close it
+// instead of waiting for an end that never comes.
+func TestShutdownWithOpenStream(t *testing.T) {
+	target := fmt.Sprintf("unix://%s", filepath.Join(t.TempDir(), "tezcatl.sock"))
+
+	server := NewServerIngester([]string{target})
+	server.drainTimeout = 200 * time.Millisecond
+
+	received := make(chan model.Observation, 1)
+
+	serverCtx, stopServer := context.WithCancel(context.Background())
+	defer stopServer()
+
+	ingestDone := make(chan error, 1)
+	go func() {
+		ingestDone <- server.Ingest(serverCtx, received)
+	}()
+
+	// Wait for the socket to be up.
+	time.Sleep(100 * time.Millisecond)
+
+	conn, err := Dial(target, "")
+	if err != nil {
+		t.Fatalf("could not dial: %+v", err)
+	}
+	defer conn.Close()
+
+	stream, err := tezcatlv1.NewIngestServiceClient(conn).StreamObservations(context.Background())
+	if err != nil {
+		t.Fatalf("could not open stream: %+v", err)
+	}
+
+	if err := stream.Send(ToProtoObservation(&model.Observation{
+		ID:       "obs-1",
+		Source:   "api",
+		Modality: model.ModalityLog,
+		Log:      &model.LogRecord{Raw: "line 1"},
+	})); err != nil {
+		t.Fatalf("could not send: %+v", err)
+	}
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("observation never reached the engine")
+	}
+
+	// The stream stays open on purpose: nothing closes it client-side.
+	stopServer()
+
+	select {
+	case err := <-ingestDone:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected error: %+v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("shutdown blocked on an open ingestion stream")
 	}
 }
 

@@ -25,6 +25,9 @@ type ServerIngester struct {
 	register    []func(server *grpc.Server)
 	certificate *tls.Certificate
 	now         func() time.Time
+	// drainTimeout bounds how long shutdown waits for in-flight
+	// streams to end on their own.
+	drainTimeout time.Duration
 
 	out chan<- model.Observation
 	ctx context.Context
@@ -55,8 +58,9 @@ func WithTLS(certFile string, keyFile string) (ServerIngesterOption, error) {
 // NewServerIngester serves the ingestion service on the given targets.
 func NewServerIngester(targets []string, opts ...ServerIngesterOption) *ServerIngester {
 	s := &ServerIngester{
-		targets: targets,
-		now:     time.Now,
+		targets:      targets,
+		now:          time.Now,
+		drainTimeout: defaultDrainTimeout,
 	}
 
 	for _, opt := range opts {
@@ -108,7 +112,7 @@ func (s *ServerIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 
 	g.Go(func() error {
 		<-gctx.Done()
-		server.GracefulStop()
+		s.stop(ctx, server)
 
 		return nil
 	})
@@ -118,6 +122,32 @@ func (s *ServerIngester) Ingest(ctx context.Context, out chan<- model.Observatio
 	}
 
 	return errors.WithStack(ctx.Err())
+}
+
+const defaultDrainTimeout = 5 * time.Second
+
+// stop drains in-flight RPCs, then forces the remaining ones closed.
+// Ingestion streams are open-ended by design (a client tailing logs
+// never stops sending), so an unbounded GracefulStop would hang until
+// systemd resorts to SIGKILL, losing the final state snapshot.
+func (s *ServerIngester) stop(ctx context.Context, server *grpc.Server) {
+	drained := make(chan struct{})
+
+	go func() {
+		defer close(drained)
+
+		server.GracefulStop()
+	}()
+
+	select {
+	case <-drained:
+	case <-time.After(s.drainTimeout):
+		slog.WarnContext(ctx, "closing ingestion streams still open after drain timeout",
+			slog.Duration("timeout", s.drainTimeout))
+
+		server.Stop()
+		<-drained
+	}
 }
 
 func (s *ServerIngester) StreamObservations(stream tezcatlv1.IngestService_StreamObservationsServer) error {
