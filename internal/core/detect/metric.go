@@ -49,8 +49,9 @@ type MetricConfig struct {
 	// the floor. Near-constant series (an idle container's CPU) have a
 	// tiny variance, so trivial fluctuations otherwise score huge
 	// z-values. Keys are metric names or path.Match globs
-	// ("*.percent"); an exact match wins, otherwise the largest
-	// matching floor applies.
+	// ("*percent"); an exact match wins, otherwise the largest
+	// matching floor applies. Beware that path.Match gives "." no
+	// special meaning: "*.percent" misses "memory.used_percent".
 	MinDeltas map[string]float64 `yaml:"min_deltas"`
 }
 
@@ -71,7 +72,9 @@ func DefaultMetricConfig() *MetricConfig {
 // statistically significant move is still operationally meaningless.
 func DefaultMinDeltas() map[string]float64 {
 	return map[string]float64{
-		"*.percent":    1,
+		// Every percentage, whatever the separator before it:
+		// system.cpu.percent as well as docker.memory.used_percent.
+		"*percent":     1,
 		"system.load1": 0.5,
 	}
 }

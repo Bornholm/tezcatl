@@ -55,7 +55,7 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 	}
 
 	// 0.15%: statistically extreme, operationally nothing (delta below
-	// the *.percent floor of 1 point).
+	// the *percent floor of 1 point).
 	signals := detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 0.15, start.Add(200*time.Second)))
 	if hasSignal(signals, SignalMetricZScore) {
 		t.Fatalf("expected the significance floor to silence a 0.12 point move, got %+v", signals)
@@ -87,6 +87,58 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 // TestMetricDetectorTrendDriftMinDelta silences drift on near-zero
 // series: a fast EWMA at 0.09 vs a slow one at 0.03 is a 3x relative
 // divergence but a 0.06 point move.
+// TestDefaultMinDeltasCoverPercentages guards the glob that the
+// dogfooding instance caught out: path.Match gives "." no special
+// meaning, so a "*.percent" pattern silently misses every metric whose
+// suffix is "_percent", and those kept firing on 0.07 point moves.
+func TestDefaultMinDeltasCoverPercentages(t *testing.T) {
+	config := &MetricConfig{MinDeltas: DefaultMinDeltas()}
+
+	// Every percentage the host plugin emits.
+	metrics := []string{
+		"system.cpu.percent",
+		"docker.cpu.percent",
+		"docker.memory.used_percent",
+		"system.disk.used_percent",
+		"system.memory.used_percent",
+	}
+
+	for _, metric := range metrics {
+		if floor := config.minDelta(metric); floor != 1 {
+			t.Errorf("expected a 1 point floor for %s, got %v", metric, floor)
+		}
+	}
+
+	if floor := config.minDelta("http.requests.total"); floor != 0 {
+		t.Errorf("expected no floor for a non-percentage metric, got %v", floor)
+	}
+}
+
+// TestMetricDetectorMinDeltaUnderscorePercent replays an event the
+// instance produced: container memory at 0.44% moving to 0.51%,
+// reported critical at z = 5.9.
+func TestMetricDetectorMinDeltaUnderscorePercent(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	start := time.Date(2026, 8, 29, 13, 0, 0, 0, time.UTC)
+
+	for i := range 100 {
+		value := 0.44 + float64(i%3)*0.01
+		detector.Detect(metricObservation("production/offen", "docker.memory.used_percent", value, start.Add(time.Duration(i)*time.Second)))
+	}
+
+	signals := detector.Detect(metricObservation("production/offen", "docker.memory.used_percent", 0.508, start.Add(200*time.Second)))
+	if hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected the floor to silence a 0.07 point move, got %+v", signals)
+	}
+
+	// A move that actually matters still gets through.
+	signals = detector.Detect(metricObservation("production/offen", "docker.memory.used_percent", 87, start.Add(260*time.Second)))
+	if !hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected memory at 87%% to signal, got %+v", signals)
+	}
+}
+
 func TestMetricDetectorTrendDriftMinDelta(t *testing.T) {
 	detector := NewMetricDetector(nil)
 
