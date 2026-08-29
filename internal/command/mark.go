@@ -177,8 +177,12 @@ func listMetricsRemote(ctx context.Context, target string, caFile string) ([]det
 		return nil, errors.WithStack(err)
 	}
 
-	series := make([]detect.SeriesInfo, 0, len(res.GetMetrics()))
-	for _, info := range res.GetMetrics() {
+	return seriesFromProto(res.GetMetrics()), nil
+}
+
+func seriesFromProto(metrics []*tezcatlv1.MetricInfo) []detect.SeriesInfo {
+	series := make([]detect.SeriesInfo, 0, len(metrics))
+	for _, info := range metrics {
 		series = append(series, detect.SeriesInfo{
 			Key:     info.GetKey(),
 			Samples: info.GetSamples(),
@@ -189,7 +193,7 @@ func listMetricsRemote(ctx context.Context, target string, caFile string) ([]det
 		})
 	}
 
-	return series, nil
+	return series
 }
 
 func listMetricsOffline(ctx context.Context, configPath string, stateDir string) ([]detect.SeriesInfo, error) {
@@ -235,8 +239,12 @@ func listRemote(ctx context.Context, target string, caFile string) ([]admin.Temp
 		return nil, errors.WithStack(err)
 	}
 
-	templates := make([]admin.TemplateInfo, 0, len(res.GetTemplates()))
-	for _, template := range res.GetTemplates() {
+	return templatesFromProto(res.GetTemplates()), nil
+}
+
+func templatesFromProto(infos []*tezcatlv1.TemplateInfo) []admin.TemplateInfo {
+	templates := make([]admin.TemplateInfo, 0, len(infos))
+	for _, template := range infos {
 		templates = append(templates, admin.TemplateInfo{
 			Partition: template.GetPartition(),
 			ID:        template.GetId(),
@@ -246,7 +254,7 @@ func listRemote(ctx context.Context, target string, caFile string) ([]admin.Temp
 		})
 	}
 
-	return templates, nil
+	return templates
 }
 
 // offlineService rebuilds the miner and detector from a persisted state

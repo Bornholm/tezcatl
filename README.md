@@ -44,6 +44,9 @@ tezcatl templates --target unix:///run/tezcatl.sock
 tezcatl metrics --target unix:///run/tezcatl.sock
 tezcatl mark --target unix:///run/tezcatl.sock \
   --template "connection reset by peer" --as ignore
+
+# Ou en interactif (TUI façon k9s : marquage au clavier, filtre, baselines)
+tezcatl top --target unix:///run/tezcatl.sock
 ```
 
 Les marquages (`normal`, `ignore`, `symptomatic`) prennent effet immédiatement et sont persistés avec l'état. La détection apprend des baselines par heure de la journée (`seasonality: hourly`) : un cron nocturne ou un pic de trafic quotidien n'est pas une anomalie. Le transport accepte `unix://`, `tcp://` et `tls://` (certificat côté serveur, `--tls-ca` côté client).
