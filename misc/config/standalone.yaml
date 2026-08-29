@@ -181,9 +181,13 @@ metrics:
     # Défauts ci-dessous ; 0 pour désactiver un motif.
     # Attention : path.Match ne donne aucun sens particulier au point,
     # donc "*.percent" raterait docker.memory.used_percent.
+    # Seul le pourcentage a une échelle connue sans connaître la
+    # métrique (0 à 100, quel que soit l'émetteur) : c'est le seul
+    # plancher livré par défaut. Pour les autres unités, ajoutez le
+    # vôtre, par exemple pour une charge système :
+    #   system.load1: 0.5
     min_deltas:
       "*percent": 1       # points de pourcentage
-      system.load1: 0.5
     # Plafond du nombre de séries suivies. Les environnements créent des
     # identités jetables (conteneur de déploiement, job ponctuel, nom de
     # pod) : autant de séries écrites une fois et jamais réalimentées.

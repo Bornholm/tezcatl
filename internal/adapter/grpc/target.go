@@ -67,8 +67,9 @@ func Listen(target string, certificate *tls.Certificate) (net.Listener, error) {
 	}
 
 	// The unix socket is a local ingestion endpoint shared with other
-	// users (dokku deploy hooks, per-app ingest units): world-writable,
-	// access is restricted by the parent directory mode when needed.
+	// local users (deployment hooks, per-service ingest units):
+	// world-writable, access restricted by the parent directory mode
+	// when needed.
 	if network == "unix" {
 		if err := os.Chmod(address, 0o666); err != nil {
 			listener.Close()

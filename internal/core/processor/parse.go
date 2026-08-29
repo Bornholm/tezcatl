@@ -30,8 +30,8 @@ func (p *ParseLog) Name() string {
 	return "parse-log"
 }
 
-// AttrLogProcess carries the emitter tag of a dokku/heroku-style prefix
-// (e.g. "app[web.1]").
+// AttrLogProcess carries the emitter tag of a bracketed prefix, the
+// shape PaaS log drains and syslog share (e.g. "app[web.1]").
 const AttrLogProcess = "log.process"
 
 var messageKeys = []string{"message", "msg", "log", "MESSAGE"}
@@ -40,12 +40,13 @@ var levelKeys = []string{"level", "severity", "lvl", "loglevel"}
 
 var timeKeys = []string{"time", "ts", "timestamp", "@timestamp"}
 
-// ansiEscape matches CSI sequences (colors and cursor controls), the
-// kind emitted by dokku logs even without a TTY.
+// ansiEscape matches CSI sequences (colors and cursor controls), which
+// log tails keep even when nothing is attached to a terminal.
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[@-~]`)
 
-// processPrefix matches dokku/heroku log prefixes such as "app[web.1]: "
-// or "heroku[router]: ".
+// processPrefix matches a bracketed emitter prefix such as
+// "app[web.1]: " or "router[http]: ". Keep it a shape, not a list of
+// emitters: a new product is not a reason to add a case here.
 var processPrefix = regexp.MustCompile(`^([A-Za-z0-9_.-]+)\[([^\]\s]+)\]:\s+`)
 
 func (p *ParseLog) Process(ctx context.Context, obs *model.Observation, emit port.EmitFunc) (bool, error) {

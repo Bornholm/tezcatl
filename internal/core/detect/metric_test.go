@@ -81,8 +81,12 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 		t.Errorf("expected the exact entry to win, got %g", floor)
 	}
 
-	if floor := config.minDelta("system.load1"); floor != 0.5 {
-		t.Errorf("expected the default load1 floor, got %g", floor)
+	// The defaults floor percentages, whose scale is known from the
+	// unit alone, and nothing else: a metric name belongs to whoever
+	// emits it, so the core does not ship floors for names a plugin
+	// happens to use today.
+	if floor := DefaultMetricConfig().minDelta("system.load1"); floor != 0 {
+		t.Errorf("expected no default floor for a plugin's own metric name, got %g", floor)
 	}
 }
 

@@ -82,15 +82,16 @@ func DefaultMetricConfig() *MetricConfig {
 	}
 }
 
-// DefaultMinDeltas covers the metric families tezcatl itself produces
-// (host and docker collectors): below these absolute deviations, a
-// statistically significant move is still operationally meaningless.
+// DefaultMinDeltas floors the one unit whose scale is known without
+// knowing the metric: a percentage runs from 0 to 100 whoever emits it,
+// so a move of less than a point is noise no matter how flat the series
+// was. Any other unit needs a floor an operator sets, since the core
+// cannot guess the scale of a name it has never seen.
 func DefaultMinDeltas() map[string]float64 {
 	return map[string]float64{
-		// Every percentage, whatever the separator before it:
-		// system.cpu.percent as well as docker.memory.used_percent.
-		"*percent":     1,
-		"system.load1": 0.5,
+		// Match the suffix, not a separator: "cpu.percent" and
+		// "memory.used_percent" are both percentages.
+		"*percent": 1,
 	}
 }
 
