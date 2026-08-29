@@ -1,6 +1,7 @@
 package detect
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -260,5 +261,54 @@ func BenchmarkLogDetector(b *testing.B) {
 
 	for i := 0; b.Loop(); i++ {
 		detector.Detect(observations[i%len(observations)])
+	}
+}
+
+// TestLogDetectorEvictsStaleTemplates mirrors the metric series cap:
+// template churn (identifiers escaping the masking) mints statistics
+// that are written once and never fed again, and nothing used to
+// retire them.
+func TestLogDetectorEvictsStaleTemplates(t *testing.T) {
+	config := DefaultLogConfig()
+	config.MaxTemplates = 3
+
+	detector := NewLogDetector(config)
+
+	start := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	// One template fed continuously must survive the churn.
+	for i := range 30 {
+		detector.Detect(logObservation("prod/api", "t-live", "GET <*> 200", "", start.Add(time.Duration(i)*time.Minute)))
+	}
+
+	// Churning templates, each seen once.
+	for i := range 30 {
+		id := fmt.Sprintf("t-churn-%d", i)
+		detector.Detect(logObservation("prod/api", id, "session "+id, "", start.Add(time.Duration(i)*time.Minute)))
+	}
+
+	snapshot, err := detector.Snapshot()
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	var state struct {
+		Sources map[string]struct {
+			Templates map[string]json.RawMessage `json:"templates"`
+		} `json:"sources"`
+	}
+
+	if err := json.Unmarshal(snapshot, &state); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	templates := state.Sources["prod/api"].Templates
+
+	if len(templates) > 3 {
+		t.Fatalf("expected at most 3 template stats, got %d", len(templates))
+	}
+
+	if _, exists := templates["t-live"]; !exists {
+		t.Errorf("expected the continuously fed template to survive, got %v", templates)
 	}
 }

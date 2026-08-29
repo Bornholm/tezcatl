@@ -92,8 +92,10 @@ logs:
     # le joker <*>.
     max_children: 100
     # Nombre maximal de clusters par partition, avec éviction LRU.
-    # 0 = illimité.
-    max_clusters: 0
+    # 0 = illimité ; le défaut est volontairement large, l'éviction ne
+    # mord que sur le churn de templates (identifiants qui échappent
+    # aux masques).
+    max_clusters: 2000
     # Jeton représentant un paramètre dans les templates.
     param_str: "<*>"
     # Délimiteurs supplémentaires convertis en espaces avant tokenisation.
@@ -162,6 +164,12 @@ logs:
     #   none   — baselines plates.
     seasonality: hourly
     seasonal_min_observations: 50
+    # Plafond des statistiques de templates par source (pendant de
+    # drain.max_clusters pour le détecteur) : au-delà, le template vu
+    # il y a le plus longtemps est abandonné. Attention en le baissant :
+    # un template évincé puis revu redevient « nouveau » et peut
+    # resignaler. 0 = illimité.
+    max_templates: 2000
     # Marquages de templates (chaîne exacte, telle qu'affichée par
     # `tezcatl templates`) :
     #   normal      — attendu, aucun signal ;

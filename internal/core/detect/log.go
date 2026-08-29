@@ -64,7 +64,20 @@ type LogConfig struct {
 	SeasonalMinObservations int64 `yaml:"seasonal_min_observations"`
 	// Markings overrides the behavior of specific templates.
 	Markings map[string]Marking `yaml:"markings"`
+	// MaxTemplates caps the per-source template statistics; past it,
+	// the template seen longest ago is dropped. The cap is deliberately
+	// generous: an evicted template seen again counts as new, and may
+	// signal once it should not. 0 removes the cap, at the price of
+	// memory growing with template churn.
+	MaxTemplates int `yaml:"max_templates"`
 }
+
+// DefaultMaxTemplates is an order of magnitude above what a service
+// with healthy logging produces (the dogfooding instance tops out
+// around 60 templates per source), so eviction only bites on template
+// churn: identifiers leaking into messages faster than masking catches
+// them.
+const DefaultMaxTemplates = 2000
 
 const (
 	SeasonalityNone   = "none"
@@ -84,6 +97,7 @@ func DefaultLogConfig() *LogConfig {
 		DisappearanceScanInterval: 30 * time.Second,
 		Seasonality:               SeasonalityHourly,
 		SeasonalMinObservations:   50,
+		MaxTemplates:              DefaultMaxTemplates,
 	}
 }
 
@@ -100,6 +114,31 @@ type LogDetector struct {
 	mu       sync.Mutex
 	markings map[string]Marking
 	sources  map[string]*logSourceState
+}
+
+// makeRoom drops the template statistics seen longest ago when the cap
+// is reached, mirroring the metric detector's series cap: template
+// churn (identifiers escaping the masking) must not grow the state
+// without bound. The caller holds the detector lock.
+func (s *logSourceState) makeRoom(maxTemplates int) {
+	if maxTemplates <= 0 || len(s.Templates) < maxTemplates {
+		return
+	}
+
+	for len(s.Templates) >= maxTemplates {
+		var (
+			oldestID   string
+			oldestSeen time.Time
+		)
+
+		for id, stats := range s.Templates {
+			if oldestID == "" || stats.LastSeen.Before(oldestSeen) {
+				oldestID, oldestSeen = id, stats.LastSeen
+			}
+		}
+
+		delete(s.Templates, oldestID)
+	}
 }
 
 type logSourceState struct {
@@ -216,6 +255,8 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 
 	stats, exists := state.Templates[obs.Log.TemplateID]
 	if !exists {
+		state.makeRoom(d.config.MaxTemplates)
+
 		stats = &templateStats{
 			LastSeen:    timestamp,
 			BucketStart: timestamp.Truncate(d.config.SpikeBucket),

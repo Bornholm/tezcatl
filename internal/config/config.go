@@ -108,6 +108,7 @@ type LogDetection struct {
 	Seasonality               string                    `yaml:"seasonality"`
 	SeasonalMinObservations   int64                     `yaml:"seasonal_min_observations"`
 	Markings                  map[string]detect.Marking `yaml:"markings"`
+	MaxTemplates              int                       `yaml:"max_templates"`
 }
 
 type Metrics struct {
@@ -260,6 +261,7 @@ func Default() *Config {
 				DisappearanceScanInterval: Duration(30 * time.Second),
 				Seasonality:               detect.SeasonalityHourly,
 				SeasonalMinObservations:   50,
+				MaxTemplates:              detect.DefaultMaxTemplates,
 			},
 		},
 		Metrics: Metrics{
@@ -417,6 +419,10 @@ func (c *Config) Validate() error {
 		return errors.New("metrics.detection.max_series cannot be negative (0 removes the cap)")
 	}
 
+	if c.Logs.Detection.MaxTemplates < 0 {
+		return errors.New("logs.detection.max_templates cannot be negative (0 removes the cap)")
+	}
+
 	return nil
 }
 
@@ -438,6 +444,7 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		Seasonality:               detection.Seasonality,
 		SeasonalMinObservations:   detection.SeasonalMinObservations,
 		Markings:                  detection.Markings,
+		MaxTemplates:              detection.MaxTemplates,
 	}
 }
 

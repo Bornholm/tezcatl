@@ -20,6 +20,11 @@ type Config struct {
 	Masking                  []MaskingInstruction `yaml:"masking" json:"masking"`
 }
 
+// DefaultMaxClusters bounds the per-partition cluster cache (LRU, as in
+// drain3). Far above what healthy logging produces, so it only bites on
+// template churn; 0 in the configuration removes the bound.
+const DefaultMaxClusters = 2000
+
 func DefaultConfig() *Config {
 	parametrize := true
 
@@ -27,6 +32,7 @@ func DefaultConfig() *Config {
 		Depth:                    4,
 		SimTh:                    0.4,
 		MaxChildren:              100,
+		MaxClusters:              DefaultMaxClusters,
 		ParamStr:                 "<*>",
 		ParametrizeNumericTokens: &parametrize,
 		MaskPrefix:               "<",
