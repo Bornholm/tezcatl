@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+# deb : $1 vaut "remove" à la désinstallation, "upgrade" lors d'une mise
+# à jour — ne rien stopper dans ce cas, le postinstall du nouveau paquet
+# redémarre les unités. pacman n'appelle pre_remove qu'à la
+# désinstallation ($1 = version), jamais à la mise à jour.
+case "${1:-}" in
+upgrade | failed-upgrade | deconfigure)
+    exit 0
+    ;;
+esac
+
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     systemctl stop 'tezcatl-ingest@*' 2>/dev/null || true
     systemctl stop tezcatl-metrics 2>/dev/null || true
