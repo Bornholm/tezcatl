@@ -151,7 +151,7 @@ func targetFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
 			Name:     "target",
-			Usage:    "server address, e.g. unix:///run/tezcatl.sock or tcp://host:4242",
+			Usage:    "server address, e.g. unix:///run/tezcatl/tezcatl.sock or tcp://host:4242",
 			Required: true,
 		},
 		&cli.IntFlag{

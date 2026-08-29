@@ -19,11 +19,17 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// defaultTarget is the socket served by the packaged tezcatl-server
+// unit (RuntimeDirectory=tezcatl).
+const defaultTarget = "unix:///run/tezcatl/tezcatl.sock"
+
 func adminTargetFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
-			Name:  "target",
-			Usage: "running server to talk to, e.g. unix:///run/tezcatl.sock",
+			Name:    "target",
+			Usage:   "running server to talk to, e.g. tcp://host:4242",
+			Value:   defaultTarget,
+			EnvVars: []string{"TEZCATL_TARGET"},
 		},
 		&cli.StringFlag{
 			Name:  "state-dir",
@@ -68,15 +74,11 @@ func NewMarkCommand() *cli.Command {
 				return errors.New("either --as or --clear is required")
 			}
 
-			if target := ctx.String("target"); target != "" {
-				return markRemote(ctx.Context, target, ctx.String("tls-ca"), ctx.String("template"), marking)
-			}
-
-			if stateDir := ctx.String("state-dir"); stateDir != "" {
+			if stateDir := offlineStateDir(ctx); stateDir != "" {
 				return markOffline(ctx.Context, ctx.String("config"), stateDir, ctx.String("template"), marking)
 			}
 
-			return errors.New("either --target or --state-dir is required")
+			return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), ctx.String("template"), marking)
 		},
 	}
 }
@@ -92,12 +94,10 @@ func NewTemplatesCommand() *cli.Command {
 				err       error
 			)
 
-			if target := ctx.String("target"); target != "" {
-				templates, err = listRemote(ctx.Context, target, ctx.String("tls-ca"))
-			} else if stateDir := ctx.String("state-dir"); stateDir != "" {
+			if stateDir := offlineStateDir(ctx); stateDir != "" {
 				templates, err = listOffline(ctx.Context, ctx.String("config"), stateDir)
 			} else {
-				return errors.New("either --target or --state-dir is required")
+				templates, err = listRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"))
 			}
 
 			if err != nil {
@@ -127,12 +127,10 @@ func NewMetricsCommand() *cli.Command {
 				err    error
 			)
 
-			if target := ctx.String("target"); target != "" {
-				series, err = listMetricsRemote(ctx.Context, target, ctx.String("tls-ca"))
-			} else if stateDir := ctx.String("state-dir"); stateDir != "" {
+			if stateDir := offlineStateDir(ctx); stateDir != "" {
 				series, err = listMetricsOffline(ctx.Context, ctx.String("config"), stateDir)
 			} else {
-				return errors.New("either --target or --state-dir is required")
+				series, err = listMetricsRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"))
 			}
 
 			if err != nil {
@@ -157,6 +155,17 @@ func NewMetricsCommand() *cli.Command {
 			return errors.WithStack(w.Flush())
 		},
 	}
+}
+
+// offlineStateDir returns the state directory to edit offline, or ""
+// to talk to a server: an explicit --target wins over --state-dir,
+// otherwise the packaged socket is the default.
+func offlineStateDir(ctx *cli.Context) string {
+	if ctx.IsSet("target") {
+		return ""
+	}
+
+	return ctx.String("state-dir")
 }
 
 func formatValue(value float64) string {
