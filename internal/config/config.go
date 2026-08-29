@@ -130,6 +130,7 @@ type MetricDetection struct {
 	TrendSlowAlpha float64                `yaml:"trend_slow_alpha"`
 	TrendThreshold float64                `yaml:"trend_threshold"`
 	Thresholds     []detect.ThresholdRule `yaml:"thresholds"`
+	MaxSeries      int                    `yaml:"max_series"`
 }
 
 type Correlation struct {
@@ -229,6 +230,7 @@ func Default() *Config {
 				TrendFastAlpha: 0.3,
 				TrendSlowAlpha: 0.05,
 				TrendThreshold: 0.5,
+				MaxSeries:      detect.DefaultMaxSeries,
 			},
 		},
 		Correlation: Correlation{
@@ -363,6 +365,10 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.Metrics.Detection.MaxSeries < 0 {
+		return errors.New("metrics.detection.max_series cannot be negative (0 removes the cap)")
+	}
+
 	return nil
 }
 
@@ -399,6 +405,7 @@ func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
 		TrendSlowAlpha: detection.TrendSlowAlpha,
 		TrendThreshold: detection.TrendThreshold,
 		Thresholds:     detection.Thresholds,
+		MaxSeries:      detection.MaxSeries,
 	}
 }
 

@@ -3,12 +3,14 @@ package detect
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/pkg/errors"
@@ -53,7 +55,19 @@ type MetricConfig struct {
 	// matching floor applies. Beware that path.Match gives "." no
 	// special meaning: "*.percent" misses "memory.used_percent".
 	MinDeltas map[string]float64 `yaml:"min_deltas"`
+	// MaxSeries caps how many series a detector keeps. Sources create
+	// series without ever retiring them: a container name, a pod name
+	// or a request path that carries an identifier all mint a key that
+	// is written once and never fed again. Past the cap, the series
+	// seen longest ago is dropped to make room. 0 removes the cap, at
+	// the price of memory growing with the churn of the environment.
+	MaxSeries int `yaml:"max_series"`
 }
+
+// DefaultMaxSeries is high enough to hold every real series of a busy
+// cluster (thousands of pods times a handful of metrics) and low enough
+// that a runaway source hits a wall instead of the machine's memory.
+const DefaultMaxSeries = 10000
 
 func DefaultMetricConfig() *MetricConfig {
 	return &MetricConfig{
@@ -64,6 +78,7 @@ func DefaultMetricConfig() *MetricConfig {
 		TrendSlowAlpha: 0.05,
 		TrendThreshold: 0.5,
 		MinDeltas:      DefaultMinDeltas(),
+		MaxSeries:      DefaultMaxSeries,
 	}
 }
 
@@ -101,8 +116,9 @@ func (c *MetricConfig) minDelta(metric string) float64 {
 type MetricDetector struct {
 	config *MetricConfig
 
-	mu     sync.Mutex
-	series map[string]*metricStats
+	mu      sync.Mutex
+	series  map[string]*metricStats
+	evicted int64
 }
 
 type metricStats struct {
@@ -112,6 +128,11 @@ type metricStats struct {
 	FastEWMA      float64 `json:"fast_ewma"`
 	SlowEWMA      float64 `json:"slow_ewma"`
 	DriftSignaled bool    `json:"drift_signaled"`
+	// LastSeen is the timestamp of the latest sample, used to pick
+	// what to drop when the series cap is reached. It is absent from
+	// snapshots written before the cap existed, which leaves those
+	// series first in line: they are the stale ones anyway.
+	LastSeen time.Time `json:"last_seen,omitzero"`
 }
 
 func NewMetricDetector(config *MetricConfig) *MetricDetector {
@@ -129,6 +150,50 @@ func (d *MetricDetector) Name() string {
 	return "metric"
 }
 
+// makeRoom drops the least recently seen series when the cap is
+// reached, so a source that keeps minting new keys cannot grow the
+// state without bound. The caller holds the lock.
+func (d *MetricDetector) makeRoom() {
+	if d.config.MaxSeries <= 0 || len(d.series) < d.config.MaxSeries {
+		return
+	}
+
+	// Dropping down to the cap covers the case of a restored snapshot
+	// larger than a cap that has since been lowered.
+	for len(d.series) >= d.config.MaxSeries {
+		var (
+			oldestKey  string
+			oldestSeen time.Time
+		)
+
+		for key, stats := range d.series {
+			if oldestKey == "" || stats.LastSeen.Before(oldestSeen) {
+				oldestKey, oldestSeen = key, stats.LastSeen
+			}
+		}
+
+		delete(d.series, oldestKey)
+
+		d.evicted++
+	}
+
+	// One line per power of ten: enough to notice saturation, quiet
+	// enough to live with a permanently churning environment.
+	if isPowerOfTen(d.evicted) {
+		slog.Warn("metric series cap reached, dropping the least recently seen series",
+			slog.Int("max_series", d.config.MaxSeries),
+			slog.Int64("evicted_total", d.evicted))
+	}
+}
+
+func isPowerOfTen(value int64) bool {
+	for value >= 10 && value%10 == 0 {
+		value /= 10
+	}
+
+	return value == 1
+}
+
 func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 	if obs.Modality != model.ModalityMetric || obs.Metric == nil {
 		return nil
@@ -141,9 +206,13 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 
 	stats, exists := d.series[key]
 	if !exists {
+		d.makeRoom()
+
 		stats = &metricStats{}
 		d.series[key] = stats
 	}
+
+	stats.LastSeen = obs.Timestamp
 
 	value := obs.Metric.Value
 

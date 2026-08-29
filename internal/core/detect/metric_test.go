@@ -1,6 +1,8 @@
 package detect
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,9 +86,6 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 	}
 }
 
-// TestMetricDetectorTrendDriftMinDelta silences drift on near-zero
-// series: a fast EWMA at 0.09 vs a slow one at 0.03 is a 3x relative
-// divergence but a 0.06 point move.
 // TestDefaultMinDeltasCoverPercentages guards the glob that the
 // dogfooding instance caught out: path.Match gives "." no special
 // meaning, so a "*.percent" pattern silently misses every metric whose
@@ -139,6 +138,100 @@ func TestMetricDetectorMinDeltaUnderscorePercent(t *testing.T) {
 	}
 }
 
+// TestMetricDetectorEvictsStaleSeries covers the cardinality leak the
+// dogfooding instance showed: environments mint series keys that are
+// written once and never fed again (a deploy container, a one-off job,
+// a pod name), and nothing used to retire them.
+func TestMetricDetectorEvictsStaleSeries(t *testing.T) {
+	detector := NewMetricDetector(&MetricConfig{
+		WarmupSamples: 30,
+		Alpha:         0.05,
+		ZThreshold:    3,
+		MaxSeries:     3,
+	})
+
+	start := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	// A series that keeps receiving samples must survive the churn.
+	for i := range 20 {
+		detector.Detect(metricObservation("prod/app", "cpu.percent", 10, start.Add(time.Duration(i)*time.Minute)))
+	}
+
+	// Ephemeral keys, each seen exactly once.
+	for i := range 20 {
+		obs := metricObservation("prod/app", "cpu.percent", 5, start.Add(time.Duration(i)*time.Minute))
+		obs.Metric.Labels = map[string]string{"container": fmt.Sprintf("app.run.%d", i)}
+		detector.Detect(obs)
+	}
+
+	series := detector.Series()
+	if len(series) > 3 {
+		t.Fatalf("expected at most 3 series, got %d", len(series))
+	}
+
+	var kept bool
+	for _, info := range series {
+		if !strings.Contains(info.Key, "container=") {
+			kept = true
+		}
+	}
+
+	if !kept {
+		t.Errorf("expected the continuously fed series to survive, got %+v", series)
+	}
+}
+
+// TestMetricDetectorUncappedByDefault documents that 0 means unlimited.
+func TestMetricDetectorNoCap(t *testing.T) {
+	detector := NewMetricDetector(&MetricConfig{WarmupSamples: 30, Alpha: 0.05, ZThreshold: 3, MaxSeries: 0})
+
+	start := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	for i := range 50 {
+		obs := metricObservation("prod/app", "cpu.percent", 5, start)
+		obs.Metric.Labels = map[string]string{"container": fmt.Sprintf("app.run.%d", i)}
+		detector.Detect(obs)
+	}
+
+	if got := len(detector.Series()); got != 50 {
+		t.Errorf("expected no cap to keep all 50 series, got %d", got)
+	}
+}
+
+// TestMetricDetectorEvictsRestoredOverflow covers lowering the cap
+// below the size of an already persisted state.
+func TestMetricDetectorEvictsRestoredOverflow(t *testing.T) {
+	wide := NewMetricDetector(&MetricConfig{WarmupSamples: 30, Alpha: 0.05, ZThreshold: 3, MaxSeries: 0})
+
+	start := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	for i := range 20 {
+		obs := metricObservation("prod/app", "cpu.percent", 5, start.Add(time.Duration(i)*time.Minute))
+		obs.Metric.Labels = map[string]string{"container": fmt.Sprintf("app.run.%d", i)}
+		wide.Detect(obs)
+	}
+
+	snapshot, err := wide.Snapshot()
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	narrow := NewMetricDetector(&MetricConfig{WarmupSamples: 30, Alpha: 0.05, ZThreshold: 3, MaxSeries: 5})
+	if err := narrow.Restore(snapshot); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	// The next new series brings the state back under the cap.
+	narrow.Detect(metricObservation("prod/app", "memory.percent", 5, start.Add(time.Hour)))
+
+	if got := len(narrow.Series()); got > 5 {
+		t.Errorf("expected the restored state to be trimmed to 5 series, got %d", got)
+	}
+}
+
+// TestMetricDetectorTrendDriftMinDelta silences drift on near-zero
+// series: a fast EWMA at 0.09 vs a slow one at 0.03 is a 3x relative
+// divergence but a 0.06 point move.
 func TestMetricDetectorTrendDriftMinDelta(t *testing.T) {
 	detector := NewMetricDetector(nil)
 

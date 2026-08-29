@@ -184,6 +184,13 @@ metrics:
     min_deltas:
       "*percent": 1       # points de pourcentage
       system.load1: 0.5
+    # Plafond du nombre de séries suivies. Les environnements créent des
+    # identités jetables (conteneur de déploiement, job ponctuel, nom de
+    # pod) : autant de séries écrites une fois et jamais réalimentées.
+    # Au-delà du plafond, la série vue il y a le plus longtemps est
+    # abandonnée. 0 retire le plafond, au prix d'une mémoire qui croît
+    # avec le renouvellement de l'environnement.
+    max_series: 10000
     # Dérive de tendance : deux EWMA (rapide/lente) ; un écart relatif
     # supérieur à trend_threshold signale une dérive soutenue.
     trend_fast_alpha: 0.3
