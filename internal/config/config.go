@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path"
 	"strings"
 	"time"
 
@@ -124,6 +125,7 @@ type MetricDetection struct {
 	WarmupSamples  int64                  `yaml:"warmup_samples"`
 	Alpha          float64                `yaml:"alpha"`
 	ZThreshold     float64                `yaml:"z_threshold"`
+	MinDeltas      map[string]float64     `yaml:"min_deltas"`
 	TrendFastAlpha float64                `yaml:"trend_fast_alpha"`
 	TrendSlowAlpha float64                `yaml:"trend_slow_alpha"`
 	TrendThreshold float64                `yaml:"trend_threshold"`
@@ -223,6 +225,7 @@ func Default() *Config {
 				WarmupSamples:  30,
 				Alpha:          0.05,
 				ZThreshold:     3,
+				MinDeltas:      detect.DefaultMinDeltas(),
 				TrendFastAlpha: 0.3,
 				TrendSlowAlpha: 0.05,
 				TrendThreshold: 0.5,
@@ -354,6 +357,12 @@ func (c *Config) Validate() error {
 		return errors.Wrap(err, "invalid logs.drain configuration")
 	}
 
+	for pattern := range c.Metrics.Detection.MinDeltas {
+		if _, err := path.Match(pattern, "x"); err != nil {
+			return errors.Wrapf(err, "invalid metrics.detection.min_deltas pattern %q", pattern)
+		}
+	}
+
 	return nil
 }
 
@@ -385,6 +394,7 @@ func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
 		WarmupSamples:  detection.WarmupSamples,
 		Alpha:          detection.Alpha,
 		ZThreshold:     detection.ZThreshold,
+		MinDeltas:      detection.MinDeltas,
 		TrendFastAlpha: detection.TrendFastAlpha,
 		TrendSlowAlpha: detection.TrendSlowAlpha,
 		TrendThreshold: detection.TrendThreshold,

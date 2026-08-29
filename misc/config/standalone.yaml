@@ -172,6 +172,16 @@ metrics:
     # |z| au-delà duquel un échantillon est anormal vis-à-vis de la
     # baseline.
     z_threshold: 3
+    # Plancher de signification : aucun signal statistique (z-score,
+    # dérive) si l'écart absolu à la baseline est sous le plancher.
+    # Indispensable pour les séries quasi constantes (CPU d'un
+    # conteneur idle) dont la variance minuscule fait exploser le z au
+    # moindre frémissement. Clés : nom exact ou motif glob ; l'entrée
+    # exacte gagne, sinon le plus grand plancher correspondant.
+    # Défauts ci-dessous ; 0 pour désactiver un motif.
+    min_deltas:
+      "*.percent": 1      # points de pourcentage
+      system.load1: 0.5
     # Dérive de tendance : deux EWMA (rapide/lente) ; un écart relatif
     # supérieur à trend_threshold signale une dérive soutenue.
     trend_fast_alpha: 0.3

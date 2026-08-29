@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,14 @@ type MetricConfig struct {
 	TrendThreshold float64 `yaml:"trend_threshold"`
 	// Thresholds are static per-metric bounds.
 	Thresholds []ThresholdRule `yaml:"thresholds"`
+	// MinDeltas floors the statistical signals: no z-score or drift is
+	// produced when the absolute deviation from the baseline is below
+	// the floor. Near-constant series (an idle container's CPU) have a
+	// tiny variance, so trivial fluctuations otherwise score huge
+	// z-values. Keys are metric names or path.Match globs
+	// ("*.percent"); an exact match wins, otherwise the largest
+	// matching floor applies.
+	MinDeltas map[string]float64 `yaml:"min_deltas"`
 }
 
 func DefaultMetricConfig() *MetricConfig {
@@ -53,7 +62,34 @@ func DefaultMetricConfig() *MetricConfig {
 		TrendFastAlpha: 0.3,
 		TrendSlowAlpha: 0.05,
 		TrendThreshold: 0.5,
+		MinDeltas:      DefaultMinDeltas(),
 	}
+}
+
+// DefaultMinDeltas covers the metric families tezcatl itself produces
+// (host and docker collectors): below these absolute deviations, a
+// statistically significant move is still operationally meaningless.
+func DefaultMinDeltas() map[string]float64 {
+	return map[string]float64{
+		"*.percent":    1,
+		"system.load1": 0.5,
+	}
+}
+
+// minDelta resolves the significance floor of one metric.
+func (c *MetricConfig) minDelta(metric string) float64 {
+	if floor, exists := c.MinDeltas[metric]; exists {
+		return floor
+	}
+
+	max := 0.0
+	for pattern, floor := range c.MinDeltas {
+		if matched, err := path.Match(pattern, metric); err == nil && matched && floor > max {
+			max = floor
+		}
+	}
+
+	return max
 }
 
 // MetricDetector produces signals from metric samples using simple,
@@ -152,8 +188,10 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 	// Statistical signals compare the sample to the baseline learned
 	// from previous samples, then fold it in.
 	if stats.Count >= d.config.WarmupSamples {
+		minDelta := d.config.minDelta(obs.Metric.Name)
+
 		stddev := math.Sqrt(stats.Variance)
-		if stddev > 0 {
+		if stddev > 0 && math.Abs(value-stats.Mean) >= minDelta {
 			z := (value - stats.Mean) / stddev
 			if math.Abs(z) >= d.config.ZThreshold {
 				score := math.Min(0.95, 0.5+math.Abs(z)/10)
@@ -169,7 +207,7 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 		}
 
 		drift := math.Abs(stats.FastEWMA-stats.SlowEWMA) / math.Max(math.Abs(stats.SlowEWMA), 1e-9)
-		if drift >= d.config.TrendThreshold {
+		if drift >= d.config.TrendThreshold && math.Abs(stats.FastEWMA-stats.SlowEWMA) >= minDelta {
 			if !stats.DriftSignaled {
 				stats.DriftSignaled = true
 
