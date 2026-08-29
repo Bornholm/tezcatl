@@ -111,7 +111,7 @@ func TestParseTarget(t *testing.T) {
 		address string
 		invalid bool
 	}{
-		{target: "unix:///run/tezcatl.sock", network: "unix", address: "/run/tezcatl.sock"},
+		{target: "unix:///run/tezcatl/tezcatl.sock", network: "unix", address: "/run/tezcatl/tezcatl.sock"},
 		{target: "tcp://127.0.0.1:4242", network: "tcp", address: "127.0.0.1:4242"},
 		{target: "http://example.net", invalid: true},
 		{target: "unix://", invalid: true},

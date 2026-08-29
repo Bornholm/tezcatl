@@ -20,9 +20,10 @@ func NewTopCommand() *cli.Command {
 		Usage: "Interactive terminal view of learned templates and metric baselines",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "target",
-				Usage:    "running server to talk to, e.g. unix:///run/tezcatl.sock",
-				Required: true,
+				Name:    "target",
+				Usage:   "running server to talk to, e.g. tcp://host:4242",
+				Value:   defaultTarget,
+				EnvVars: []string{"TEZCATL_TARGET"},
 			},
 			&cli.StringFlag{
 				Name:  "tls-ca",

@@ -49,7 +49,7 @@ type Config struct {
 }
 
 type Server struct {
-	// Listen targets: unix:///run/tezcatl.sock, tcp://127.0.0.1:4242 or
+	// Listen targets: unix:///run/tezcatl/tezcatl.sock, tcp://127.0.0.1:4242 or
 	// tls://0.0.0.0:4243 (requires the tls section).
 	Listen []string `yaml:"listen"`
 	// TLS provides the certificate serving tls:// targets.

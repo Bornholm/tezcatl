@@ -41,7 +41,7 @@ func TestLoadOverridesAndEnvExpansion(t *testing.T) {
 	path := writeConfig(t, `
 server:
   listen:
-    - unix:///run/tezcatl.sock
+    - unix:///run/tezcatl/tezcatl.sock
 pipeline:
   workers: 4
 logs:
@@ -67,7 +67,7 @@ sinks:
 		t.Fatalf("unexpected error: %+v", err)
 	}
 
-	if len(cfg.Server.Listen) != 1 || cfg.Server.Listen[0] != "unix:///run/tezcatl.sock" {
+	if len(cfg.Server.Listen) != 1 || cfg.Server.Listen[0] != "unix:///run/tezcatl/tezcatl.sock" {
 		t.Errorf("unexpected listen targets: %+v", cfg.Server.Listen)
 	}
 

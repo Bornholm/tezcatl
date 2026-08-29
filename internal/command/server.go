@@ -14,7 +14,7 @@ func NewServerCommand() *cli.Command {
 		Flags: append(commonFlags(),
 			&cli.StringSliceFlag{
 				Name:  "listen",
-				Usage: "listen target, e.g. unix:///run/tezcatl.sock or tcp://127.0.0.1:4242 (repeatable, overrides the configuration)",
+				Usage: "listen target, e.g. unix:///run/tezcatl/tezcatl.sock or tcp://127.0.0.1:4242 (repeatable, overrides the configuration)",
 			},
 		),
 		Action: func(ctx *cli.Context) error {

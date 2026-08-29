@@ -29,7 +29,7 @@ tezcatl server --config misc/config/server.yaml
 # Clients d'ingestion distants
 docker logs -f payment-api 2>&1 |
   tezcatl ingest logs \
-    --target unix:///run/tezcatl.sock \
+    --target unix:///run/tezcatl/tezcatl.sock \
     --service payment-api --environment production
 
 tezcatl ingest metrics --target tcp://host:4242 --service payment-api < metrics.txt
@@ -40,13 +40,14 @@ tezcatl ingest change --target tcp://host:4242 \
   --type deployment --change-version checkout:v1.8.2
 
 # Boucle de feedback : inspecter ce qui a été appris, marquer le bruit
-tezcatl templates --target unix:///run/tezcatl.sock
-tezcatl metrics --target unix:///run/tezcatl.sock
-tezcatl mark --target unix:///run/tezcatl.sock \
-  --template "connection reset by peer" --as ignore
+# (--target vaut unix:///run/tezcatl/tezcatl.sock par défaut, le socket
+# du paquet ; surchargeable aussi par $TEZCATL_TARGET)
+tezcatl templates
+tezcatl metrics
+tezcatl mark --template "connection reset by peer" --as ignore
 
 # Ou en interactif (TUI façon k9s : marquage au clavier, filtre, baselines)
-tezcatl top --target unix:///run/tezcatl.sock
+tezcatl top
 ```
 
 Les marquages (`normal`, `ignore`, `symptomatic`) prennent effet immédiatement et sont persistés avec l'état. La détection apprend des baselines par heure de la journée (`seasonality: hourly`) : un cron nocturne ou un pic de trafic quotidien n'est pas une anomalie. Le transport accepte `unix://`, `tcp://` et `tls://` (certificat côté serveur, `--tls-ca` côté client).

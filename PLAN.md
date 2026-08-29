@@ -50,7 +50,7 @@ tezcatl server --config config.yaml
 # Client d’ingestion distant
 tail -F application.log |
   tezcatl ingest logs \
-    --target unix:///run/tezcatl.sock \
+    --target unix:///run/tezcatl/tezcatl.sock \
     --source payment-api
 
 # Traitement local autonome

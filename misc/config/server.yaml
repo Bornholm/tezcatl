@@ -9,7 +9,7 @@
 
 server:
   listen:
-    - unix:///run/tezcatl.sock
+    - unix:///run/tezcatl/tezcatl.sock
     - tcp://0.0.0.0:4242
     # tls://0.0.0.0:4243 serves the same services encrypted; clients use
     # tls:// targets (and --tls-ca for a private CA).
