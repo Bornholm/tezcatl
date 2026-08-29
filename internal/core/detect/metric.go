@@ -120,6 +120,12 @@ type MetricDetector struct {
 	mu      sync.Mutex
 	series  map[string]*metricStats
 	evicted int64
+	// ignored silences the statistical signals of matching series at
+	// runtime, the metric side of the template marking loop. Keys are
+	// exact series keys ("source/metric{labels}"), exact metric names,
+	// or path.Match globs over either. Baselines keep learning while
+	// ignored, so clearing the mark resumes cleanly.
+	ignored map[string]bool
 }
 
 type metricStats struct {
@@ -142,9 +148,54 @@ func NewMetricDetector(config *MetricConfig) *MetricDetector {
 	}
 
 	return &MetricDetector{
-		config: config,
-		series: map[string]*metricStats{},
+		config:  config,
+		series:  map[string]*metricStats{},
+		ignored: map[string]bool{},
 	}
+}
+
+// SetIgnored silences (or, with ignore false, restores) the statistical
+// signals of the series matching pattern: an exact series key, an exact
+// metric name, or a path.Match glob over either.
+func (d *MetricDetector) SetIgnored(pattern string, ignore bool) error {
+	if pattern == "" {
+		return errors.New("missing metric pattern")
+	}
+
+	if _, err := path.Match(pattern, "x"); err != nil {
+		return errors.Wrapf(err, "malformed pattern %q", pattern)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if ignore {
+		d.ignored[pattern] = true
+	} else {
+		delete(d.ignored, pattern)
+	}
+
+	return nil
+}
+
+// isIgnored reports whether a series is silenced. The caller holds the
+// lock.
+func (d *MetricDetector) isIgnored(key string, metric string) bool {
+	if d.ignored[key] || d.ignored[metric] {
+		return true
+	}
+
+	for pattern := range d.ignored {
+		if matched, err := path.Match(pattern, key); err == nil && matched {
+			return true
+		}
+
+		if matched, err := path.Match(pattern, metric); err == nil && matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (d *MetricDetector) Name() string {
@@ -216,6 +267,14 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 	stats.LastSeen = obs.Timestamp
 
 	value := obs.Metric.Value
+
+	// An ignored series keeps learning its baseline silently, so
+	// clearing the mark resumes detection without a warmup.
+	if d.isIgnored(key, obs.Metric.Name) {
+		d.update(stats, value)
+
+		return nil
+	}
 
 	signals := []model.Signal{}
 
@@ -351,6 +410,21 @@ func seriesKey(source string, metric *model.MetricSample) string {
 	return b.String()
 }
 
+// IgnoredPatterns lists the runtime metric markings, sorted.
+func (d *MetricDetector) IgnoredPatterns() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	patterns := make([]string, 0, len(d.ignored))
+	for pattern := range d.ignored {
+		patterns = append(patterns, pattern)
+	}
+
+	sort.Strings(patterns)
+
+	return patterns
+}
+
 // SeriesInfo is the learned state of one metric series, for inspection.
 type SeriesInfo struct {
 	// Key is "source/metric{labels}".
@@ -364,6 +438,8 @@ type SeriesInfo struct {
 	// Warmup is true while the series has too few samples for
 	// statistical signals.
 	Warmup bool `json:"warmup"`
+	// Ignored is true when a runtime marking silences this series.
+	Ignored bool `json:"ignored,omitempty"`
 }
 
 // Series lists the learned metric series, sorted by key.
@@ -381,6 +457,7 @@ func (d *MetricDetector) Series() []SeriesInfo {
 			StdDev:  math.Sqrt(stats.Variance),
 			Recent:  stats.FastEWMA,
 			Warmup:  stats.Count < d.config.WarmupSamples,
+			Ignored: d.isIgnored(key, metricNameOfKey(key)),
 		})
 	}
 
@@ -393,11 +470,25 @@ func (d *MetricDetector) SnapshotKey() string {
 	return "detect-metric"
 }
 
+// metricSnapshot is the persisted form: the learned series plus the
+// runtime markings, so an ignored series stays ignored across restarts.
+type metricSnapshot struct {
+	Series  map[string]*metricStats `json:"series"`
+	Ignored []string                `json:"ignored,omitempty"`
+}
+
 func (d *MetricDetector) Snapshot() ([]byte, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	data, err := json.Marshal(d.series)
+	snapshot := metricSnapshot{Series: d.series}
+	for pattern := range d.ignored {
+		snapshot.Ignored = append(snapshot.Ignored, pattern)
+	}
+
+	sort.Strings(snapshot.Ignored)
+
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -406,14 +497,41 @@ func (d *MetricDetector) Snapshot() ([]byte, error) {
 }
 
 func (d *MetricDetector) Restore(data []byte) error {
-	series := map[string]*metricStats{}
-	if err := json.Unmarshal(data, &series); err != nil {
-		return errors.WithStack(err)
+	snapshot := metricSnapshot{}
+	if err := json.Unmarshal(data, &snapshot); err != nil || snapshot.Series == nil {
+		// Snapshots written before the markings existed are the bare
+		// series map.
+		series := map[string]*metricStats{}
+		if err := json.Unmarshal(data, &series); err != nil {
+			return errors.WithStack(err)
+		}
+
+		snapshot = metricSnapshot{Series: series}
+	}
+
+	ignored := make(map[string]bool, len(snapshot.Ignored))
+	for _, pattern := range snapshot.Ignored {
+		ignored[pattern] = true
 	}
 
 	d.mu.Lock()
-	d.series = series
+	d.series = snapshot.Series
+	d.ignored = ignored
 	d.mu.Unlock()
 
 	return nil
+}
+
+// metricNameOfKey extracts the metric name from a series key
+// ("source/metric{labels}"): the last path segment, labels stripped.
+func metricNameOfKey(key string) string {
+	if brace := strings.IndexByte(key, '{'); brace >= 0 {
+		key = key[:brace]
+	}
+
+	if slash := strings.LastIndexByte(key, '/'); slash >= 0 {
+		key = key[slash+1:]
+	}
+
+	return key
 }

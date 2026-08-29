@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	AdminService_MarkTemplate_FullMethodName  = "/tezcatl.v1.AdminService/MarkTemplate"
+	AdminService_MarkMetric_FullMethodName    = "/tezcatl.v1.AdminService/MarkMetric"
 	AdminService_ListTemplates_FullMethodName = "/tezcatl.v1.AdminService/ListTemplates"
 	AdminService_ListMetrics_FullMethodName   = "/tezcatl.v1.AdminService/ListMetrics"
 	AdminService_StreamEvents_FullMethodName  = "/tezcatl.v1.AdminService/StreamEvents"
@@ -34,6 +35,7 @@ const (
 // has been learned and mark templates without restarting the server.
 type AdminServiceClient interface {
 	MarkTemplate(ctx context.Context, in *MarkTemplateRequest, opts ...grpc.CallOption) (*MarkTemplateResponse, error)
+	MarkMetric(ctx context.Context, in *MarkMetricRequest, opts ...grpc.CallOption) (*MarkMetricResponse, error)
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 	ListMetrics(ctx context.Context, in *ListMetricsRequest, opts ...grpc.CallOption) (*ListMetricsResponse, error)
 	StreamEvents(ctx context.Context, in *StreamEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[EventEnvelope], error)
@@ -52,6 +54,16 @@ func (c *adminServiceClient) MarkTemplate(ctx context.Context, in *MarkTemplateR
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(MarkTemplateResponse)
 	err := c.cc.Invoke(ctx, AdminService_MarkTemplate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) MarkMetric(ctx context.Context, in *MarkMetricRequest, opts ...grpc.CallOption) (*MarkMetricResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkMetricResponse)
+	err := c.cc.Invoke(ctx, AdminService_MarkMetric_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +127,7 @@ func (c *adminServiceClient) ListEvents(ctx context.Context, in *ListEventsReque
 // has been learned and mark templates without restarting the server.
 type AdminServiceServer interface {
 	MarkTemplate(context.Context, *MarkTemplateRequest) (*MarkTemplateResponse, error)
+	MarkMetric(context.Context, *MarkMetricRequest) (*MarkMetricResponse, error)
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	ListMetrics(context.Context, *ListMetricsRequest) (*ListMetricsResponse, error)
 	StreamEvents(*StreamEventsRequest, grpc.ServerStreamingServer[EventEnvelope]) error
@@ -131,6 +144,9 @@ type UnimplementedAdminServiceServer struct{}
 
 func (UnimplementedAdminServiceServer) MarkTemplate(context.Context, *MarkTemplateRequest) (*MarkTemplateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method MarkTemplate not implemented")
+}
+func (UnimplementedAdminServiceServer) MarkMetric(context.Context, *MarkMetricRequest) (*MarkMetricResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MarkMetric not implemented")
 }
 func (UnimplementedAdminServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListTemplates not implemented")
@@ -179,6 +195,24 @@ func _AdminService_MarkTemplate_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).MarkTemplate(ctx, req.(*MarkTemplateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_MarkMetric_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkMetricRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).MarkMetric(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_MarkMetric_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).MarkMetric(ctx, req.(*MarkMetricRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -258,6 +292,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkTemplate",
 			Handler:    _AdminService_MarkTemplate_Handler,
+		},
+		{
+			MethodName: "MarkMetric",
+			Handler:    _AdminService_MarkMetric_Handler,
 		},
 		{
 			MethodName: "ListTemplates",

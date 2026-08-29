@@ -141,6 +141,17 @@ func (s *grpcSource) ListEvents(ctx context.Context, limit int) ([]model.Event, 
 	return events, nil
 }
 
+func (s *grpcSource) MarkMetric(ctx context.Context, pattern string, ignore bool) error {
+	if _, err := s.client.MarkMetric(ctx, &tezcatlv1.MarkMetricRequest{
+		Pattern: pattern,
+		Ignore:  ignore,
+	}); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 func (s *grpcSource) Mark(ctx context.Context, template string, marking detect.Marking) error {
 	if _, err := s.client.MarkTemplate(ctx, &tezcatlv1.MarkTemplateRequest{
 		Template: template,

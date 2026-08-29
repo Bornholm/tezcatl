@@ -39,6 +39,10 @@ func (s *fakeSource) Mark(ctx context.Context, template string, marking detect.M
 	return nil
 }
 
+func (s *fakeSource) MarkMetric(ctx context.Context, pattern string, ignore bool) error {
+	return nil
+}
+
 func (s *fakeSource) Events(ctx context.Context, history int, out chan<- model.Event, connected func()) error {
 	s.mu.Lock()
 	index := s.calls

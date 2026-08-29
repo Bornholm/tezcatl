@@ -327,3 +327,116 @@ func TestMetricDetectorSnapshotRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected restored state: %+v", stats)
 	}
 }
+
+// TestMetricDetectorIgnore covers the metric side of the feedback
+// loop: a marked series goes quiet, keeps learning, and resumes when
+// the marking is cleared.
+func TestMetricDetectorIgnore(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	start := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+
+	obs := func(value float64, at time.Duration) *model.Observation {
+		o := metricObservation("prod/app", "docker.memory.used_percent", value, start.Add(at))
+		o.Metric.Labels = map[string]string{"container": "app.web.1"}
+		return o
+	}
+
+	for i := range 100 {
+		detector.Detect(obs(40+float64(i%3), time.Duration(i)*time.Second))
+	}
+
+	// Sanity: an outlier signals before any marking.
+	if signals := detector.Detect(obs(90, 200*time.Second)); !hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected a signal before marking, got %+v", signals)
+	}
+
+	key := seriesKey("prod/app", obs(0, 0).Metric)
+	if err := detector.SetIgnored(key, true); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if signals := detector.Detect(obs(95, 210*time.Second)); len(signals) != 0 {
+		t.Fatalf("expected the marked series to stay quiet, got %+v", signals)
+	}
+
+	if !detector.Series()[0].Ignored {
+		t.Error("expected the series to report itself ignored")
+	}
+
+	// The marking survives a snapshot round trip.
+	snapshot, err := detector.Snapshot()
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	restored := NewMetricDetector(nil)
+	if err := restored.Restore(snapshot); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if signals := restored.Detect(obs(95, 220*time.Second)); len(signals) != 0 {
+		t.Fatalf("expected the marking to survive a restart, got %+v", signals)
+	}
+
+	// Clearing resumes detection without a warmup.
+	if err := restored.SetIgnored(key, false); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	// Any signal proves detection resumed; which one depends on how the
+	// baseline moved while the series was learning silently.
+	if signals := restored.Detect(obs(95, 230*time.Second)); len(signals) == 0 {
+		t.Fatal("expected detection to resume after clearing")
+	}
+}
+
+// TestMetricDetectorIgnorePatterns checks the three matching forms: an
+// exact key, an exact metric name and a glob.
+func TestMetricDetectorIgnorePatterns(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	if err := detector.SetIgnored("docker.cpu.percent", true); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if err := detector.SetIgnored("prod/*/queue_depth", true); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	if !detector.isIgnored("prod/app/docker.cpu.percent{container=x}", "docker.cpu.percent") {
+		t.Error("expected the metric name to match")
+	}
+
+	if !detector.isIgnored("prod/app/queue_depth", "queue_depth") {
+		t.Error("expected the glob to match the key")
+	}
+
+	if detector.isIgnored("prod/app/docker.memory.used_percent", "docker.memory.used_percent") {
+		t.Error("expected an unmarked series to stay live")
+	}
+
+	if err := detector.SetIgnored("[bad", true); err == nil {
+		t.Error("expected a malformed pattern to be rejected")
+	}
+
+	if got := detector.IgnoredPatterns(); len(got) != 2 {
+		t.Errorf("expected 2 patterns, got %v", got)
+	}
+}
+
+// TestMetricDetectorRestoreLegacySnapshot keeps old states loadable:
+// they are the bare series map, without the markings wrapper.
+func TestMetricDetectorRestoreLegacySnapshot(t *testing.T) {
+	legacy := []byte(`{"prod/app/cpu.percent":{"count":50,"mean":10,"variance":4,"fast_ewma":10,"slow_ewma":10}}`)
+
+	detector := NewMetricDetector(nil)
+	if err := detector.Restore(legacy); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	series := detector.Series()
+	if len(series) != 1 || series[0].Key != "prod/app/cpu.percent" || series[0].Samples != 50 {
+		t.Fatalf("expected the legacy series to be restored, got %+v", series)
+	}
+}

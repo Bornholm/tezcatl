@@ -131,6 +131,16 @@ func (s *Service) SubscribeEvents(history int, buffer int) ([]model.Event, <-cha
 	return recent, events, cancel, nil
 }
 
+// MarkMetric silences (or restores, with ignore false) the metric
+// series matching pattern, the metric side of the feedback loop.
+func (s *Service) MarkMetric(pattern string, ignore bool) error {
+	if s.metricDetector == nil {
+		return errors.New("metric detection is disabled")
+	}
+
+	return errors.WithStack(s.metricDetector.SetIgnored(pattern, ignore))
+}
+
 // Metrics lists the learned metric series with their baselines.
 func (s *Service) Metrics() []detect.SeriesInfo {
 	if s.metricDetector == nil {

@@ -23,6 +23,8 @@ type Source interface {
 	Templates(ctx context.Context) ([]admin.TemplateInfo, error)
 	Metrics(ctx context.Context) ([]detect.SeriesInfo, error)
 	Mark(ctx context.Context, template string, marking detect.Marking) error
+	// MarkMetric silences (or restores) the series matching pattern.
+	MarkMetric(ctx context.Context, pattern string, ignore bool) error
 	// Events follows the published events, starting with the recent
 	// ones. It calls connected once the stream is established, and
 	// returns when the context is cancelled or the server goes away.
@@ -79,7 +81,8 @@ type top struct {
 	// visibleEvents those of eventsTable, so key handlers can map a
 	// selected row back to its object.
 	visible       []admin.TemplateInfo
-	visibleEvents []model.Event
+	visibleEvents  []model.Event
+	visibleMetrics []metricRow
 	query         string
 	fetchedAt     time.Time
 	streaming     bool
@@ -267,7 +270,55 @@ func (t *top) selectedTemplate() (admin.TemplateInfo, bool) {
 	return t.visible[index], true
 }
 
+// selectedMetric returns the series behind the selected table row.
+func (t *top) selectedMetric() (metricRow, bool) {
+	if name, _ := t.pages.GetFrontPage(); name != pageMetrics {
+		return metricRow{}, false
+	}
+
+	row, _ := t.metricsTable.GetSelection()
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	index := row - 1
+	if index < 0 || index >= len(t.visibleMetrics) {
+		return metricRow{}, false
+	}
+
+	return t.visibleMetrics[index], true
+}
+
 func (t *top) markSelected(marking detect.Marking) {
+	// On the metrics view, i silences the selected series and c clears
+	// the marking; the other markings have no metric meaning.
+	if metric, ok := t.selectedMetric(); ok {
+		if marking != detect.MarkingIgnore && marking != "" {
+			return
+		}
+
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+			defer cancel()
+
+			if err := t.source.MarkMetric(ctx, metric.Key, marking == detect.MarkingIgnore); err != nil {
+				t.setMessage(fmt.Sprintf("[red]mark failed: %v[-]", err))
+
+				return
+			}
+
+			label := "ignored"
+			if marking == "" {
+				label = "cleared"
+			}
+
+			t.setMessage(fmt.Sprintf("[green]%s %s[-]", tview.Escape(metric.Key), label))
+			t.refresh()
+		}()
+
+		return
+	}
+
 	template, ok := t.selectedTemplate()
 	if !ok {
 		return
@@ -488,6 +539,7 @@ func (t *top) render() {
 	events := eventRows(t.events, t.query)
 	t.visible = templates
 	t.visibleEvents = events
+	t.visibleMetrics = metrics
 	fetchedAt := t.fetchedAt
 	streaming := t.streaming
 	message := t.message
@@ -633,6 +685,11 @@ func renderMetrics(table *tview.Table, metrics []metricRow) {
 			state = "warming up"
 		} else if info.Deviation >= 3 {
 			color = tcell.ColorRed
+		}
+
+		if info.Ignored {
+			color = tcell.ColorGray
+			state = "ignored"
 		}
 
 		table.SetCell(row, 0, tview.NewTableCell(tview.Escape(info.Key)).SetTextColor(color).SetMaxWidth(80).SetExpansion(1))

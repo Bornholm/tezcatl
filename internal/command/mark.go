@@ -49,16 +49,19 @@ func adminTargetFlags() []cli.Flag {
 func NewMarkCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "mark",
-		Usage: "Mark a log template as normal, ignore or symptomatic",
+		Usage: "Mark a log template (normal, ignore, symptomatic) or silence a metric series (ignore)",
 		Flags: append(adminTargetFlags(),
 			&cli.StringFlag{
-				Name:     "template",
-				Usage:    "exact template string, as shown by 'tezcatl templates'",
-				Required: true,
+				Name:  "template",
+				Usage: "exact template string, as shown by 'tezcatl templates'",
+			},
+			&cli.StringFlag{
+				Name:  "metric",
+				Usage: "series key as shown by 'tezcatl metrics', a metric name, or a glob over either",
 			},
 			&cli.StringFlag{
 				Name:  "as",
-				Usage: "marking: normal, ignore or symptomatic",
+				Usage: "marking: normal, ignore or symptomatic (metrics: ignore only)",
 			},
 			&cli.BoolFlag{
 				Name:  "clear",
@@ -66,6 +69,11 @@ func NewMarkCommand() *cli.Command {
 			},
 		),
 		Action: func(ctx *cli.Context) error {
+			template, metric := ctx.String("template"), ctx.String("metric")
+			if (template == "") == (metric == "") {
+				return errors.New("exactly one of --template or --metric is required")
+			}
+
 			marking := detect.Marking(ctx.String("as"))
 
 			if ctx.Bool("clear") {
@@ -74,11 +82,23 @@ func NewMarkCommand() *cli.Command {
 				return errors.New("either --as or --clear is required")
 			}
 
-			if stateDir := offlineStateDir(ctx); stateDir != "" {
-				return markOffline(ctx.Context, ctx.String("config"), stateDir, ctx.String("template"), marking)
+			if metric != "" && marking != "" && marking != detect.MarkingIgnore {
+				return errors.Errorf("a metric can only be marked ignore, not %q", marking)
 			}
 
-			return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), ctx.String("template"), marking)
+			if stateDir := offlineStateDir(ctx); stateDir != "" {
+				if metric != "" {
+					return markMetricOffline(ctx.Context, ctx.String("config"), stateDir, metric, marking == detect.MarkingIgnore)
+				}
+
+				return markOffline(ctx.Context, ctx.String("config"), stateDir, template, marking)
+			}
+
+			if metric != "" {
+				return markMetricRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), metric, marking == detect.MarkingIgnore)
+			}
+
+			return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), template, marking)
 		},
 	}
 }
@@ -145,6 +165,9 @@ func NewMetricsCommand() *cli.Command {
 				if info.Warmup {
 					state = "warming up"
 				}
+				if info.Ignored {
+					state = "ignored"
+				}
 
 				fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n",
 					info.Key, info.Samples,
@@ -199,6 +222,7 @@ func seriesFromProto(metrics []*tezcatlv1.MetricInfo) []detect.SeriesInfo {
 			StdDev:  info.GetStdDev(),
 			Recent:  info.GetRecent(),
 			Warmup:  info.GetWarmup(),
+			Ignored: info.GetIgnored(),
 		})
 	}
 
@@ -206,13 +230,55 @@ func seriesFromProto(metrics []*tezcatlv1.MetricInfo) []detect.SeriesInfo {
 }
 
 func listMetricsOffline(ctx context.Context, configPath string, stateDir string) ([]detect.SeriesInfo, error) {
-	service, _, store, err := offlineService(ctx, configPath, stateDir)
+	service, _, _, store, err := offlineService(ctx, configPath, stateDir)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	defer store.Close()
 
 	return service.Metrics(), nil
+}
+
+func markMetricRemote(ctx context.Context, target string, caFile string, pattern string, ignore bool) error {
+	conn, err := grpc.Dial(target, caFile)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer conn.Close()
+
+	client := tezcatlv1.NewAdminServiceClient(conn)
+
+	if _, err := client.MarkMetric(ctx, &tezcatlv1.MarkMetricRequest{
+		Pattern: pattern,
+		Ignore:  ignore,
+	}); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
+func markMetricOffline(ctx context.Context, configPath string, stateDir string, pattern string, ignore bool) error {
+	service, _, metricDetector, store, err := offlineService(ctx, configPath, stateDir)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer store.Close()
+
+	if err := service.MarkMetric(pattern, ignore); err != nil {
+		return errors.WithStack(err)
+	}
+
+	snapshot, err := metricDetector.Snapshot()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	if err := store.Save(ctx, metricDetector.SnapshotKey(), snapshot); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
 }
 
 func markRemote(ctx context.Context, target string, caFile string, template string, marking detect.Marking) error {
@@ -268,49 +334,49 @@ func templatesFromProto(infos []*tezcatlv1.TemplateInfo) []admin.TemplateInfo {
 
 // offlineService rebuilds the miner and detector from a persisted state
 // directory, without a running process.
-func offlineService(ctx context.Context, configPath string, stateDir string) (*admin.Service, *detect.LogDetector, port.StateStore, error) {
+func offlineService(ctx context.Context, configPath string, stateDir string) (*admin.Service, *detect.LogDetector, *detect.MetricDetector, port.StateStore, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return nil, nil, nil, errors.WithStack(err)
+		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
 	store, err := fs.NewStateStore(stateDir)
 	if err != nil {
-		return nil, nil, nil, errors.WithStack(err)
+		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
 	miner := drain.NewPartitionedMiner(&cfg.Logs.Drain)
 	if data, err := store.Load(ctx, "drain"); err == nil {
 		if err := miner.Restore(data); err != nil {
-			return nil, nil, nil, errors.WithStack(err)
+			return nil, nil, nil, nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, errors.WithStack(err)
+		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
 	detector := detect.NewLogDetector(cfg.LogDetectionConfig())
 	if data, err := store.Load(ctx, detector.SnapshotKey()); err == nil {
 		if err := detector.Restore(data); err != nil {
-			return nil, nil, nil, errors.WithStack(err)
+			return nil, nil, nil, nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, errors.WithStack(err)
+		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
 	metricDetector := detect.NewMetricDetector(cfg.MetricDetectionConfig())
 	if data, err := store.Load(ctx, metricDetector.SnapshotKey()); err == nil {
 		if err := metricDetector.Restore(data); err != nil {
-			return nil, nil, nil, errors.WithStack(err)
+			return nil, nil, nil, nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, errors.WithStack(err)
+		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
-	return admin.NewService(miner, detector, metricDetector), detector, store, nil
+	return admin.NewService(miner, detector, metricDetector), detector, metricDetector, store, nil
 }
 
 func markOffline(ctx context.Context, configPath string, stateDir string, template string, marking detect.Marking) error {
-	service, detector, store, err := offlineService(ctx, configPath, stateDir)
+	service, detector, _, store, err := offlineService(ctx, configPath, stateDir)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -333,7 +399,7 @@ func markOffline(ctx context.Context, configPath string, stateDir string, templa
 }
 
 func listOffline(ctx context.Context, configPath string, stateDir string) ([]admin.TemplateInfo, error) {
-	service, _, store, err := offlineService(ctx, configPath, stateDir)
+	service, _, _, store, err := offlineService(ctx, configPath, stateDir)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

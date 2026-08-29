@@ -39,7 +39,19 @@ message MetricInfo {
   // warmup is true while the series has too few samples for
   // statistical signals.
   bool warmup = 6;
+  // ignored is true when a runtime marking silences this series.
+  bool ignored = 7;
 }
+
+message MarkMetricRequest {
+  // pattern is an exact series key ("source/metric{labels}"), an exact
+  // metric name, or a path.Match glob over either.
+  string pattern = 1;
+  // ignore silences the matching series; false clears the marking.
+  bool ignore = 2;
+}
+
+message MarkMetricResponse {}
 
 message ListMetricsResponse {
   repeated MetricInfo metrics = 1;
@@ -82,6 +94,7 @@ message ListEventsResponse {
 // has been learned and mark templates without restarting the server.
 service AdminService {
   rpc MarkTemplate(MarkTemplateRequest) returns (MarkTemplateResponse);
+  rpc MarkMetric(MarkMetricRequest) returns (MarkMetricResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
   rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse);
   rpc StreamEvents(StreamEventsRequest) returns (stream EventEnvelope);

@@ -129,6 +129,14 @@ func (s *AdminServer) MarkTemplate(ctx context.Context, req *tezcatlv1.MarkTempl
 	return &tezcatlv1.MarkTemplateResponse{}, nil
 }
 
+func (s *AdminServer) MarkMetric(ctx context.Context, req *tezcatlv1.MarkMetricRequest) (*tezcatlv1.MarkMetricResponse, error) {
+	if err := s.service.MarkMetric(req.GetPattern(), req.GetIgnore()); err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return &tezcatlv1.MarkMetricResponse{}, nil
+}
+
 func (s *AdminServer) ListMetrics(ctx context.Context, req *tezcatlv1.ListMetricsRequest) (*tezcatlv1.ListMetricsResponse, error) {
 	series := s.service.Metrics()
 
@@ -144,6 +152,7 @@ func (s *AdminServer) ListMetrics(ctx context.Context, req *tezcatlv1.ListMetric
 			StdDev:  info.StdDev,
 			Recent:  info.Recent,
 			Warmup:  info.Warmup,
+			Ignored: info.Ignored,
 		})
 	}
 

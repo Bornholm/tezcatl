@@ -48,6 +48,7 @@ tezcatl events --since 24h | jq .summary
 tezcatl templates
 tezcatl metrics
 tezcatl mark --template "connection reset by peer" --as ignore
+tezcatl mark --metric "docker.memory.used_percent" --as ignore  # ou une clé de série, ou un glob
 
 # Ou en interactif : TUI façon k9s. Trois onglets, événements en direct,
 # marquage au clavier, filtre, baselines apprises
