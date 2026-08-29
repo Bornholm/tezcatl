@@ -40,6 +40,70 @@ func TestMetricDetectorZScore(t *testing.T) {
 	}
 }
 
+// TestMetricDetectorMinDelta reproduces the idle-container situation:
+// a CPU series flat around 0.03% has a near-zero variance, so a sample
+// at 0.15% scores a huge z — the significance floor must silence it,
+// while a genuinely large move still signals.
+func TestMetricDetectorMinDelta(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	for i := range 100 {
+		value := 0.02 + float64(i%3)*0.01
+		detector.Detect(metricObservation("prod/app", "docker.cpu.percent", value, start.Add(time.Duration(i)*time.Second)))
+	}
+
+	// 0.15%: statistically extreme, operationally nothing (delta below
+	// the *.percent floor of 1 point).
+	signals := detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 0.15, start.Add(200*time.Second)))
+	if hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected the significance floor to silence a 0.12 point move, got %+v", signals)
+	}
+
+	// 42%: above the floor, must still signal.
+	signals = detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 42, start.Add(210*time.Second)))
+	if !hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected a z-score signal for a real move, got %+v", signals)
+	}
+
+	// A metric matching no floor keeps the previous behavior.
+	if floor := detector.config.minDelta("queue_depth"); floor != 0 {
+		t.Errorf("expected no floor for queue_depth, got %g", floor)
+	}
+
+	// Exact entries win over globs.
+	config := DefaultMetricConfig()
+	config.MinDeltas["docker.cpu.percent"] = 5
+	if floor := config.minDelta("docker.cpu.percent"); floor != 5 {
+		t.Errorf("expected the exact entry to win, got %g", floor)
+	}
+
+	if floor := config.minDelta("system.load1"); floor != 0.5 {
+		t.Errorf("expected the default load1 floor, got %g", floor)
+	}
+}
+
+// TestMetricDetectorTrendDriftMinDelta silences drift on near-zero
+// series: a fast EWMA at 0.09 vs a slow one at 0.03 is a 3x relative
+// divergence but a 0.06 point move.
+func TestMetricDetectorTrendDriftMinDelta(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	for i := range 60 {
+		detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 0.03, start.Add(time.Duration(i)*time.Second)))
+	}
+
+	for i := range 60 {
+		signals := detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 0.09, start.Add(time.Duration(60+i)*time.Second)))
+		if hasSignal(signals, SignalMetricTrendDrift) {
+			t.Fatalf("expected the significance floor to silence a 0.06 point drift at sample %d", i)
+		}
+	}
+}
+
 func TestMetricDetectorThreshold(t *testing.T) {
 	maxValue := 90.0
 
