@@ -208,11 +208,14 @@ metrics:
     # donc "*.percent" raterait docker.memory.used_percent.
     # Seul le pourcentage a une échelle connue sans connaître la
     # métrique (0 à 100, quel que soit l'émetteur) : c'est le seul
-    # plancher livré par défaut. Pour les autres unités, ajoutez le
-    # vôtre, par exemple pour une charge système :
+    # plancher livré par défaut. Les 5 points viennent de la mesure :
+    # sur une nuit calme, 27 des 34 signaux sur pourcentages bougeaient
+    # moins que ça, dont un CPU passant de 0,87 % à 1,91 % remonté en
+    # critical. Pour les autres unités, ajoutez le vôtre, par exemple
+    # pour une charge système :
     #   system.load1: 0.5
     min_deltas:
-      "*percent": 1       # points de pourcentage
+      "*percent": 5       # points de pourcentage
     # Plafond du nombre de séries suivies. Les environnements créent des
     # identités jetables (conteneur de déploiement, job ponctuel, nom de
     # pod) : autant de séries écrites une fois et jamais réalimentées.

@@ -83,15 +83,20 @@ func DefaultMetricConfig() *MetricConfig {
 }
 
 // DefaultMinDeltas floors the one unit whose scale is known without
-// knowing the metric: a percentage runs from 0 to 100 whoever emits it,
-// so a move of less than a point is noise no matter how flat the series
-// was. Any other unit needs a floor an operator sets, since the core
-// cannot guess the scale of a name it has never seen.
+// knowing the metric: a percentage runs from 0 to 100 whoever emits it.
+// Any other unit needs a floor an operator sets, since the core cannot
+// guess the scale of a name it has never seen.
+//
+// Five points comes from measurement, not taste: on the dogfooding
+// instance, 27 of the 34 percentage z-scores of a quiet night moved
+// less than that, the smallest of them barely above one point (a host
+// CPU going from 0.87% to 1.91%, reported critical). Everything a
+// person would act on cleared it.
 func DefaultMinDeltas() map[string]float64 {
 	return map[string]float64{
 		// Match the suffix, not a separator: "cpu.percent" and
 		// "memory.used_percent" are both percentages.
-		"*percent": 1,
+		"*percent": 5,
 	}
 }
 

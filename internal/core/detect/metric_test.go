@@ -57,7 +57,7 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 	}
 
 	// 0.15%: statistically extreme, operationally nothing (delta below
-	// the *percent floor of 1 point).
+	// the percentage floor).
 	signals := detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 0.15, start.Add(200*time.Second)))
 	if hasSignal(signals, SignalMetricZScore) {
 		t.Fatalf("expected the significance floor to silence a 0.12 point move, got %+v", signals)
@@ -107,8 +107,8 @@ func TestDefaultMinDeltasCoverPercentages(t *testing.T) {
 	}
 
 	for _, metric := range metrics {
-		if floor := config.minDelta(metric); floor != 1 {
-			t.Errorf("expected a 1 point floor for %s, got %v", metric, floor)
+		if floor := config.minDelta(metric); floor != 5 {
+			t.Errorf("expected the percentage floor for %s, got %v", metric, floor)
 		}
 	}
 
@@ -133,6 +133,12 @@ func TestMetricDetectorMinDeltaUnderscorePercent(t *testing.T) {
 	signals := detector.Detect(metricObservation("production/offen", "docker.memory.used_percent", 0.508, start.Add(200*time.Second)))
 	if hasSignal(signals, SignalMetricZScore) {
 		t.Fatalf("expected the floor to silence a 0.07 point move, got %+v", signals)
+	}
+
+	// A host CPU going from 0.87% to 1.91% used to be reported
+	// critical; a point of movement is not an incident.
+	if signals := detector.Detect(metricObservation("production/offen", "docker.memory.used_percent", 1.9, start.Add(220*time.Second))); hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected the floor to silence a 1.5 point move, got %+v", signals)
 	}
 
 	// A move that actually matters still gets through.
