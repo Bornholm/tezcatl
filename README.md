@@ -45,7 +45,8 @@ tezcatl events --since 24h | jq .summary
 # Assembler les anomalies d'une période en briefings d'incident :
 # déclencheur, propagation, preuves agrégées, changements corrélés
 tezcatl incidents --since 24h
-tezcatl incidents --since 24h --format json   # pour un agent LLM
+tezcatl incidents --since 24h --format markdown   # rapport auto-descriptif
+tezcatl incidents --since 24h --format json       # structure brute
 
 # Boucle de feedback : inspecter ce qui a été appris, marquer le bruit.
 # --target vaut unix:///run/tezcatl/tezcatl.sock par défaut, le socket
@@ -93,6 +94,8 @@ Le `related_changes` dit qu'un déploiement a eu lieu 180 secondes avant l'anoma
 Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.dir` et le recharge au démarrage. Un redémarrage ne relance donc pas une salve de fausses alertes sur des templates déjà connus.
 
 `tezcatl incidents` remonte d'un cran : il assemble les anomalies en récits. Deux événements appartiennent au même incident quand ils sont **apparentés**, pas simplement voisins dans le temps : même service, même changement corrélé, ou assez simultanés pour être un seul événement qui se propage (le même cycle de collecte). Un incident se termine après un silence (`--gap`) et ne dépasse jamais une durée plafond (`--max-duration`), parce qu'un service qui déraille toute la nuit est un état chronique, pas une histoire. Sans ce critère de parenté, une machine qui produit une anomalie toutes les huit minutes voit sa nuit entière fondue en un seul « incident » de cinq heures, ce qui n'apprend rien.
+
+La sortie `--format markdown` est faite pour être donnée telle quelle à un agent LLM. Elle explique son propre schéma avant de présenter les données : ce qu'est un déclencheur par opposition à une preuve, que `<NUM>` et `<*>` sont des masques et non des valeurs, que les preuves sont agrégées, que les changements associés sont une corrélation et rien d'autre. Elle énonce aussi ce que tezcatl **ne sait pas** : il ignore la causalité, il ne voit que ce qu'on lui donne, un détecteur silencieux n'est pas un système sain, et les frontières d'un incident sont une heuristique. Un agent qui lit ces données sans ces avertissements invente du sens qui n'y est pas.
 
 `tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue l'historique persisté, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline et permet de faire taire une série avec `i`.
 

@@ -264,3 +264,104 @@ func TestGroupCapsChronicServices(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderMarkdownExplainsItsSchema(t *testing.T) {
+	incidents := Group(scenario(), Options{})
+
+	var b strings.Builder
+	RenderMarkdown(&b, incidents, Period{
+		Since:     time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC),
+		Generated: time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC),
+	})
+	report := b.String()
+
+	// The reader must learn what the data means before reading it.
+	for _, expected := range []string{
+		"# Tezcatl incident report",
+		"## How to read this report",
+		"Placeholders in templates",
+		"`<NUM>`",
+		"Do not read a placeholder as",
+		"correlation, and only correlation",
+		"### Signal kinds",
+		"`log.frequency_spike`",
+		"`metric.zscore`",
+		"What tezcatl does not know",
+		"It does not know causality",
+		"A quiet detector is not a healthy system",
+		"Incident boundaries are a heuristic",
+	} {
+		if !strings.Contains(report, expected) {
+			t.Errorf("expected the report to explain %q", expected)
+		}
+	}
+
+	// And then the incidents themselves.
+	for _, expected := range []string{
+		"## Incident 2 — checkout: new log template",
+		"### Trigger",
+		"### Changes near this incident (correlation only)",
+		"3m0s before the trigger",
+		"### Evidence",
+		"| `log.new_template` |",
+		"pool_usage_percent",
+	} {
+		if !strings.Contains(report, expected) {
+			t.Errorf("expected the report to contain %q, got:\n%s", expected, report)
+		}
+	}
+
+	// The schema is written once, not per incident.
+	if count := strings.Count(report, "## How to read this report"); count != 1 {
+		t.Errorf("expected the schema once, got %d times", count)
+	}
+}
+
+// TestRenderMarkdownSurvivesLogLines guards the tables: real log lines
+// carry pipes and newlines, which would otherwise end a cell or a row.
+func TestRenderMarkdownSurvivesLogLines(t *testing.T) {
+	at := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
+
+	events := []model.Event{{
+		ID: "nasty", Kind: "anomaly.log.new_template", Source: "prod/api", Service: "api",
+		Severity: model.SeverityWarning, Timestamp: at,
+		Summary:  "new log template: a | b\nc",
+		Signals: []model.Signal{
+			{Kind: "log.new_template", Source: "prod/api", Timestamp: at, Summary: "col | umn\nnewline"},
+		},
+	}}
+
+	var b strings.Builder
+	RenderMarkdown(&b, Group(events, Options{}), Period{})
+	report := b.String()
+
+	evidence := report[strings.Index(report, "### Evidence"):]
+	for _, line := range strings.Split(evidence, "\n") {
+		if !strings.HasPrefix(line, "| ") {
+			continue
+		}
+
+		// Six columns means seven pipes; an unescaped one would add more.
+		if got := strings.Count(line, "|") - strings.Count(line, "\\|"); got != 7 {
+			t.Errorf("expected 7 unescaped pipes in an evidence row, got %d: %s", got, line)
+		}
+	}
+
+	if strings.Contains(evidence, "newline\n") && !strings.Contains(evidence, "col \\| umn newline") {
+		t.Error("expected newlines folded into the cell")
+	}
+}
+
+func TestRenderMarkdownWithoutIncidents(t *testing.T) {
+	var b strings.Builder
+	RenderMarkdown(&b, nil, Period{})
+	report := b.String()
+
+	if !strings.Contains(report, "None. No anomaly was detected") {
+		t.Error("expected an explicit empty result")
+	}
+
+	if !strings.Contains(report, "not\nthat the systems were healthy") {
+		t.Error("expected the empty result to warn against reading it as health")
+	}
+}

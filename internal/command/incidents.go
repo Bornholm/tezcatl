@@ -35,6 +35,10 @@ func NewIncidentsCommand() *cli.Command {
 				Usage: "how far back to look: a duration (24h) or an RFC3339 timestamp",
 				Value: "24h",
 			},
+			&cli.StringFlag{
+				Name:  "until",
+				Usage: "newest event to include, same forms as --since",
+			},
 			&cli.DurationFlag{
 				Name:  "gap",
 				Usage: "a lull longer than this ends an incident",
@@ -52,19 +56,24 @@ func NewIncidentsCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "format",
-				Usage: "text or json",
+				Usage: "text (terminal), markdown (self-describing report for an LLM agent) or json",
 				Value: "text",
 			},
 		},
 		Action: func(ctx *cli.Context) error {
 			format := ctx.String("format")
-			if format != "text" && format != "json" {
-				return errors.Errorf("unknown format %q (text, json)", format)
+			if format != "text" && format != "json" && format != "markdown" {
+				return errors.Errorf("unknown format %q (text, markdown, json)", format)
 			}
 
 			since, err := parseTimeFlag(ctx.String("since"))
 			if err != nil {
 				return errors.Wrap(err, "malformed --since")
+			}
+
+			until, err := parseTimeFlag(ctx.String("until"))
+			if err != nil {
+				return errors.Wrap(err, "malformed --until")
 			}
 
 			conn, err := grpc.Dial(ctx.String("target"), ctx.String("tls-ca"))
@@ -77,6 +86,9 @@ func NewIncidentsCommand() *cli.Command {
 			req := &tezcatlv1.ListEventsRequest{}
 			if !since.IsZero() {
 				req.Since = since.Format(time.RFC3339Nano)
+			}
+			if !until.IsZero() {
+				req.Until = until.Format(time.RFC3339Nano)
 			}
 
 			res, err := tezcatlv1.NewAdminServiceClient(conn).ListEvents(ctx.Context, req)
@@ -111,6 +123,16 @@ func NewIncidentsCommand() *cli.Command {
 						return errors.WithStack(err)
 					}
 				}
+
+				return nil
+			}
+
+			if format == "markdown" {
+				incident.RenderMarkdown(os.Stdout, incidents, incident.Period{
+					Since:     since,
+					Until:     until,
+					Generated: time.Now(),
+				})
 
 				return nil
 			}

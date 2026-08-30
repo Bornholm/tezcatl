@@ -311,13 +311,13 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 
 		if rule.Max != nil && value > *rule.Max {
 			signals = append(signals, newSignal(SignalMetricThreshold, 0.9,
-				fmt.Sprintf("%s = %g above configured maximum %g", obs.Metric.Name, value, *rule.Max),
+				fmt.Sprintf("%s = %.4g above configured maximum %g", obs.Metric.Name, value, *rule.Max),
 				map[string]string{"max": strconv.FormatFloat(*rule.Max, 'f', -1, 64)}))
 		}
 
 		if rule.Min != nil && value < *rule.Min {
 			signals = append(signals, newSignal(SignalMetricThreshold, 0.9,
-				fmt.Sprintf("%s = %g below configured minimum %g", obs.Metric.Name, value, *rule.Min),
+				fmt.Sprintf("%s = %.4g below configured minimum %g", obs.Metric.Name, value, *rule.Min),
 				map[string]string{"min": strconv.FormatFloat(*rule.Min, 'f', -1, 64)}))
 		}
 	}
@@ -334,7 +334,10 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 				score := math.Min(0.95, 0.5+math.Abs(z)/10)
 
 				signals = append(signals, newSignal(SignalMetricZScore, score,
-					fmt.Sprintf("%s = %g deviates from baseline %.3g (z = %.1f)", obs.Metric.Name, value, stats.Mean, z),
+					// Four significant digits: a summary is read, and
+					// "30.585181299599963" carries no more meaning than
+					// "30.59". The exact value stays in the attributes.
+					fmt.Sprintf("%s = %.4g deviates from baseline %.3g (z = %.1f)", obs.Metric.Name, value, stats.Mean, z),
 					map[string]string{
 						"mean":   strconv.FormatFloat(stats.Mean, 'g', 4, 64),
 						"stddev": strconv.FormatFloat(stddev, 'g', 4, 64),
