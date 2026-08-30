@@ -53,7 +53,7 @@ func scenario() []model.Event {
 }
 
 func TestGroupSplitsOnGaps(t *testing.T) {
-	incidents := Group(scenario(), 30*time.Minute)
+	incidents := Group(scenario(), Options{})
 
 	if len(incidents) != 2 {
 		t.Fatalf("expected 2 incidents, got %d", len(incidents))
@@ -69,7 +69,7 @@ func TestGroupSplitsOnGaps(t *testing.T) {
 }
 
 func TestBuildAggregates(t *testing.T) {
-	incidents := Group(scenario(), 30*time.Minute)
+	incidents := Group(scenario(), Options{})
 	burst := incidents[1]
 
 	if burst.Severity != model.SeverityCritical || burst.Confidence != 0.92 {
@@ -110,7 +110,7 @@ func TestBuildAggregates(t *testing.T) {
 }
 
 func TestRenderReadsLikeABriefing(t *testing.T) {
-	incidents := Group(scenario(), 30*time.Minute)
+	incidents := Group(scenario(), Options{})
 
 	var b strings.Builder
 	Render(&b, incidents[1])
@@ -130,6 +130,137 @@ func TestRenderReadsLikeABriefing(t *testing.T) {
 	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("expected the briefing to contain %q, got:\n%s", expected, text)
+		}
+	}
+}
+
+// nightlyNoise reproduces what the dogfooding instance actually
+// produces: unrelated services anomalizing every few minutes all night
+// (a web server's access-log patterns, a host's CPU), interleaved with
+// one real deployment burst. Pure time-proximity grouping chained all
+// of it into a single 5-hour "incident"; relatedness must not.
+func nightlyNoise() []model.Event {
+	base := time.Date(2026, 8, 30, 2, 0, 0, 0, time.UTC)
+
+	events := []model.Event{}
+
+	// Background: blog and host take turns every ~8 minutes for 3 hours,
+	// which is well inside any usable gap.
+	for i := range 12 {
+		at := base.Add(time.Duration(i) * 16 * time.Minute)
+
+		events = append(events,
+			model.Event{
+				ID: "blog-" + string(rune('a'+i)), Kind: "anomaly.log.frequency_spike",
+				Source: "production/blog", Service: "blog", Severity: model.SeverityWarning,
+				Timestamp: at, Summary: "frequency spike for template",
+				Signals: []model.Signal{{Kind: "log.frequency_spike", Source: "production/blog", Timestamp: at}},
+			},
+			model.Event{
+				ID: "host-" + string(rune('a'+i)), Kind: "anomaly.metric.zscore",
+				Source: "production/host", Service: "host", Severity: model.SeverityWarning,
+				Timestamp: at.Add(8 * time.Minute), Summary: "system.load1 deviates from baseline",
+				Signals: []model.Signal{{Kind: "metric.zscore", Source: "production/host", Timestamp: at.Add(8 * time.Minute)}},
+			},
+		)
+	}
+
+	// The real story: a deployment of automata, its CPU spiking, and
+	// leash-toolbox reacting seconds later.
+	deploy := base.Add(70 * time.Minute)
+	change := []model.RelatedChange{{Change: model.ChangeRecord{Type: "deployment", Version: "automata:00c698e"}, OffsetSeconds: -60}}
+
+	events = append(events,
+		model.Event{
+			ID: "deploy-cpu", Kind: "anomaly.metric.zscore", Source: "production/automata", Service: "automata",
+			Severity: model.SeverityCritical, Confidence: 0.95, Timestamp: deploy,
+			Summary: "docker.cpu.percent = 8.5 deviates from baseline 0.08 (z = 234)",
+			Signals: []model.Signal{{Kind: "metric.zscore", Source: "production/automata", Score: 0.95, Timestamp: deploy}},
+			RelatedChanges: change,
+		},
+		model.Event{
+			ID: "deploy-spread", Kind: "anomaly.metric.zscore", Source: "production/leash-toolbox", Service: "leash-toolbox",
+			Severity: model.SeverityWarning, Confidence: 0.8, Timestamp: deploy.Add(5 * time.Second),
+			Summary: "docker.memory.used_percent deviates from baseline",
+			Signals: []model.Signal{{Kind: "metric.zscore", Source: "production/leash-toolbox", Score: 0.8, Timestamp: deploy.Add(5 * time.Second)}},
+		},
+		model.Event{
+			ID: "deploy-sigterm", Kind: "anomaly.log.missing_template", Source: "production/automata", Service: "automata",
+			Severity: model.SeverityWarning, Timestamp: deploy.Add(3 * time.Minute),
+			Summary: "expected log template not seen: Received SIGTERM",
+			Signals: []model.Signal{{Kind: "log.missing_template", Source: "production/automata", Timestamp: deploy.Add(3 * time.Minute)}},
+			RelatedChanges: change,
+		},
+	)
+
+	return events
+}
+
+// TestGroupIsolatesRealBurstFromBackground is the regression the
+// instance taught: the deployment must be its own story, not a
+// paragraph inside a night-long one.
+func TestGroupIsolatesRealBurstFromBackground(t *testing.T) {
+	incidents := Group(nightlyNoise(), Options{})
+
+	var deployIncident *Incident
+	for i := range incidents {
+		for _, event := range incidents[i].Events {
+			if event.ID == "deploy-cpu" {
+				deployIncident = &incidents[i]
+			}
+		}
+	}
+
+	if deployIncident == nil {
+		t.Fatal("the deployment burst vanished")
+	}
+
+	// Exactly the three events of the deployment, nothing swept in.
+	if len(deployIncident.Events) != 3 {
+		t.Fatalf("expected the deployment burst alone, got %d events: %+v", len(deployIncident.Events), deployIncident.Services)
+	}
+
+	if len(deployIncident.Services) != 2 {
+		t.Errorf("expected automata and leash-toolbox, got %v", deployIncident.Services)
+	}
+
+	if deployIncident.End.Sub(deployIncident.Start) > 5*time.Minute {
+		t.Errorf("expected a short burst, got %s", deployIncident.End.Sub(deployIncident.Start))
+	}
+
+	// The background stays separate, and no incident swallows the night.
+	for _, entry := range incidents {
+		if entry.End.Sub(entry.Start) > time.Hour {
+			t.Errorf("expected no incident longer than the cap, got %s (%s)", entry.End.Sub(entry.Start), entry.Title)
+		}
+	}
+}
+
+// TestGroupCapsChronicServices covers a service that never stops
+// anomalizing: it must be reported as successive bounded incidents
+// rather than one endless one.
+func TestGroupCapsChronicServices(t *testing.T) {
+	base := time.Date(2026, 8, 30, 0, 0, 0, 0, time.UTC)
+
+	events := []model.Event{}
+	for i := range 40 {
+		at := base.Add(time.Duration(i) * 10 * time.Minute)
+		events = append(events, model.Event{
+			ID: "chronic", Kind: "anomaly.log.frequency_spike", Source: "production/blog", Service: "blog",
+			Severity: model.SeverityWarning, Timestamp: at, Summary: "frequency spike",
+			Signals: []model.Signal{{Kind: "log.frequency_spike", Source: "production/blog", Timestamp: at}},
+		})
+	}
+
+	incidents := Group(events, Options{})
+
+	if len(incidents) < 6 {
+		t.Errorf("expected the chronic service split into bounded incidents, got %d", len(incidents))
+	}
+
+	for _, entry := range incidents {
+		if entry.End.Sub(entry.Start) > time.Hour {
+			t.Errorf("expected each incident under the cap, got %s", entry.End.Sub(entry.Start))
 		}
 	}
 }

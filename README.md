@@ -92,7 +92,9 @@ Le `related_changes` dit qu'un déploiement a eu lieu 180 secondes avant l'anoma
 
 Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.dir` et le recharge au démarrage. Un redémarrage ne relance donc pas une salve de fausses alertes sur des templates déjà connus.
 
-`tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue les 500 derniers, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline, ce qui sert à régler les planchers `min_deltas`. L'historique des événements vit en mémoire dans le serveur, donc il repart à zéro à chaque redémarrage.
+`tezcatl incidents` remonte d'un cran : il assemble les anomalies en récits. Deux événements appartiennent au même incident quand ils sont **apparentés**, pas simplement voisins dans le temps : même service, même changement corrélé, ou assez simultanés pour être un seul événement qui se propage (le même cycle de collecte). Un incident se termine après un silence (`--gap`) et ne dépasse jamais une durée plafond (`--max-duration`), parce qu'un service qui déraille toute la nuit est un état chronique, pas une histoire. Sans ce critère de parenté, une machine qui produit une anomalie toutes les huit minutes voit sa nuit entière fondue en un seul « incident » de cinq heures, ce qui n'apprend rien.
+
+`tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue l'historique persisté, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline et permet de faire taire une série avec `i`.
 
 ## Déploiement
 

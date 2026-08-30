@@ -38,9 +38,9 @@ type Incident struct {
 // Evidence is one kind of signal observed on one source during the
 // incident.
 type Evidence struct {
-	Kind    string `json:"kind"`
-	Source  string `json:"source"`
-	Count   int    `json:"count"`
+	Kind   string `json:"kind"`
+	Source string `json:"source"`
+	Count  int    `json:"count"`
 	// Summary is the strongest occurrence's own words.
 	Summary  string    `json:"summary"`
 	MaxScore float64   `json:"max_score"`
@@ -59,18 +59,66 @@ type Change struct {
 	BeforeStart time.Duration `json:"-"`
 }
 
-// DefaultGap separates two incidents: a lull this long means whatever
-// comes next is a new story. Half an hour trades a few merged storms
-// for never splitting one incident in two.
-const DefaultGap = 30 * time.Minute
+const (
+	// DefaultGap is the silence after which an incident is over: a
+	// service quiet this long has moved on.
+	DefaultGap = 30 * time.Minute
+	// DefaultMaxDuration bounds an incident whatever else happens. A
+	// service that keeps anomalizing all night is a chronic condition,
+	// not one story, and reading it as one story hides when things
+	// actually changed.
+	DefaultMaxDuration = time.Hour
+	// DefaultCoOccurrence is how close two events from otherwise
+	// unrelated services must be to count as one event spreading.
+	// Real spread lands in the same collection cycle: the instance
+	// shows three services deviating on the same second. Anything
+	// looser stops being evidence and starts being coincidence, and
+	// coincidence chains a busy machine's background noise into one
+	// endless incident.
+	DefaultCoOccurrence = 30 * time.Second
+)
 
-// Group clusters events into incidents: consecutive events closer than
-// gap belong to the same burst. Events must not contain debug noise;
-// the caller filters kinds. Incidents come back oldest first.
-func Group(events []model.Event, gap time.Duration) []Incident {
-	if gap <= 0 {
-		gap = DefaultGap
+// Options tunes the grouping. Zero values fall back to the defaults.
+type Options struct {
+	Gap          time.Duration
+	MaxDuration  time.Duration
+	CoOccurrence time.Duration
+}
+
+func (o Options) withDefaults() Options {
+	if o.Gap <= 0 {
+		o.Gap = DefaultGap
 	}
+
+	if o.MaxDuration <= 0 {
+		o.MaxDuration = DefaultMaxDuration
+	}
+
+	if o.CoOccurrence <= 0 {
+		o.CoOccurrence = DefaultCoOccurrence
+	}
+
+	return o
+}
+
+// openIncident accumulates events while it can still take more.
+type openIncident struct {
+	events   []model.Event
+	services map[string]bool
+	changes  map[string]bool
+	start    time.Time
+	last     time.Time
+}
+
+// Group assembles events into incidents. Events join an incident they
+// are *related* to, not merely one they are close to: proximity alone
+// chains the background noise of a busy machine into a single endless
+// story. Two events belong together when they touch the same service,
+// share a correlated change, or happen near enough to be one event
+// spreading. Incidents come back oldest first; the caller filters out
+// non-anomaly kinds.
+func Group(events []model.Event, opts Options) []Incident {
+	opts = opts.withDefaults()
 
 	sorted := make([]model.Event, len(events))
 	copy(sorted, events)
@@ -79,22 +127,108 @@ func Group(events []model.Event, gap time.Duration) []Incident {
 	})
 
 	incidents := []Incident{}
+	open := []*openIncident{}
 
-	var burst []model.Event
+	closeOut := func(candidate *openIncident) {
+		incidents = append(incidents, build(candidate.events))
+	}
+
 	for _, event := range sorted {
-		if len(burst) > 0 && event.Timestamp.Sub(burst[len(burst)-1].Timestamp) > gap {
-			incidents = append(incidents, build(burst))
-			burst = nil
+		// Retire the incidents this event can no longer join, oldest
+		// first so the output stays chronological.
+		kept := open[:0]
+		for _, candidate := range open {
+			if event.Timestamp.Sub(candidate.last) > opts.Gap {
+				closeOut(candidate)
+
+				continue
+			}
+
+			kept = append(kept, candidate)
+		}
+		open = kept
+
+		if host := pick(open, event, opts); host != nil {
+			host.add(event)
+
+			continue
 		}
 
-		burst = append(burst, event)
+		fresh := &openIncident{services: map[string]bool{}, changes: map[string]bool{}}
+		fresh.start = event.Timestamp
+		fresh.add(event)
+		open = append(open, fresh)
 	}
 
-	if len(burst) > 0 {
-		incidents = append(incidents, build(burst))
+	for _, candidate := range open {
+		closeOut(candidate)
 	}
+
+	sort.SliceStable(incidents, func(i, j int) bool {
+		return incidents[i].Start.Before(incidents[j].Start)
+	})
 
 	return incidents
+}
+
+// pick returns the open incident the event belongs to, preferring the
+// most recently active one when several match.
+func pick(open []*openIncident, event model.Event, opts Options) *openIncident {
+	var best *openIncident
+
+	for _, candidate := range open {
+		// However related, an incident that has run this long is a
+		// chronic condition; start a new story.
+		if event.Timestamp.Sub(candidate.start) > opts.MaxDuration {
+			continue
+		}
+
+		if !candidate.relatedTo(event, opts.CoOccurrence) {
+			continue
+		}
+
+		if best == nil || candidate.last.After(best.last) {
+			best = candidate
+		}
+	}
+
+	return best
+}
+
+// relatedTo reports whether an event continues this incident: the same
+// service, a change already blamed here, or a spread close enough in
+// time to be the same event reaching another service.
+func (o *openIncident) relatedTo(event model.Event, coOccurrence time.Duration) bool {
+	if o.services[serviceOf(event)] {
+		return true
+	}
+
+	for _, key := range changeKeys(event) {
+		if o.changes[key] {
+			return true
+		}
+	}
+
+	return event.Timestamp.Sub(o.last) <= coOccurrence
+}
+
+func (o *openIncident) add(event model.Event) {
+	o.events = append(o.events, event)
+	o.services[serviceOf(event)] = true
+	o.last = event.Timestamp
+
+	for _, key := range changeKeys(event) {
+		o.changes[key] = true
+	}
+}
+
+func changeKeys(event model.Event) []string {
+	keys := make([]string, 0, len(event.RelatedChanges))
+	for _, related := range event.RelatedChanges {
+		keys = append(keys, related.Change.Type+"\x00"+related.Change.Version+"\x00"+related.Change.Summary)
+	}
+
+	return keys
 }
 
 func build(events []model.Event) Incident {

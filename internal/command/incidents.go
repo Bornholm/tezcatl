@@ -37,8 +37,18 @@ func NewIncidentsCommand() *cli.Command {
 			},
 			&cli.DurationFlag{
 				Name:  "gap",
-				Usage: "a lull longer than this separates two incidents",
+				Usage: "a lull longer than this ends an incident",
 				Value: incident.DefaultGap,
+			},
+			&cli.DurationFlag{
+				Name:  "max-duration",
+				Usage: "an incident never runs longer than this, however related the events",
+				Value: incident.DefaultMaxDuration,
+			},
+			&cli.DurationFlag{
+				Name:  "co-occurrence",
+				Usage: "how close two unrelated services must anomalize to count as one event spreading",
+				Value: incident.DefaultCoOccurrence,
 			},
 			&cli.StringFlag{
 				Name:  "format",
@@ -88,7 +98,11 @@ func NewIncidentsCommand() *cli.Command {
 				}
 			}
 
-			incidents := incident.Group(events, ctx.Duration("gap"))
+			incidents := incident.Group(events, incident.Options{
+				Gap:          ctx.Duration("gap"),
+				MaxDuration:  ctx.Duration("max-duration"),
+				CoOccurrence: ctx.Duration("co-occurrence"),
+			})
 
 			if format == "json" {
 				encoder := json.NewEncoder(os.Stdout)
