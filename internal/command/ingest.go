@@ -52,6 +52,10 @@ func NewIngestCommand() *cli.Command {
 						Value: "{}",
 					},
 					&cli.StringFlag{
+						Name:  "source-config-file",
+						Usage: "read the plugin configuration from a JSON file instead (a systemd unit has no business quoting JSON)",
+					},
+					&cli.StringFlag{
 						Name:  "environment",
 						Usage: "deployment environment, merged into the plugin configuration",
 					},
@@ -67,7 +71,18 @@ func NewIngestCommand() *cli.Command {
 						return errors.WithStack(err)
 					}
 
-					sourceConfig, err := mergeSourceConfig(ctx.String("source-config"), ctx.String("environment"))
+					raw := ctx.String("source-config")
+
+					if path := ctx.String("source-config-file"); path != "" {
+						content, err := os.ReadFile(path)
+						if err != nil {
+							return errors.Wrapf(err, "could not read the plugin configuration %q", path)
+						}
+
+						raw = string(content)
+					}
+
+					sourceConfig, err := mergeSourceConfig(raw, ctx.String("environment"))
 					if err != nil {
 						return errors.WithStack(err)
 					}

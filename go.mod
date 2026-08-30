@@ -3,10 +3,12 @@ module github.com/bornholm/tezcatl
 go 1.26.0
 
 require (
+	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/pkg/errors v0.9.1
+	github.com/rivo/tview v0.42.0
 	github.com/urfave/cli/v2 v2.27.7
 	golang.org/x/sync v0.22.0
 	google.golang.org/grpc v1.83.1
@@ -18,7 +20,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
-	github.com/gdamore/tcell/v2 v2.8.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -30,7 +31,6 @@ require (
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/oklog/run v1.1.0 // indirect
-	github.com/rivo/tview v0.42.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

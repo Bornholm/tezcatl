@@ -16,6 +16,7 @@
 #   --variant <v>    TEZCATL_VARIANT    variante (défaut : client)
 #   --version <tag>  TEZCATL_VERSION    tag de release, ex. v0.7.0 (défaut : latest)
 #   --force          TEZCATL_FORCE=1    réinstalle même si la version est déjà là
+#   --no-journald    TEZCATL_JOURNALD=0 n'installe pas le plugin journald
 #   --download-only                     télécharge et vérifie sans installer
 #                    TEZCATL_REPO       dépôt GitHub (défaut : bornholm/tezcatl)
 #                    TEZCATL_PACKAGES   liste de paquets explicite (remplace la variante)
@@ -27,6 +28,8 @@ VARIANT="${TEZCATL_VARIANT:-client}"
 VERSION="${TEZCATL_VERSION:-}"
 PACKAGES="${TEZCATL_PACKAGES:-}"
 FORCE="${TEZCATL_FORCE:-0}"
+JOURNALD="${TEZCATL_JOURNALD:-1}"
+WITH_JOURNALD=0
 DOWNLOAD_ONLY=0
 
 usage() {
@@ -36,7 +39,11 @@ Installe ou met à jour tezcatl depuis les GitHub Releases.
   curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sh -s -- --variant dokku
 
 Variantes : client (défaut), server, docker, dokku, kubernetes.
-Options : --variant <v>, --version <tag>, --force, --download-only.
+Options : --variant <v>, --version <tag>, --force, --no-journald,
+          --download-only.
+
+Sur une machine systemd, le plugin journald est ajouté au jeu de
+paquets ; son unité reste à activer.
 Variables : TEZCATL_VARIANT, TEZCATL_VERSION, TEZCATL_FORCE, TEZCATL_REPO,
             TEZCATL_PACKAGES, TEZCATL_BASE_URL (détail en tête de script).
 EOF
@@ -61,6 +68,10 @@ while [ $# -gt 0 ]; do
         ;;
     --force)
         FORCE=1
+        shift
+        ;;
+    --no-journald)
+        JOURNALD=0
         shift
         ;;
     --download-only)
@@ -150,6 +161,15 @@ if [ -z "$PACKAGES" ]; then
         fail "variante inconnue : $VARIANT (client, server, docker, dokku, kubernetes)"
         ;;
     esac
+
+    # Sur une machine systemd, le journal est la source de logs qui va de
+    # soi : le plugin s'installe avec le reste. Il ne fait rien tant que
+    # son unité n'est pas activée — ingérer tout le journal d'une machine
+    # est une décision, pas un défaut. --no-journald pour s'en passer.
+    if [ "$JOURNALD" = 1 ] && [ -d /run/systemd/system ]; then
+        PACKAGES="$PACKAGES tezcatl-plugin-journald"
+        WITH_JOURNALD=1
+    fi
 fi
 
 # --- Résolution de la version -----------------------------------------------
@@ -281,4 +301,8 @@ kubernetes)
     echo "  ou : tezcatl ingest source kubernetes --plugin-config '{...}'"
     ;;
 esac
+if [ "$WITH_JOURNALD" = 1 ]; then
+    echo "  systemctl enable --now tezcatl-journald      # ingérer le journal systemd"
+    echo "  (réglages dans /etc/tezcatl/journald.json)"
+fi
 echo "  tezcatl top                                   # inspecter ce qui est appris"

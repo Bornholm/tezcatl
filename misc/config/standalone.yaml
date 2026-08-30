@@ -284,6 +284,10 @@ plugins:
         # user: false           # lire le journal utilisateur
         # service: ""           # forcer une identité unique
         # journalctl_path: journalctl
+        #
+        # Le paquet tezcatl-plugin-journald livre aussi l unité
+        # tezcatl-journald.service, qui lit ces réglages dans
+        # /etc/tezcatl/journald.json plutôt que dans ce fichier.
 
     # Le plugin « scaleway » (paquet tezcatl-plugin-scaleway) suit les
     # conteneurs serverless : le CLI scw sert à la découverte (quels

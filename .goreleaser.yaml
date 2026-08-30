@@ -284,8 +284,20 @@ nfpms:
     description: |-
       Tezcatl - plugin source journald.
       Ingestion du journal systemd : identite par unite, niveau depuis
-      la priorite syslog, reprise exacte par curseur.
+      la priorite syslog, reprise exacte par curseur. Fournit l'unite
+      tezcatl-journald.service, a activer explicitement.
     bindir: /usr/lib/tezcatl/plugins
+    contents:
+      - src: misc/packaging/tezcatl-journald.service
+        dst: /usr/lib/systemd/system/tezcatl-journald.service
+        file_info: { mode: 0644 }
+      - src: misc/packaging/journald.json
+        dst: /etc/tezcatl/journald.json
+        type: config|noreplace
+        file_info: { mode: 0644 }
+    scripts:
+      postinstall: misc/packaging/journald-postinstall.sh
+      preremove: misc/packaging/journald-preremove.sh
 
   # Plugin source scaleway : conteneurs serverless via scw + Cockpit.
   - id: tezcatl-plugin-scaleway

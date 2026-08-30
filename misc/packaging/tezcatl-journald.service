@@ -1,0 +1,39 @@
+[Unit]
+Description=Tezcatl systemd journal ingestion
+Documentation=https://github.com/bornholm/tezcatl
+After=tezcatl-server.service
+
+[Service]
+# Cible et environnement par défaut, surchargeables dans
+# /etc/tezcatl/ingest.env (mêmes variables que les autres unités).
+Environment=TEZCATL_TARGET=unix:///run/tezcatl/tezcatl.sock
+Environment=TEZCATL_ENVIRONMENT=production
+EnvironmentFile=-/etc/tezcatl/ingest.env
+
+# Le reste du réglage vit dans un fichier JSON plutôt que sur cette
+# ligne : une unité systemd n'a pas à échapper du JSON.
+ExecStart=/usr/bin/tezcatl ingest source \
+    --target ${TEZCATL_TARGET} \
+    --environment ${TEZCATL_ENVIRONMENT} \
+    --source-config-file /etc/tezcatl/journald.json \
+    journald
+
+# Lire le journal système demande d'appartenir au groupe dédié ; le
+# service n'a besoin d'aucun autre privilège, d'où l'utilisateur
+# éphémère. Son répertoire d'état lui appartient donc en propre, et ne
+# marche pas sur celui du serveur.
+DynamicUser=yes
+SupplementaryGroups=systemd-journal
+StateDirectory=tezcatl-journald
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateDevices=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
