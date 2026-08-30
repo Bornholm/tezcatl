@@ -312,3 +312,96 @@ func TestLogDetectorEvictsStaleTemplates(t *testing.T) {
 		t.Errorf("expected the continuously fed template to survive, got %v", templates)
 	}
 }
+
+// TestLogDetectorBurstyTemplateIsNotMissing guards the regularity gate:
+// a template arriving in bursts is silent most of the time, so its mean
+// interval predicts nothing and its silence is not news. This is the
+// nginx access log of an idle blog, the loudest false positive of the
+// dogfooding instance.
+func TestLogDetectorBurstyTemplateIsNotMissing(t *testing.T) {
+	burst := func(t *testing.T, maxCV float64) []model.Signal {
+		t.Helper()
+
+		config := DefaultLogConfig()
+		config.LearningPeriod = 0
+		config.DisappearanceMinCount = 5
+		config.DisappearanceFactor = 3
+		config.DisappearanceScanInterval = 10 * time.Second
+		config.DisappearanceMaxCV = maxCV
+
+		detector := NewLogDetector(config)
+
+		start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+		// Four bursts of ten lines one second apart, five minutes of
+		// silence between them: the same total, none of the regularity.
+		timestamp := start
+		for range 4 {
+			for range 10 {
+				detector.Detect(logObservation("blog", "1", "GET /index.html 200", "none", timestamp))
+				timestamp = timestamp.Add(time.Second)
+			}
+
+			timestamp = timestamp.Add(5 * time.Minute)
+		}
+
+		// Other logs keep flowing, which is what drives the scan.
+		for i := range 60 {
+			other := logObservation("blog", "2", "request handled", "none", timestamp.Add(time.Duration((i+1)*10)*time.Second))
+			if signals := detector.Detect(other); hasSignal(signals, SignalLogMissingTemplate) {
+				return signals
+			}
+		}
+
+		return nil
+	}
+
+	if signals := burst(t, DefaultDisappearanceMaxCV); signals != nil {
+		t.Fatalf("expected no missing template signal for a bursty template, got %+v", signals)
+	}
+
+	// Without the gate the very same stream signals, so the burst is
+	// what the gate rejects and not some other guard along the way.
+	if signals := burst(t, 0); signals == nil {
+		t.Fatal("expected the ungated detector to signal the bursty template, the test proves nothing otherwise")
+	}
+}
+
+func TestIntervalCV(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		stats       templateStats
+		wantBelow   float64
+		wantAtLeast float64
+	}{
+		{
+			name:      "metronome",
+			stats:     templateStats{MeanIntervalS: 60, IntervalVarianceS2: 0.25},
+			wantBelow: DefaultDisappearanceMaxCV,
+		},
+		{
+			// A state file written before the variance was tracked
+			// restores as a metronome, and a few occurrences rebuild it.
+			name:      "restored without variance",
+			stats:     templateStats{MeanIntervalS: 60},
+			wantBelow: DefaultDisappearanceMaxCV,
+		},
+		{
+			name:        "bursty",
+			stats:       templateStats{MeanIntervalS: 6, IntervalVarianceS2: 10000},
+			wantAtLeast: DefaultDisappearanceMaxCV,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cv := test.stats.intervalCV()
+
+			if test.wantBelow > 0 && cv >= test.wantBelow {
+				t.Errorf("expected a coefficient of variation below %g, got %g", test.wantBelow, cv)
+			}
+
+			if test.wantAtLeast > 0 && cv < test.wantAtLeast {
+				t.Errorf("expected a coefficient of variation of at least %g, got %g", test.wantAtLeast, cv)
+			}
+		})
+	}
+}

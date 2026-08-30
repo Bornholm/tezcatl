@@ -89,10 +89,10 @@ inventing meaning that is not there.
 
 ### Placeholders in templates
 
-Template text contains masks, not literal values. ` + "`<NUM>`" + `, ` + "`<IP>`" + `,
-` + "`<HEX>`" + `, ` + "`<UUID>`" + `, ` + "`<EMAIL>`" + ` stand for values that were masked
-before clustering, and ` + "`<*>`" + ` marks a position where the clustering found
-varying content. A template reading ` + "`connection timeout after <NUM>s`" + `
+Template text contains masks, not literal values. `+"`<NUM>`"+`, `+"`<IP>`"+`,
+`+"`<HEX>`"+`, `+"`<UUID>`"+`, `+"`<EMAIL>`"+` stand for values that were masked
+before clustering, and `+"`<*>`"+` marks a position where the clustering found
+varying content. A template reading `+"`connection timeout after <NUM>s`"+`
 matched many lines with different numbers. Do not read a placeholder as
 a literal, and do not infer the masked value.
 
@@ -164,7 +164,7 @@ func signalGlossary() []glossaryEntry {
 		{detect.SignalLogNewTemplate, "A log line whose shape had never been seen since the learning period ended."},
 		{detect.SignalLogRareTemplate, "A template seen very few times relative to the volume of the source."},
 		{detect.SignalLogFrequencySpike, "A template occurring far more often than its learned rate for this hour of day."},
-		{detect.SignalLogMissingTemplate, "A regular template that has not appeared for much longer than its usual interval. Often means a component stopped, not that a message was lost."},
+		{detect.SignalLogMissingTemplate, "A template whose intervals are regular enough to predict, absent for much longer than its usual one. Often means a component stopped, not that a message was lost. Bursty templates are never reported this way, so silence from an irregular source is invisible here."},
 		{detect.SignalLogSymptomatic, "A template an operator explicitly marked as a symptom worth reporting."},
 		{detect.SignalMetricZScore, "A sample far from the series' learned mean, measured in standard deviations (z). The summary gives value, baseline and z."},
 		{detect.SignalMetricThreshold, "A sample beyond a static bound an operator configured. Unlike the others, this one encodes a human's intent."},

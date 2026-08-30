@@ -23,7 +23,11 @@ func TestEventLogPublishAndQuery(t *testing.T) {
 
 	defer log.Close()
 
-	base := time.Date(2026, 8, 29, 10, 0, 0, 0, time.UTC)
+	// Drive the clock, like the rotation test: segments are named after
+	// the write time, and a test that writes fixed timestamps under the
+	// real clock starts failing the day after it was written.
+	base := time.Date(2026, 8, 29, 10, 0, 0, 0, time.Local)
+	log.now = func() time.Time { return base }
 
 	for i := range 5 {
 		if err := log.Publish(context.Background(), []model.Event{logEvent(fmt.Sprintf("e%d", i), base.Add(time.Duration(i)*time.Minute))}); err != nil {

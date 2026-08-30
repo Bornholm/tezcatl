@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -54,6 +55,12 @@ type LogConfig struct {
 	// DisappearanceScanInterval bounds the frequency of the per-source
 	// overdue templates scan.
 	DisappearanceScanInterval time.Duration `yaml:"disappearance_scan_interval"`
+	// DisappearanceMaxCV is the largest coefficient of variation of the
+	// intervals (standard deviation over mean) a template may have and
+	// still be expected back. Past it the template is bursty, and its
+	// mean interval predicts nothing. 0 or less expects every template
+	// back, however irregular.
+	DisappearanceMaxCV float64 `yaml:"disappearance_max_cv"`
 	// Seasonality is "hourly" to learn hour-of-day baselines (crons,
 	// nightly jobs, daily traffic patterns) or "none" for flat
 	// baselines.
@@ -79,6 +86,19 @@ type LogConfig struct {
 // them.
 const DefaultMaxTemplates = 2000
 
+// DefaultDisappearanceMaxCV separates a heartbeat from a burst. Fully
+// random arrivals (a Poisson process: web requests, SSH scans) have a
+// coefficient of variation of 1, and bursty traffic goes well above it;
+// something emitted on a timer stays near 0. Half of the Poisson value
+// keeps the timers and drops the rest.
+//
+// The number answers what the dogfooding instance kept reporting: 118
+// disappearance signals in seven hours, of which the loudest read
+// "expected log template not seen for 5623s (mean interval 6.0s)" —
+// nginx access logs of a blog nobody was reading. A mean interval only
+// predicts the next occurrence when the intervals cluster around it.
+const DefaultDisappearanceMaxCV = 0.5
+
 const (
 	SeasonalityNone   = "none"
 	SeasonalityHourly = "hourly"
@@ -95,6 +115,7 @@ func DefaultLogConfig() *LogConfig {
 		DisappearanceFactor:       3,
 		DisappearanceMinCount:     10,
 		DisappearanceScanInterval: 30 * time.Second,
+		DisappearanceMaxCV:        DefaultDisappearanceMaxCV,
 		Seasonality:               SeasonalityHourly,
 		SeasonalMinObservations:   50,
 		MaxTemplates:              DefaultMaxTemplates,
@@ -152,15 +173,19 @@ type logSourceState struct {
 }
 
 type templateStats struct {
-	Template        string    `json:"template"`
-	Count           int64     `json:"count"`
-	LastSeen        time.Time `json:"last_seen"`
-	MeanIntervalS   float64   `json:"mean_interval_s"`
-	BucketStart     time.Time `json:"bucket_start"`
-	BucketCount     int64     `json:"bucket_count"`
-	BucketBaseline  float64   `json:"bucket_baseline"`
-	SpikeSignaled   bool      `json:"spike_signaled"`
-	MissingSignaled bool      `json:"missing_signaled"`
+	Template      string    `json:"template"`
+	Count         int64     `json:"count"`
+	LastSeen      time.Time `json:"last_seen"`
+	MeanIntervalS float64   `json:"mean_interval_s"`
+	// IntervalVarianceS2 is the EWMA variance of the intervals, in
+	// square seconds. Compared to the mean it tells a heartbeat from a
+	// burst, which is what makes a missing template worth reporting.
+	IntervalVarianceS2 float64   `json:"interval_variance_s2,omitempty"`
+	BucketStart        time.Time `json:"bucket_start"`
+	BucketCount        int64     `json:"bucket_count"`
+	BucketBaseline     float64   `json:"bucket_baseline"`
+	SpikeSignaled      bool      `json:"spike_signaled"`
+	MissingSignaled    bool      `json:"missing_signaled"`
 	// HourlyCounts counts the occurrences of the template per hour of
 	// day; HourlyBaseline is the per-bucket EWMA per hour of day, and
 	// HourlyFolded the number of buckets folded into it.
@@ -170,6 +195,19 @@ type templateStats struct {
 }
 
 const intervalAlpha = 0.3
+
+// intervalCV is the coefficient of variation of the intervals: 0 for a
+// perfect metronome, 1 for fully random arrivals, more for bursts. A
+// template with no learned variance reads as regular, which is what a
+// state file written before variance was tracked restores to; a few
+// occurrences rebuild it.
+func (s *templateStats) intervalCV() float64 {
+	if s.MeanIntervalS <= 0 {
+		return 0
+	}
+
+	return math.Sqrt(s.IntervalVarianceS2) / s.MeanIntervalS
+}
 
 func NewLogDetector(config *LogConfig) *LogDetector {
 	if config == nil {
@@ -270,7 +308,10 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 		if stats.MeanIntervalS == 0 {
 			stats.MeanIntervalS = interval
 		} else {
-			stats.MeanIntervalS += intervalAlpha * (interval - stats.MeanIntervalS)
+			delta := interval - stats.MeanIntervalS
+			stats.MeanIntervalS += intervalAlpha * delta
+			stats.IntervalVarianceS2 = (1 - intervalAlpha) *
+				(stats.IntervalVarianceS2 + intervalAlpha*delta*delta)
 		}
 	}
 
@@ -437,6 +478,13 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 			}
 		}
 
+		// Regularity: a mean interval only predicts the next occurrence
+		// when the intervals cluster around it. A template arriving in
+		// bursts is silent all the time, and its silence says nothing.
+		if maxCV := d.config.DisappearanceMaxCV; maxCV > 0 && stats.intervalCV() > maxCV {
+			continue
+		}
+
 		overdue := d.config.DisappearanceFactor * stats.MeanIntervalS
 		silence := timestamp.Sub(stats.LastSeen).Seconds()
 
@@ -455,6 +503,9 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 					"template":        stats.Template,
 					"silence_s":       strconv.FormatFloat(silence, 'f', 0, 64),
 					"mean_interval_s": strconv.FormatFloat(stats.MeanIntervalS, 'f', 1, 64),
+					// The dispersion of the intervals, so a reader can
+					// judge how much the mean was worth predicting.
+					"interval_cv": strconv.FormatFloat(stats.intervalCV(), 'f', 2, 64),
 				},
 			})
 		}

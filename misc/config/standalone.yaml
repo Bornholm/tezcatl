@@ -156,6 +156,12 @@ logs:
     disappearance_factor: 3
     disappearance_min_count: 10
     disappearance_scan_interval: 30s
+    # Seuls les templates réguliers sont attendus. Le coefficient de
+    # variation de leurs intervalles (écart-type sur moyenne) vaut 0
+    # pour un métronome, 1 pour des arrivées aléatoires et davantage
+    # pour des rafales : au-delà de ce plafond, la moyenne ne prédit
+    # rien et le silence n'apprend rien. 0 attend tous les templates.
+    disappearance_max_cv: 0.5
     # Saisonnalité :
     #   hourly — baselines par heure de la journée : un pic quotidien à
     #            9h ou un cron nocturne ne sont pas des anomalies ; un
