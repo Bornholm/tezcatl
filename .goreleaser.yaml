@@ -7,6 +7,7 @@ before:
     - sh -c "cd plugins/kubernetes && go mod tidy"
     - sh -c "cd plugins/prometheus && go mod tidy"
     - sh -c "cd plugins/scaleway && go mod tidy"
+    - sh -c "cd plugins/journald && go mod tidy"
 
 builds:
   - id: tezcatl
@@ -80,6 +81,21 @@ builds:
     ldflags:
       - -w -s
 
+  # Plugin source « journald » : le journal systemd, lu via journalctl.
+  - id: tezcatl-source-journald
+    env:
+      - CGO_ENABLED=0
+    # Le journal systemd n'existe que sous Linux.
+    goos: [linux]
+    goarch: [amd64, arm64, arm, "386"]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./plugins/journald
+    binary: tezcatl-source-journald
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s
+
 archives:
   - id: tezcatl
     ids: [tezcatl]
@@ -111,6 +127,13 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - none*
+
+  - id: tezcatl-source-journald
+    ids: [tezcatl-source-journald]
+    name_template: "tezcatl-source-journald_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
     files:
       - none*
 
@@ -246,6 +269,22 @@ nfpms:
       Tezcatl - plugin source prometheus.
       Evaluation periodique de requetes PromQL via l'API HTTP de
       Prometheus, chaque echantillon devenant une metrique.
+    bindir: /usr/lib/tezcatl/plugins
+
+  # Plugin source journald : le journal systemd de la machine locale.
+  - id: tezcatl-plugin-journald
+    package_name: tezcatl-plugin-journald
+    ids: [tezcatl-source-journald]
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - plugin source journald.
+      Ingestion du journal systemd : identite par unite, niveau depuis
+      la priorite syslog, reprise exacte par curseur.
     bindir: /usr/lib/tezcatl/plugins
 
   # Plugin source scaleway : conteneurs serverless via scw + Cockpit.

@@ -263,6 +263,28 @@ plugins:
         # no_system: false
         # no_docker: false
 
+    # Le plugin « journald » (paquet tezcatl-plugin-journald) lit le
+    # journal systemd via journalctl. L'unité émettrice nomme le
+    # service (nginx.service -> nginx, tezcatl-ingest@blog.service ->
+    # tezcatl-ingest@blog), la priorité syslog donne le niveau, et
+    # l'horodatage est celui de l'application, pas celui de
+    # l'ingestion. Le texte du message n'est PAS pré-analysé : le
+    # serveur continue d'en retirer les couleurs ANSI et d'en
+    # désempaqueter le JSON applicatif.
+    journald:
+      enabled: false
+      config:
+        # environment: production
+        # units: [nginx.service, postgresql.service]  # vide = tout ce qui est visible
+        # priority: 6           # sévérité maximale conservée ; -1 pour tout
+        # since: ""             # fenêtre initiale ; vide = démarre en fin de journal
+        # cursor_file: /var/lib/tezcatl/journald.cursor
+        #                       # reprise exacte après redémarrage ; sans lui,
+        #                       # ce qui arrive pendant l'arrêt est perdu
+        # user: false           # lire le journal utilisateur
+        # service: ""           # forcer une identité unique
+        # journalctl_path: journalctl
+
     # Le plugin « scaleway » (paquet tezcatl-plugin-scaleway) suit les
     # conteneurs serverless : le CLI scw sert à la découverte (quels
     # conteneurs existent, où sont les endpoints Cockpit) et réutilise
