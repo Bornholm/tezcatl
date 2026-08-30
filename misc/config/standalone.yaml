@@ -263,6 +263,35 @@ plugins:
         # no_system: false
         # no_docker: false
 
+    # Le plugin « scaleway » (paquet tezcatl-plugin-scaleway) suit les
+    # conteneurs serverless : le CLI scw sert à la découverte (quels
+    # conteneurs existent, où sont les endpoints Cockpit) et réutilise
+    # donc vos identifiants scw existants, tandis que les données sont
+    # lues dans Cockpit — Loki pour les logs, Prometheus pour les
+    # métriques. Le CLI publié ne sait pas encore lire les logs des
+    # conteneurs, d'où ce détour.
+    #
+    # Le jeton doit porter les portées lecture seule :
+    #   scw cockpit token create name=tezcatl \
+    #     token-scopes.0=read_only_logs token-scopes.1=read_only_metrics
+    # Ne l'écrivez pas en clair ici : passez-le par l'environnement.
+    scaleway:
+      enabled: false
+      config:
+        token: ${SCW_COCKPIT_TOKEN}
+        # region: fr-par              # défaut : celle du profil scw
+        # project_id: ""              # restreindre à un projet
+        # profile: ""                 # profil scw à utiliser
+        # scw_path: scw               # binaire à invoquer
+        # logs_url: ""                # découverts si vides
+        # metrics_url: ""
+        # interval: 30s               # période d'interrogation
+        # lookback: 5m                # profondeur de la première requête
+        # refresh_interval: 5m        # rafraîchissement de la liste des conteneurs
+        # environment: ""             # défaut : le nom du namespace
+        # no_logs: false
+        # no_metrics: false
+
     # Le plugin « kubernetes » (paquet tezcatl-plugin-kubernetes) suit
     # en continu les events du cluster (flux de logs, identité
     # k8s-events), les logs de tous les pods (un stream par conteneur,

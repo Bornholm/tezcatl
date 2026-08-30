@@ -6,6 +6,7 @@ before:
     - sh -c "cd plugins/host && go mod tidy"
     - sh -c "cd plugins/kubernetes && go mod tidy"
     - sh -c "cd plugins/prometheus && go mod tidy"
+    - sh -c "cd plugins/scaleway && go mod tidy"
 
 builds:
   - id: tezcatl
@@ -64,6 +65,21 @@ builds:
     ldflags:
       - -w -s
 
+  # Plugin source « scaleway » : logs et métriques des conteneurs
+  # serverless, via le CLI scw pour la découverte et Cockpit pour les
+  # données.
+  - id: tezcatl-source-scaleway
+    env:
+      - CGO_ENABLED=0
+    targets: [go_first_class]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./plugins/scaleway
+    binary: tezcatl-source-scaleway
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s
+
 archives:
   - id: tezcatl
     ids: [tezcatl]
@@ -91,6 +107,16 @@ archives:
   - id: tezcatl-source-kubernetes
     ids: [tezcatl-source-kubernetes]
     name_template: "tezcatl-source-kubernetes_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - none*
+
+  - id: tezcatl-source-scaleway
+    ids: [tezcatl-source-scaleway]
+    name_template: "tezcatl-source-scaleway_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -220,6 +246,22 @@ nfpms:
       Tezcatl - plugin source prometheus.
       Evaluation periodique de requetes PromQL via l'API HTTP de
       Prometheus, chaque echantillon devenant une metrique.
+    bindir: /usr/lib/tezcatl/plugins
+
+  # Plugin source scaleway : conteneurs serverless via scw + Cockpit.
+  - id: tezcatl-plugin-scaleway
+    package_name: tezcatl-plugin-scaleway
+    ids: [tezcatl-source-scaleway]
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - plugin source scaleway.
+      Logs et metriques des conteneurs serverless Scaleway : decouverte
+      par le CLI scw, donnees lues dans Cockpit (Loki et Prometheus).
     bindir: /usr/lib/tezcatl/plugins
 
   # Intégration Dokku : une unité systemd template (une instance par

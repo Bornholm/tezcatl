@@ -101,6 +101,8 @@ La sortie `--format markdown` est faite pour être donnée telle quelle à un ag
 
 ## Déploiement
 
+Les sources actives sont des plugins : `host` (CPU, mémoire, disque, conteneurs Docker), `kubernetes` (events, logs de pods, rollouts), `prometheus` (requêtes PromQL) et `scaleway` (conteneurs serverless, via le CLI `scw` pour la découverte et Cockpit pour les données).
+
 Chaque release publie des paquets Debian et Arch (`tezcatl`, `tezcatl-server`, les plugins, `tezcatl-dokku`) et une image de conteneur, `ghcr.io/bornholm/tezcatl`. Le script [install.sh](./install.sh) installe le jeu de paquets d'une variante et vérifie les sommes de contrôle avant d'installer quoi que ce soit :
 
 ```bash
