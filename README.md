@@ -111,7 +111,7 @@ curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | 
 
 Cinq variantes. `client` n'installe que la CLI et suffit pour envoyer des logs vers un serveur distant. `server` ajoute l'unité systemd, `/etc/tezcatl` et l'utilisateur dédié. `docker` ajoute le plugin de métriques hôte et conteneurs. `dokku` ajoute l'ingestion des logs par application et le hook de déploiement. `kubernetes` ajoute le plugin qui surveille un cluster depuis cette machine.
 
-Sur une machine systemd, le plugin `journald` s'ajoute à la variante choisie, quelle qu'elle soit : le journal est la source de logs qui va de soi. Son unité reste à activer, parce qu'ingérer tout le journal d'une machine est une décision et pas un défaut. Utilisez `--no-journald` pour ne pas l'installer du tout.
+Sur une machine systemd, le plugin `journald` s'ajoute à la variante choisie, quelle qu'elle soit : le journal est la source de logs qui va de soi. Son unité reste à activer, parce qu'ingérer tout le journal d'une machine est une décision et pas un défaut. Utilisez `--no-journald` pour ne pas l'installer du tout. Lisant tout le journal, il en exclut par défaut les unités de tezcatl : le serveur écrit ses événements sur stdout, systemd les enregistre, et un plugin qui les relit les rend au serveur, qui en fait des événements. Le cycle de vie des unités reste visible, puisque c'est systemd qui le journalise.
 
 ```bash
 systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald.json

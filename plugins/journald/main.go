@@ -15,6 +15,7 @@
 //
 //	{
 //	  "units": ["nginx.service"],  // empty reads everything visible
+//	  "exclude_units": [],         // globs dropped when units is empty
 //	  "priority": 6,               // keep entries at or below this severity, -1 for all
 //	  "since": "",                 // journalctl --since; empty starts at the tail
 //	  "cursor_file": "",           // resume exactly where the last run stopped
@@ -30,6 +31,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -43,17 +45,37 @@ import (
 )
 
 type config struct {
-	Units          []string `json:"units"`
-	Priority       *int     `json:"priority"`
-	Since          string   `json:"since"`
-	CursorFile     string   `json:"cursor_file"`
-	User           bool     `json:"user"`
-	Environment    string   `json:"environment"`
-	Service        string   `json:"service"`
-	JournalctlPath string   `json:"journalctl_path"`
+	Units          []string  `json:"units"`
+	ExcludeUnits   *[]string `json:"exclude_units"`
+	Priority       *int      `json:"priority"`
+	Since          string    `json:"since"`
+	CursorFile     string    `json:"cursor_file"`
+	User           bool      `json:"user"`
+	Environment    string    `json:"environment"`
+	Service        string    `json:"service"`
+	JournalctlPath string    `json:"journalctl_path"`
 }
 
 const defaultEnvironment = "production"
+
+// defaultExcludedUnits keeps tezcatl out of its own journal. The server
+// writes every event it produces to stdout, systemd files that in the
+// journal, and a plugin reading the whole journal hands it straight
+// back: an event becomes a log line that can produce an event, whose
+// context embeds the previous one. On the dogfooding instance this grew
+// single events to 49 KB against 3 KB for a normal one, and taught the
+// miner seven templates made of tezcatl's own JSON.
+//
+// Nothing observable is lost. A unit starting or stopping is journaled
+// by systemd itself, under "init", so the lifecycle of the server stays
+// visible; only its own output goes.
+//
+// The exclusion applies when "units" is empty, that is when the plugin
+// reads everything by default. An operator who names units has stated
+// an intent, and it is not for a default to overrule it.
+func defaultExcludedUnits() []string {
+	return []string{"tezcatl*"}
+}
 
 func main() {
 	sdk.Serve(sdk.SourceFunc(stream))
@@ -78,6 +100,8 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 	if cfg.Priority != nil {
 		priority = *cfg.Priority
 	}
+
+	excluded := excludedUnits(cfg)
 
 	opts := journal.Options{
 		Path:     cfg.JournalctlPath,
@@ -113,6 +137,14 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 	}()
 
 	return errors.WithStack(reader.Read(ctx, func(entry journal.Entry) error {
+		if isExcluded(entry, excluded) {
+			// The cursor still moves: a skipped entry must not be read
+			// again after a restart.
+			cursors.record(entry.Cursor)
+
+			return nil
+		}
+
 		service := cfg.Service
 		if service == "" {
 			service = entry.Service()
@@ -148,6 +180,37 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 
 		return nil
 	}))
+}
+
+// excludedUnits resolves the exclusion list: what the operator asked
+// for, else the default when the plugin reads the whole journal.
+func excludedUnits(cfg config) []string {
+	switch {
+	case cfg.ExcludeUnits != nil:
+		return *cfg.ExcludeUnits
+	case len(cfg.Units) > 0:
+		return nil
+	default:
+		return defaultExcludedUnits()
+	}
+}
+
+// isExcluded matches the patterns against the entry's unit and, for
+// entries journald attributes to no unit, its syslog identifier.
+func isExcluded(entry journal.Entry, patterns []string) bool {
+	for _, pattern := range patterns {
+		for _, name := range []string{entry.Unit, entry.Identifier} {
+			if name == "" {
+				continue
+			}
+
+			if matched, err := path.Match(pattern, name); err == nil && matched {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func attributes(entry journal.Entry) map[string]string {
