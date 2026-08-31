@@ -369,31 +369,43 @@ func TestLogDetectorBurstyTemplateIsNotMissing(t *testing.T) {
 
 func TestIntervalCV(t *testing.T) {
 	for _, test := range []struct {
-		name        string
-		stats       templateStats
-		wantBelow   float64
-		wantAtLeast float64
+		name         string
+		stats        templateStats
+		wantMeasured bool
+		wantBelow    float64
+		wantAtLeast  float64
 	}{
 		{
-			name:      "metronome",
-			stats:     templateStats{MeanIntervalS: 60, IntervalVarianceS2: 0.25},
-			wantBelow: DefaultDisappearanceMaxCV,
+			name:         "metronome",
+			stats:        templateStats{MeanIntervalS: 60, IntervalVarianceS2: 0.25, IntervalSamples: 20},
+			wantMeasured: true,
+			wantBelow:    DefaultDisappearanceMaxCV,
+		},
+		{
+			name:         "bursty",
+			stats:        templateStats{MeanIntervalS: 6, IntervalVarianceS2: 10000, IntervalSamples: 20},
+			wantMeasured: true,
+			wantAtLeast:  DefaultDisappearanceMaxCV,
 		},
 		{
 			// A state file written before the variance was tracked
-			// restores as a metronome, and a few occurrences rebuild it.
-			name:      "restored without variance",
-			stats:     templateStats{MeanIntervalS: 60},
-			wantBelow: DefaultDisappearanceMaxCV,
+			// carries thousands of occurrences and no dispersion. Read
+			// as a variance of zero it would make every old template a
+			// metronome, which is the loudest possible answer.
+			name:  "restored without variance",
+			stats: templateStats{MeanIntervalS: 60, Count: 5000},
 		},
 		{
-			name:        "bursty",
-			stats:       templateStats{MeanIntervalS: 6, IntervalVarianceS2: 10000},
-			wantAtLeast: DefaultDisappearanceMaxCV,
+			name:  "too few intervals to tell",
+			stats: templateStats{MeanIntervalS: 60, IntervalVarianceS2: 4, IntervalSamples: minIntervalSamples - 1},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			cv := test.stats.intervalCV()
+			cv, measured := test.stats.intervalCV()
+
+			if measured != test.wantMeasured {
+				t.Fatalf("expected measured to be %t, got %t", test.wantMeasured, measured)
+			}
 
 			if test.wantBelow > 0 && cv >= test.wantBelow {
 				t.Errorf("expected a coefficient of variation below %g, got %g", test.wantBelow, cv)
@@ -403,5 +415,36 @@ func TestIntervalCV(t *testing.T) {
 				t.Errorf("expected a coefficient of variation of at least %g, got %g", test.wantAtLeast, cv)
 			}
 		})
+	}
+}
+
+// TestLogDetectorRestoredTemplateIsNotExpectedBack covers the upgrade
+// the dogfooding instance went through: a state file from a version
+// with no variance restores templates seen thousands of times whose
+// regularity is entirely unknown. Expecting them back on a variance of
+// zero reports every one of them as a metronome that stopped.
+func TestLogDetectorRestoredTemplateIsNotExpectedBack(t *testing.T) {
+	config := DefaultLogConfig()
+	config.LearningPeriod = 0
+	config.DisappearanceScanInterval = 10 * time.Second
+
+	detector := NewLogDetector(config)
+
+	start := time.Date(2026, 8, 31, 6, 0, 0, 0, time.UTC)
+
+	snapshot := fmt.Sprintf(`{"sources":{"prod/blog":{"first_seen":%q,"total":5000,"templates":{
+		"1":{"template":"GET <*> HTTP/<NUM>.<NUM>","count":5000,"last_seen":%q,"mean_interval_s":4800}
+	}}}}`, start.Format(time.RFC3339), start.Format(time.RFC3339))
+
+	if err := detector.Restore([]byte(snapshot)); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	// Long past the mean interval, with other logs driving the scan.
+	for i := range 60 {
+		other := logObservation("blog", "2", "request handled", "none", start.Add(time.Duration(i+1)*time.Minute))
+		if signals := detector.Detect(other); hasSignal(signals, SignalLogMissingTemplate) {
+			t.Fatalf("expected no missing template signal for a restored template of unknown regularity, got %+v", signals)
+		}
 	}
 }

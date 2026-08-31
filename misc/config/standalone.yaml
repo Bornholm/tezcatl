@@ -160,7 +160,10 @@ logs:
     # variation de leurs intervalles (écart-type sur moyenne) vaut 0
     # pour un métronome, 1 pour des arrivées aléatoires et davantage
     # pour des rafales : au-delà de ce plafond, la moyenne ne prédit
-    # rien et le silence n'apprend rien. 0 attend tous les templates.
+    # rien et le silence n'apprend rien. Un template dont la dispersion
+    # n'est pas encore mesurée n'est pas attendu non plus : après un
+    # redémarrage, quelques occurrences suffisent à la reconstruire.
+    # 0 attend tous les templates.
     disappearance_max_cv: 0.5
     # Saisonnalité :
     #   hourly — baselines par heure de la journée : un pic quotidien à

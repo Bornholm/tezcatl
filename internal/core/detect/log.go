@@ -180,12 +180,17 @@ type templateStats struct {
 	// IntervalVarianceS2 is the EWMA variance of the intervals, in
 	// square seconds. Compared to the mean it tells a heartbeat from a
 	// burst, which is what makes a missing template worth reporting.
-	IntervalVarianceS2 float64   `json:"interval_variance_s2,omitempty"`
-	BucketStart        time.Time `json:"bucket_start"`
-	BucketCount        int64     `json:"bucket_count"`
-	BucketBaseline     float64   `json:"bucket_baseline"`
-	SpikeSignaled      bool      `json:"spike_signaled"`
-	MissingSignaled    bool      `json:"missing_signaled"`
+	IntervalVarianceS2 float64 `json:"interval_variance_s2,omitempty"`
+	// IntervalSamples counts the intervals folded into the variance,
+	// which is not the occurrence count: a state file restored from a
+	// version that did not track the variance carries occurrences by
+	// the thousand and no dispersion at all.
+	IntervalSamples int64     `json:"interval_samples,omitempty"`
+	BucketStart     time.Time `json:"bucket_start"`
+	BucketCount     int64     `json:"bucket_count"`
+	BucketBaseline  float64   `json:"bucket_baseline"`
+	SpikeSignaled   bool      `json:"spike_signaled"`
+	MissingSignaled bool      `json:"missing_signaled"`
 	// HourlyCounts counts the occurrences of the template per hour of
 	// day; HourlyBaseline is the per-bucket EWMA per hour of day, and
 	// HourlyFolded the number of buckets folded into it.
@@ -196,17 +201,22 @@ type templateStats struct {
 
 const intervalAlpha = 0.3
 
+// minIntervalSamples is how many intervals the EWMA variance needs
+// before it says anything. With intervalAlpha at 0.3 the estimate is
+// carried by roughly the last half-dozen intervals, so five is where it
+// stops being an artifact of its own initialization.
+const minIntervalSamples = 5
+
 // intervalCV is the coefficient of variation of the intervals: 0 for a
-// perfect metronome, 1 for fully random arrivals, more for bursts. A
-// template with no learned variance reads as regular, which is what a
-// state file written before variance was tracked restores to; a few
-// occurrences rebuild it.
-func (s *templateStats) intervalCV() float64 {
-	if s.MeanIntervalS <= 0 {
-		return 0
+// perfect metronome, 1 for fully random arrivals, more for bursts. The
+// second return value is false while too few intervals have been folded
+// in to tell one from the other.
+func (s *templateStats) intervalCV() (float64, bool) {
+	if s.MeanIntervalS <= 0 || s.IntervalSamples < minIntervalSamples {
+		return 0, false
 	}
 
-	return math.Sqrt(s.IntervalVarianceS2) / s.MeanIntervalS
+	return math.Sqrt(s.IntervalVarianceS2) / s.MeanIntervalS, true
 }
 
 func NewLogDetector(config *LogConfig) *LogDetector {
@@ -312,6 +322,7 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 			stats.MeanIntervalS += intervalAlpha * delta
 			stats.IntervalVarianceS2 = (1 - intervalAlpha) *
 				(stats.IntervalVarianceS2 + intervalAlpha*delta*delta)
+			stats.IntervalSamples++
 		}
 	}
 
@@ -481,7 +492,10 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 		// Regularity: a mean interval only predicts the next occurrence
 		// when the intervals cluster around it. A template arriving in
 		// bursts is silent all the time, and its silence says nothing.
-		if maxCV := d.config.DisappearanceMaxCV; maxCV > 0 && stats.intervalCV() > maxCV {
+		// Until the dispersion is known the template is not expected
+		// back either: an unmeasured template is not a regular one.
+		cv, measured := stats.intervalCV()
+		if maxCV := d.config.DisappearanceMaxCV; maxCV > 0 && (!measured || cv > maxCV) {
 			continue
 		}
 
@@ -505,7 +519,7 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 					"mean_interval_s": strconv.FormatFloat(stats.MeanIntervalS, 'f', 1, 64),
 					// The dispersion of the intervals, so a reader can
 					// judge how much the mean was worth predicting.
-					"interval_cv": strconv.FormatFloat(stats.intervalCV(), 'f', 2, 64),
+					"interval_cv": strconv.FormatFloat(cv, 'f', 2, 64),
 				},
 			})
 		}
