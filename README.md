@@ -4,7 +4,7 @@
 
 Tezcatl lit vos logs et vos métriques, apprend ce qui est normal, et signale ce qui ne l'est pas.
 
-Il regroupe les lignes de log en templates avec un port Go de Drain3, vérifié par golden tests contre l'implémentation Python. Il compare chaque métrique à la baseline qu'il a apprise pour elle. Quand plusieurs signaux tombent dans la même fenêtre de temps, il les rassemble en un seul événement qui cite ses preuves, et y attache les déploiements récents. Chaque événement sort en JSON, lisible par un opérateur comme par un agent LLM.
+Il regroupe les lignes de log en templates avec un port Go de [Drain3](https://github.com/logpai/Drain3), vérifié par golden tests contre l'implémentation Python. Il compare chaque métrique à la baseline qu'il a apprise pour elle. Quand plusieurs signaux tombent dans la même fenêtre de temps, il les rassemble en un seul événement qui cite ses preuves, et y attache les déploiements récents. Chaque événement sort en JSON, lisible par un opérateur comme par un agent LLM.
 
 ## Usage
 
