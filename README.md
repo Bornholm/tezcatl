@@ -119,6 +119,13 @@ systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald
 
 Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
 
+[Prise en main](./docs/getting-started.md) explique les concepts à un
+administrateur système qui n'a pas à connaître les statistiques : ce
+qu'est un template, ce qu'est une baseline, pourquoi un z-score énorme
+peut ne rien vouloir dire, et ce que tezcatl ne sait pas faire. Vingt
+minutes, dont cinq de manipulation, sans rien installer d'autre que le
+binaire.
+
 Trois guides pas à pas :
 
 - [Serveur Dokku/Ubuntu](./docs/deploy-dokku.md) couvre les paquets, l'ingestion des logs par application et le hook de déploiement.

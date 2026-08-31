@@ -223,6 +223,9 @@ metrics:
     # critical. Pour les autres unités, ajoutez le vôtre, par exemple
     # pour une charge système :
     #   system.load1: 0.5
+    # Les clés que vous posez ici s'ajoutent aux planchers par défaut,
+    # elles ne les remplacent pas : pour annuler celui des pourcentages,
+    # redéfinissez-le à 0 plutôt que de vider la table.
     min_deltas:
       "*percent": 5       # points de pourcentage
     # Plafond du nombre de séries suivies. Les environnements créent des
