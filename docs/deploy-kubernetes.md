@@ -7,8 +7,8 @@ s'appuie sur l'image publiée à chaque release :
 `ghcr.io/bornholm/tezcatl:<version>` (distroless statique, amd64/arm64,
 le binaire en entrypoint).
 
-> **Périmètre actuel** : pas encore d'opérateur (voir la roadmap,
-> chantier C4). Le déploiement ci-dessous est volontairement simple :
+> **Périmètre actuel** : pas encore d'opérateur. Le déploiement
+> ci-dessous est volontairement simple :
 > un serveur central, les métriques par l'API Prometheus, et un
 > collecteur unique (plugin `tezcatl-source-kubernetes`) pour les logs
 > de pods et les events. C'est suffisant pour valider la valeur avant
@@ -84,7 +84,7 @@ spec:
         fsGroup: 65532   # droits d'écriture sur le PVC
       containers:
         - name: tezcatl
-          image: ghcr.io/bornholm/tezcatl:0.1.0   # épingler la version
+          image: ghcr.io/bornholm/tezcatl:0.13.2   # épingler la version
           args: ["server", "--config", "/etc/tezcatl/server.yaml"]
           ports:
             - containerPort: 4242
@@ -262,7 +262,7 @@ spec:
           image: curlimages/curl:8.10.1
           command: ["sh", "-c"]
           args:
-            - VERSION=0.5.0 &&
+            - VERSION=0.13.2 &&
               curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl_${VERSION}_linux_amd64.tar.gz
               | tar -xz -C /opt/tezcatl tezcatl &&
               curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl-source-kubernetes_${VERSION}_linux_amd64.tar.gz
@@ -289,8 +289,8 @@ spec:
 
 Les identifiants in-cluster (token du serviceaccount, CA) sont
 autodétectés ; la config JSON du plugin permet de restreindre
-(`namespaces`, `label_selector`), de couper une des deux sources
-(`no_events`, `no_logs`) ou de changer la dérivation d'identité
+(`namespaces`, `label_selector`), de couper une des trois sources
+(`no_events`, `no_logs`, `no_changes`) ou de changer la dérivation d'identité
 (`service_labels`) — schéma complet dans `misc/config/standalone.yaml`.
 Depuis un poste de travail, le même plugin fonctionne sans rien
 déployer : sans configuration il lit `$KUBECONFIG` puis
@@ -355,7 +355,8 @@ spec:
           image: curlimages/curl:8.10.1
           command: ["sh", "-c"]
           args:
-            - curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v0.1.0/tezcatl_0.1.0_linux_amd64.tar.gz
+            - VERSION=0.13.2 &&
+              curl -fsSL https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl_${VERSION}_linux_amd64.tar.gz
               | tar -xz -C /opt/tezcatl tezcatl
           volumeMounts:
             - { name: bin, mountPath: /opt/tezcatl }
@@ -394,7 +395,7 @@ flag). Après chaque déploiement, un job one-shot dans le cluster
 
 ```bash
 kubectl run tezcatl-change-$RANDOM --rm -i --restart=Never \
-  --image=ghcr.io/bornholm/tezcatl:0.1.0 -- \
+  --image=ghcr.io/bornholm/tezcatl:0.13.2 -- \
   ingest change \
     --target tcp://tezcatl.tezcatl:4242 \
     --service checkout --environment prod \
@@ -406,20 +407,48 @@ kubectl run tezcatl-change-$RANDOM --rm -i --restart=Never \
 Toute anomalie dans le quart d'heure suivant sortira avec ce déploiement
 en `related_changes`.
 
-## 5. Boucle de feedback
+## 5. Lire et corriger ce qui est appris
 
 Depuis un poste de travail (binaire installé localement), via
-port-forward :
+port-forward. Toutes ces commandes acceptent `$TEZCATL_TARGET`, ce qui
+évite de répéter `--target` :
 
 ```bash
 kubectl -n tezcatl port-forward svc/tezcatl 4242 &
-
-tezcatl templates --target tcp://127.0.0.1:4242
-tezcatl mark --target tcp://127.0.0.1:4242 \
-  --template "connection reset by peer" --as ignore
+export TEZCATL_TARGET=tcp://127.0.0.1:4242
 ```
 
-Les marquages sont persistés dans le PVC avec le reste de l'état.
+Inspecter et marquer :
+
+```bash
+tezcatl templates                                  # templates appris et leur taille
+tezcatl metrics                                    # séries et leur écart à la baseline
+
+tezcatl mark --template "connection reset by peer" --as ignore
+tezcatl mark --metric "pod_restarts" --as ignore   # ou un glob sur les séries
+```
+
+Relire ce qui s'est passé — le serveur tient un journal local des
+événements, indépendamment des sinks :
+
+```bash
+tezcatl events --since 24h | jq .summary
+
+# Les anomalies d'une période assemblées en récits : déclencheur,
+# propagation, preuves agrégées, changements corrélés
+tezcatl incidents --since 24h
+tezcatl incidents --since 24h --format markdown    # rapport auto-descriptif
+```
+
+Ou en interactif, une TUI à trois onglets — événements en direct,
+templates, baselines — avec le marquage au clavier :
+
+```bash
+tezcatl top
+```
+
+Les marquages prennent effet immédiatement et sont persistés dans le PVC
+avec le reste de l'état.
 
 ## 6. Sorties
 
@@ -434,7 +463,7 @@ Les marquages sont persistés dans le PVC avec le reste de l'état.
 
 Une seule réplique (l'état n'est pas partagé) et pas de TLS entre pods
 (rajouter `tls://` + certificat si le trafic sort du cluster). La suite
-naturelle (roadmap C4) : regroupement par workload/namespace,
-événements multi-services et corrélation des déploiements collectés
+naturelle : regroupement par workload/namespace, événements
+multi-services et corrélation des déploiements collectés
 automatiquement — ce déploiement minimal sert précisément à valider ce
 qui mérite d'y être industrialisé.

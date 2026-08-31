@@ -7,11 +7,18 @@ rejeu d'un incident passé, apprentissage progressif — avant un
 déploiement dans le cluster ([deploy-kubernetes.md](./deploy-kubernetes.md)).
 
 Prérequis : un accès `kubectl` au cluster, et le binaire tezcatl
-installé localement — .deb, paquet Arch ou archive depuis les
-[releases](https://github.com/bornholm/tezcatl/releases) :
+installé localement. Sur Debian/Ubuntu ou Arch, le script d'installation
+suffit — la variante `client` n'installe que la CLI :
 
 ```bash
-VERSION=0.1.0
+curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sh -s -- --variant client
+```
+
+Ailleurs, prenez l'archive de la dernière
+[release](https://github.com/bornholm/tezcatl/releases) :
+
+```bash
+VERSION=0.13.2
 curl -fsSL "https://github.com/bornholm/tezcatl/releases/download/v${VERSION}/tezcatl_${VERSION}_linux_amd64.tar.gz" |
   tar -xz tezcatl && sudo install tezcatl /usr/local/bin/
 ```
@@ -38,7 +45,10 @@ Ce qu'il se passe :
   la découverte de templates porte sur le message ;
 - pendant les 5 premières minutes (période d'apprentissage par défaut),
   tezcatl apprend silencieusement les templates ; ensuite, tout template
-  inédit, rare, en pic de fréquence ou disparu produit un événement ;
+  inédit, rare ou en pic de fréquence produit un événement. La
+  disparition, elle, n'est signalée que pour les templates dont les
+  intervalles sont réguliers : le silence d'un template qui arrive par
+  rafales n'apprend rien ;
 - `--state-dir` **persiste l'apprentissage entre les sessions** : à la
   prochaine exécution, les templates connus ne redéclenchent rien.
 
@@ -112,7 +122,8 @@ Si le cluster héberge un Prometheus, un port-forward suffit pour
 corréler métriques et logs — toujours sans rien déployer. Le poller
 est fourni par le plugin `tezcatl-source-prometheus`, à installer une
 fois (paquet `tezcatl-plugin-prometheus`, ou
-`tezcatl plugin install github.com/bornholm/tezcatl`) :
+`tezcatl plugin install github.com/bornholm/tezcatl prometheus` — le
+dépôt publie plusieurs plugins, il faut nommer celui qu'on veut) :
 
 ```bash
 kubectl -n monitoring port-forward svc/prometheus-server 9090:80 &
@@ -156,16 +167,23 @@ persisté (aucun processus en cours requis) :
 
 ```bash
 tezcatl templates --state-dir ~/.local/state/tezcatl
+tezcatl metrics --state-dir ~/.local/state/tezcatl   # baselines apprises
 
 tezcatl mark --state-dir ~/.local/state/tezcatl \
   --template "connection reset by peer" --as ignore
 
 tezcatl mark --state-dir ~/.local/state/tezcatl \
   --template "Pod/<*> BackOff: Back-off restarting failed container" --as symptomatic
+
+# Une série de métrique qui n'apprend rien se fait taire pareillement
+# (clé exacte, nom de métrique ou glob) :
+tezcatl mark --state-dir ~/.local/state/tezcatl \
+  --metric "pod_restarts" --as ignore
 ```
 
 Les marquages sont relus à la session suivante : `ignore` supprime les
 signaux du template, `symptomatic` en produit un à chaque occurrence.
+Pour les métriques, seul `ignore` a un sens.
 
 ## 6. Injecter un déploiement en cours de session
 
