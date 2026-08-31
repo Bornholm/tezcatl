@@ -262,11 +262,9 @@ Les requêtes portent la même identité `prod/checkout` que les logs. Une
 anomalie de latence et un nouveau template dans la même fenêtre
 produisent **un seul événement corrélé**, marqué `multimodal`.
 
-Rien n'interdit d'activer les deux plugins dans le même fichier de
-configuration. Avec le plugin kubernetes pour les logs et celui de
-Prometheus pour les métriques, un seul
-`tezcatl standalone logs --config tezcatl.yaml --service k8s < /dev/null`
-surveille un cluster entier depuis un terminal.
+Cet exemple ne suit qu'une application. Pour brancher Prometheus sur
+tout le cluster, en même temps que le plugin kubernetes, voyez « Pour
+aller plus loin » plus bas.
 
 ## 6. Faire le ménage entre deux sessions
 
@@ -311,6 +309,113 @@ kubectl logs --follow --timestamps --selector app=checkout --max-log-requests 20
 kubectl rollout restart deploy/checkout
 echo '{"type":"deployment","version":"checkout:rollout-manuel","summary":"rollout restart"}' > /tmp/tezcatl-changes
 ```
+
+## Pour aller plus loin : Prometheus et le plugin kubernetes ensemble
+
+Les deux plugins tiennent dans le même fichier de configuration et le
+même processus. C'est là que tezcatl devient intéressant : une anomalie
+de log et une anomalie de métrique qui tombent dans la même fenêtre sur
+le même service ne font qu'un seul événement.
+
+Encore faut-il qu'elles parlent du même service. Le plugin kubernetes
+nomme chaque pod d'après ses labels, `checkout` par exemple, et produit
+des observations sous l'identité `prod/checkout`. Une métrique
+Prometheus doit atterrir sur cette identité exacte, sans quoi les deux
+modalités restent étrangères l'une à l'autre et rien ne se corrèle. Le
+pont, c'est `service_label` : il dit quel label de la série Prometheus
+porte le nom du service.
+
+Avec kube-state-metrics, deux labels font l'affaire. `container` porte
+le nom du conteneur, `deployment` celui du workload, et l'un comme
+l'autre valent `checkout` pour notre application.
+
+```yaml
+# cluster.yaml
+plugins:
+  sources:
+    kubernetes:
+      enabled: true
+      config:
+        environment: prod
+        namespaces: [prod]
+
+    prometheus:
+      enabled: true
+      config:
+        url: http://127.0.0.1:9090
+        interval: 5s
+        environment: prod
+        queries:
+          - name: pod_restarts
+            query: sum(kube_pod_container_status_restarts_total{namespace="prod"}) by (container)
+            service_label: container
+          - name: replicas_unavailable
+            query: sum(kube_deployment_status_replicas_unavailable{namespace="prod"}) by (deployment)
+            service_label: deployment
+
+logs:
+  detection:
+    learning_period: 20s
+metrics:
+  detection:
+    warmup_samples: 5
+```
+
+```bash
+kubectl -n monitoring port-forward svc/prometheus 9090:9090 &
+tezcatl standalone logs --config cluster.yaml --service k8s < /dev/null
+```
+
+Sur un `checkout` qui part en CrashLoopBackOff, voici l'événement que ça
+produit, réduit à ce qui compte :
+
+```json
+{"kind":"anomaly.correlated","source":"prod/checkout","severity":"critical","confidence":0.968,
+ "summary":"new log template after learning period: payment gateway refused handshake, upstream pool exhausted, 0 of 8 connections free (+2 correlated signals)",
+ "signals":[
+   {"kind":"log.new_template","summary":"new log template after learning period: payment gateway refused handshake, upstream pool exhausted, 0 of 8 connections free"},
+   {"kind":"metric.trend_drift","summary":"pod_restarts drifting: fast trend 0.719 vs baseline 1.68"},
+   {"kind":"metric.trend_drift","summary":"replicas_unavailable drifting: fast trend 0.214 vs baseline 0.451"}],
+ "attributes":{"multimodal":"true","signal_count":"3"}}
+```
+
+Un message que l'application n'avait jamais produit, des redémarrages
+qui s'emballent et des réplicas qui manquent : trois observations de
+deux mondes différents, un seul événement, marqué `multimodal`. Sans
+`service_label`, vous auriez eu deux événements sans rapport apparent,
+l'un sur `prod/checkout` et l'autre sur l'identité par défaut du poller.
+
+Deux réglages méritent votre attention pour un premier essai.
+`warmup_samples` vaut 30 par défaut, ce qui, à un `interval` de 30
+secondes, retarde le premier signal métrique d'un quart d'heure : 5
+échantillons toutes les 5 secondes suffisent à voir quelque chose en une
+minute. Remettez les valeurs par défaut ensuite, une baseline apprise
+sur cinq points ne vaut pas grand-chose.
+
+Sachez aussi qu'une métrique parfaitement plate ne produit jamais de
+z-score. L'écart-type est nul, la division est impossible, et tezcatl se
+tait plutôt que d'inventer un chiffre. Un compteur de redémarrages resté
+à zéro depuis toujours est donc silencieux jusqu'à son premier
+mouvement, ce qui est le comportement voulu.
+
+### Quelques requêtes qui vont bien
+
+Toutes tournent sur kube-state-metrics et se corrèlent aux logs par leur
+label :
+
+| Métrique | Requête | `service_label` |
+| --- | --- | --- |
+| redémarrages | `sum(kube_pod_container_status_restarts_total) by (namespace, container)` | `container` |
+| réplicas manquants | `sum(kube_deployment_status_replicas_unavailable) by (namespace, deployment)` | `deployment` |
+| pods non prêts | `sum(kube_pod_status_ready{condition="false"}) by (namespace)` | aucun, l'identité est le namespace |
+
+La troisième n'a pas de label de service utilisable. Donnez-lui un
+`service` fixe, `cluster` par exemple : elle ne se corrélera avec aucun
+log applicatif, mais elle reste une bonne sentinelle de santé générale.
+
+Si votre cluster tourne sous kube-prometheus-stack, le port-forward vise
+`svc/prometheus-operated` dans le namespace `monitoring`, et les mêmes
+requêtes fonctionnent telles quelles.
 
 ## Limites, et quand passer à autre chose
 

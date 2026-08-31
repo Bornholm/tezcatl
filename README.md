@@ -123,7 +123,7 @@ Trois guides pas à pas :
 
 - [Serveur Dokku/Ubuntu](./docs/deploy-dokku.md) couvre les paquets, l'ingestion des logs par application et le hook de déploiement.
 - [Kubernetes](./docs/deploy-kubernetes.md) couvre le serveur en Deployment, les métriques via Prometheus, les logs de pods, les events du cluster et les rollouts vus par le plugin `tezcatl-source-kubernetes`.
-- [Tutoriel kubectl](./docs/tutorial-kubectl.md) montre comment superviser un cluster depuis l'extérieur sans rien y installer : analyse en direct, rejeu d'incident, events, Prometheus en port-forward.
+- [Tutoriel Kubernetes](./docs/tutorial-kubernetes.md) montre comment superviser un cluster depuis l'extérieur sans rien y installer, par `kubectl` ou par le plugin `kubernetes` : analyse en direct, rejeu d'incident, events, rollouts, et Prometheus branché sur les mêmes identités de service.
 
 ## Configuration
 
