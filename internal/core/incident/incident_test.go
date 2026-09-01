@@ -122,7 +122,7 @@ func TestRenderReadsLikeABriefing(t *testing.T) {
 		"services: checkout, payment-api",
 		"correlation, not causation",
 		"deployment checkout:v1.8.2",
-		"3m0s before the trigger",
+		"3m before the trigger",
 		"trigger:",
 		"evidence:",
 		"x2",
@@ -174,8 +174,8 @@ func nightlyNoise() []model.Event {
 		model.Event{
 			ID: "deploy-cpu", Kind: "anomaly.metric.zscore", Source: "production/automata", Service: "automata",
 			Severity: model.SeverityCritical, Confidence: 0.95, Timestamp: deploy,
-			Summary: "docker.cpu.percent = 8.5 deviates from baseline 0.08 (z = 234)",
-			Signals: []model.Signal{{Kind: "metric.zscore", Source: "production/automata", Score: 0.95, Timestamp: deploy}},
+			Summary:        "docker.cpu.percent = 8.5 deviates from baseline 0.08 (z = 234)",
+			Signals:        []model.Signal{{Kind: "metric.zscore", Source: "production/automata", Score: 0.95, Timestamp: deploy}},
 			RelatedChanges: change,
 		},
 		model.Event{
@@ -187,8 +187,8 @@ func nightlyNoise() []model.Event {
 		model.Event{
 			ID: "deploy-sigterm", Kind: "anomaly.log.missing_template", Source: "production/automata", Service: "automata",
 			Severity: model.SeverityWarning, Timestamp: deploy.Add(3 * time.Minute),
-			Summary: "expected log template not seen: Received SIGTERM",
-			Signals: []model.Signal{{Kind: "log.missing_template", Source: "production/automata", Timestamp: deploy.Add(3 * time.Minute)}},
+			Summary:        "expected log template not seen: Received SIGTERM",
+			Signals:        []model.Signal{{Kind: "log.missing_template", Source: "production/automata", Timestamp: deploy.Add(3 * time.Minute)}},
 			RelatedChanges: change,
 		},
 	)
@@ -301,7 +301,7 @@ func TestRenderMarkdownExplainsItsSchema(t *testing.T) {
 		"## Incident 2 — checkout: new log template",
 		"### Trigger",
 		"### Changes near this incident (correlation only)",
-		"3m0s before the trigger",
+		"3m before the trigger",
 		"### Evidence",
 		"| `log.new_template` |",
 		"pool_usage_percent",
@@ -325,7 +325,7 @@ func TestRenderMarkdownSurvivesLogLines(t *testing.T) {
 	events := []model.Event{{
 		ID: "nasty", Kind: "anomaly.log.new_template", Source: "prod/api", Service: "api",
 		Severity: model.SeverityWarning, Timestamp: at,
-		Summary:  "new log template: a | b\nc",
+		Summary: "new log template: a | b\nc",
 		Signals: []model.Signal{
 			{Kind: "log.new_template", Source: "prod/api", Timestamp: at, Summary: "col | umn\nnewline"},
 		},

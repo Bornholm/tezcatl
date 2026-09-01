@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bornholm/tezcatl/internal/core/humanize"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/pkg/errors"
 )
@@ -511,7 +512,11 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 				Source:    source,
 				Timestamp: timestamp,
 				Score:     0.6,
-				Summary:   fmt.Sprintf("expected log template not seen for %.0fs (mean interval %.1fs): %s", silence, stats.MeanIntervalS, stats.Template),
+				// The prose is humanized, the attributes below keep raw
+				// seconds: "1h 40m" is for the reader, "6002" is for
+				// whatever parses the event.
+				Summary: fmt.Sprintf("expected log template not seen for %s (mean interval %s): %s",
+					humanize.Seconds(silence), humanize.Seconds(stats.MeanIntervalS), stats.Template),
 				Attributes: map[string]string{
 					"template_id":     templateID,
 					"template":        stats.Template,

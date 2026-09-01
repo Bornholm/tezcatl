@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
+
+	"github.com/bornholm/tezcatl/internal/core/humanize"
 )
 
 // Render writes the incident the way an engineer would brief it: the
@@ -14,10 +15,10 @@ import (
 func Render(w io.Writer, incident Incident) {
 	fmt.Fprintf(w, "incident: %s\n", incident.Title)
 
-	duration := incident.End.Sub(incident.Start).Round(time.Second)
+	duration := incident.End.Sub(incident.Start)
 	span := incident.Start.Local().Format("2006-01-02 15:04:05")
 	if duration > 0 {
-		span += fmt.Sprintf(" -> %s (%s)", incident.End.Local().Format("15:04:05"), duration)
+		span += fmt.Sprintf(" -> %s (%s)", incident.End.Local().Format("15:04:05"), humanize.Duration(duration))
 	}
 
 	fmt.Fprintf(w, "severity: %s (confidence %.2f)\n", incident.Severity, incident.Confidence)
@@ -28,9 +29,9 @@ func Render(w io.Writer, incident Incident) {
 		fmt.Fprintf(w, "\nchanges before or during (correlation, not causation):\n")
 
 		for _, change := range incident.Changes {
-			position := fmt.Sprintf("%s before the trigger", change.BeforeStart.Round(time.Second))
+			position := fmt.Sprintf("%s before the trigger", humanize.Duration(change.BeforeStart))
 			if change.BeforeStart < 0 {
-				position = fmt.Sprintf("%s into the incident", (-change.BeforeStart).Round(time.Second))
+				position = fmt.Sprintf("%s into the incident", humanize.Duration(-change.BeforeStart))
 			}
 
 			fmt.Fprintf(w, "  %s  %s %s  (%s)%s\n",

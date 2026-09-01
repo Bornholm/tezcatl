@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/humanize"
 )
 
 // RenderMarkdown writes a report meant to be handed to an LLM agent for
@@ -96,6 +97,13 @@ varying content. A template reading `+"`connection timeout after <NUM>s`"+`
 matched many lines with different numbers. Do not read a placeholder as
 a literal, and do not infer the masked value.
 
+### Durations
+
+Durations in summaries are written for a reader: "1h 40m", "27m 48s",
+"<0.1s" for anything shorter than the display allows. The signal
+attributes keep the raw seconds under keys ending in `+"`_s`"+`, so
+parse those rather than the prose.
+
 ### What each field means
 
 - **Trigger**: the first event of the incident. First in time, which is
@@ -175,7 +183,7 @@ func signalGlossary() []glossaryEntry {
 func writeIncident(w io.Writer, number int, incident Incident) {
 	fmt.Fprintf(w, "## Incident %d — %s\n\n", number, incident.Title)
 
-	duration := incident.End.Sub(incident.Start).Round(time.Second)
+	duration := incident.End.Sub(incident.Start)
 
 	fmt.Fprintf(w, "- Started: %s\n", incident.Start.Format(time.RFC3339))
 	fmt.Fprintf(w, "- Last activity: %s (%s later)\n", incident.End.Format(time.RFC3339), duration)
@@ -197,9 +205,9 @@ func writeIncident(w io.Writer, number int, incident Incident) {
 		fmt.Fprintln(w, "| --- | --- | --- | --- | --- |")
 
 		for _, change := range incident.Changes {
-			position := fmt.Sprintf("%s before the trigger", change.BeforeStart.Round(time.Second))
+			position := fmt.Sprintf("%s before the trigger", humanize.Duration(change.BeforeStart))
 			if change.BeforeStart < 0 {
-				position = fmt.Sprintf("%s after the trigger", (-change.BeforeStart).Round(time.Second))
+				position = fmt.Sprintf("%s after the trigger", humanize.Duration(-change.BeforeStart))
 			}
 
 			fmt.Fprintf(w, "| %s | %s | %s | %s | %s |\n",

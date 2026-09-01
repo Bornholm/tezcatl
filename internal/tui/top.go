@@ -12,6 +12,7 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/detect"
+	"github.com/bornholm/tezcatl/internal/core/humanize"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/gdamore/tcell/v2"
 	"github.com/pkg/errors"
@@ -80,14 +81,14 @@ type top struct {
 	// visible mirrors the rows currently shown by templatesTable, and
 	// visibleEvents those of eventsTable, so key handlers can map a
 	// selected row back to its object.
-	visible       []admin.TemplateInfo
+	visible        []admin.TemplateInfo
 	visibleEvents  []model.Event
 	visibleMetrics []metricRow
-	query         string
-	fetchedAt     time.Time
-	streaming     bool
-	message       string
-	messageAt     time.Time
+	query          string
+	fetchedAt      time.Time
+	streaming      bool
+	message        string
+	messageAt      time.Time
 }
 
 // Run displays the interactive top view until the user quits or the
@@ -622,7 +623,8 @@ func eventDetail(event model.Event) string {
 		b.WriteString("\nrelated changes (correlation, not causation)\n")
 
 		for _, related := range event.RelatedChanges {
-			fmt.Fprintf(&b, "  %+.0fs  %s %s %s\n", related.OffsetSeconds,
+			fmt.Fprintf(&b, "  %s  %s %s %s\n",
+				humanize.SignedDuration(time.Duration(related.OffsetSeconds*float64(time.Second))),
 				related.Change.Type, valueOr(related.Change.Version, ""), related.Change.Summary)
 		}
 	}
