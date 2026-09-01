@@ -162,6 +162,16 @@ genai:
 `base_url` pointe vers n'importe quel endpoint compatible OpenAI, y
 compris un modèle local. Sans section `genai`, le bouton n'existe pas.
 
+Le rapport envoyé contient les métadonnées de l'incident, le
+déclencheur, les preuves agrégées, les changements corrélés **et les
+lignes de log brutes autour du déclencheur**. Ces lignes-là ne sont pas
+masquées : ce sont vos vraies adresses, chemins et messages qui partent
+chez le fournisseur. C'est aussi la seule matière qui permet une
+explication concrète, puisqu'un template masqué comme
+`"GET <*> HTTP/<NUM>.<NUM>"` décrit toutes les requêtes HTTP jamais
+faites. Pour vous en tenir aux templates masqués, posez
+`genai.send_log_context: false` ; l'explication y perdra beaucoup.
+
 La génération tourne côté serveur, hors de la requête qui l'a lancée,
 et la page interroge le résultat toutes les deux secondes. Un modèle
 qui met trois minutes aboutit donc quand même derrière un reverse

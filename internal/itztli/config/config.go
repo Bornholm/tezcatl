@@ -127,6 +127,18 @@ type GenAI struct {
 	// BaseURL overrides the provider's default endpoint
 	// (OpenAI-compatible gateways, local models).
 	BaseURL string `yaml:"base_url"`
+	// SendLogContext carries the raw log lines around an incident to
+	// the provider. They are what an explanation can be concrete
+	// about; they are also production lines, unmasked, leaving the
+	// machine. Unset means true.
+	SendLogContext *bool `yaml:"send_log_context"`
+}
+
+// SendsLogContext reports whether the raw lines may leave the machine,
+// defaulting to yes: an explanation without them can only restate what
+// the reader already sees.
+func (g GenAI) SendsLogContext() bool {
+	return g.SendLogContext == nil || *g.SendLogContext
 }
 
 func Default() *Config {

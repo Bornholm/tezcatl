@@ -89,3 +89,9 @@ incidents:
 #   api_key: ${ITZTLI_GENAI_API_KEY}
 #   # Endpoint compatible OpenAI (passerelle locale, vLLM…) :
 #   # base_url: http://127.0.0.1:8000/v1
+#   # Les lignes de log brutes autour du déclencheur partent avec le
+#   # rapport : ce sont elles qui permettent une explication concrète,
+#   # et ce sont aussi des lignes de production, non masquées, qui
+#   # quittent la machine. Passez à false pour n'envoyer que les
+#   # templates masqués, au prix d'une lecture beaucoup plus vague.
+#   # send_log_context: true

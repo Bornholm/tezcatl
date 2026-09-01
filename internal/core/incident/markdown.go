@@ -8,20 +8,37 @@ import (
 
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/humanize"
+	"github.com/bornholm/tezcatl/internal/core/model"
 )
 
+// MarkdownOptions tunes how much the report teaches its own reader.
+type MarkdownOptions struct {
+	// Guidance adds the sections written for an agent working
+	// unaided: the glossary of signal kinds, the limits of what
+	// tezcatl knows, and what to do with the data. They are most of
+	// the report's length, and a caller that already frames the task
+	// in its own prompt is better off without them: a model given six
+	// times more methodology than data answers with methodology.
+	Guidance bool
+}
+
 // RenderMarkdown writes a report meant to be handed to an LLM agent for
-// diagnosis. It leads with the schema, because a reader who does not
-// know that "<NUM>" is a mask, that evidence lines are aggregated, or
-// that a related change is a coincidence in time and nothing more, will
-// confidently misread the data. The preamble is written once, however
-// many incidents follow.
+// diagnosis, with the full guidance.
 func RenderMarkdown(w io.Writer, incidents []Incident, period Period) {
+	RenderMarkdownWith(w, incidents, period, MarkdownOptions{Guidance: true})
+}
+
+// RenderMarkdownWith writes the report with the schema a reader needs:
+// someone who does not know that "<NUM>" is a mask, that evidence lines
+// are aggregated, or that a related change is a coincidence in time and
+// nothing more, will confidently misread the data. The preamble is
+// written once, however many incidents follow.
+func RenderMarkdownWith(w io.Writer, incidents []Incident, period Period, options MarkdownOptions) {
 	fmt.Fprintln(w, "# Tezcatl incident report")
 	fmt.Fprintln(w)
 
 	writeScope(w, incidents, period)
-	writeSchema(w)
+	writeSchema(w, options.Guidance)
 
 	if len(incidents) == 0 {
 		fmt.Fprintln(w, "## Incidents")
@@ -70,7 +87,7 @@ func writeScope(w io.Writer, incidents []Incident, period Period) {
 	fmt.Fprintln(w)
 }
 
-func writeSchema(w io.Writer) {
+func writeSchema(w io.Writer, guidance bool) {
 	fmt.Fprint(w, `## How to read this report
 
 Tezcatl watches logs, metrics and declared changes. It learns what each
@@ -108,6 +125,9 @@ parse those rather than the prose.
 
 - **Trigger**: the first event of the incident. First in time, which is
   not the same as root cause.
+- **Raw log lines**: the actual lines around the trigger, unmasked.
+  This is the only place the values behind the placeholders appear, and
+  the only material that says what concretely happened.
 - **Evidence**: every signal of the incident, folded by kind and source.
   A count of x14 means fourteen occurrences, and the summary shown is the
   strongest single occurrence, not an average.
@@ -121,7 +141,13 @@ parse those rather than the prose.
   because an engineer would want to see them, not because it has any
   evidence they caused anything.
 
-### Signal kinds
+`)
+
+	if !guidance {
+		return
+	}
+
+	fmt.Fprint(w, `### Signal kinds
 
 | Kind | Meaning |
 | --- | --- |
@@ -198,6 +224,8 @@ func writeIncident(w io.Writer, number int, incident Incident) {
 		incident.Trigger.Timestamp.Format(time.RFC3339), serviceOf(incident.Trigger))
 	fmt.Fprintf(w, "> %s\n\n", escapeCell(incident.Trigger.Summary))
 
+	writeContext(w, incident.Trigger)
+
 	if len(incident.Changes) > 0 {
 		fmt.Fprintln(w, "### Changes near this incident (correlation only)")
 		fmt.Fprintln(w)
@@ -235,6 +263,58 @@ func writeIncident(w io.Writer, number int, incident Incident) {
 	}
 
 	fmt.Fprintln(w)
+}
+
+// maxContextLines bounds the raw excerpt. The collector already caps
+// what it keeps around an anomaly; this guards a report handed to a
+// model with a context window.
+const maxContextLines = 40
+
+// writeContext prints the raw lines surrounding the trigger. Without
+// them a reader has only masked templates, and can say nothing about
+// what actually happened: "GET <*> HTTP/<NUM>.<NUM>" describes every
+// HTTP request ever made.
+func writeContext(w io.Writer, trigger model.Event) {
+	lines := make([]string, 0, len(trigger.Context.Before)+len(trigger.Context.After))
+
+	for _, observations := range [][]model.Observation{trigger.Context.Before, trigger.Context.After} {
+		for _, observation := range observations {
+			if observation.Log == nil {
+				continue
+			}
+
+			lines = append(lines, fmt.Sprintf("%s  %s",
+				observation.Timestamp.Format(time.RFC3339), strings.TrimSpace(observation.Log.Raw)))
+		}
+	}
+
+	if len(lines) == 0 {
+		return
+	}
+
+	truncated := 0
+	if len(lines) > maxContextLines {
+		truncated = len(lines) - maxContextLines
+		lines = lines[:maxContextLines]
+	}
+
+	fmt.Fprintln(w, "### Raw log lines around the trigger")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "The lines as they were ingested, unmasked. The placeholders in")
+	fmt.Fprintln(w, "the templates above stand for values you can read here.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "```")
+
+	for _, line := range lines {
+		fmt.Fprintln(w, line)
+	}
+
+	fmt.Fprintln(w, "```")
+	fmt.Fprintln(w)
+
+	if truncated > 0 {
+		fmt.Fprintf(w, "%d further lines were kept out of this excerpt.\n\n", truncated)
+	}
 }
 
 // escapeCell keeps log lines from breaking the table they sit in:
