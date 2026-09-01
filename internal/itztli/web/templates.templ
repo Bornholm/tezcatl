@@ -118,7 +118,7 @@ templ TemplateRowView(row TemplateRow) {
 			<button type="submit" name="marking" value="ignore" class={ "chip-btn", templ.KV("active", row.Marking == "ignore") }>ignorer</button>
 			<button type="submit" name="marking" value="normal" class={ "chip-btn", templ.KV("active", row.Marking == "normal") }>normal</button>
 			<button type="submit" name="marking" value="symptomatic" class={ "chip-btn", templ.KV("active", row.Marking == "symptomatic") }>symptomatique</button>
-			<button type="submit" name="marking" value="" class="chip-btn">effacer</button>
+			<button type="submit" name="marking" value="" class={ "chip-btn", templ.KV("active", row.Marking == "") }>défaut</button>
 		</form>
 	</div>
 }
