@@ -28,15 +28,38 @@ import (
 type fakeAdmin struct {
 	tezcatlv1.UnimplementedAdminServiceServer
 
+	// events replaces the canned ones when set, for the tests that
+	// need a particular shape of history.
+	events []model.Event
+
 	mutex           sync.Mutex
 	markedTemplates map[string]string
 	markedMetrics   map[string]bool
 }
 
 func (f *fakeAdmin) ListEvents(ctx context.Context, req *tezcatlv1.ListEventsRequest) (*tezcatlv1.ListEventsResponse, error) {
+	events := f.events
+	if events == nil {
+		events = cannedEvents()
+	}
+
+	res := &tezcatlv1.ListEventsResponse{}
+	for _, event := range events {
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return nil, err
+		}
+
+		res.Events = append(res.Events, &tezcatlv1.EventEnvelope{Json: string(encoded)})
+	}
+
+	return res, nil
+}
+
+func cannedEvents() []model.Event {
 	now := time.Now()
 
-	events := []model.Event{
+	return []model.Event{
 		{
 			ID:          "ev-trigger",
 			Kind:        "anomaly.log.missing_template",
@@ -54,6 +77,9 @@ func (f *fakeAdmin) ListEvents(ctx context.Context, req *tezcatlv1.ListEventsReq
 				Timestamp: now.Add(-2 * time.Hour),
 				Score:     0.99,
 				Summary:   "expected log template not seen for 1h 40m (mean interval 27m 48s): HTTP server listening on <IP>:<NUM>",
+				Attributes: map[string]string{
+					"template": "HTTP server listening on <IP>:<NUM>",
+				},
 			}},
 			RelatedChanges: []model.RelatedChange{{
 				Source:        "production/automata",
@@ -89,17 +115,6 @@ func (f *fakeAdmin) ListEvents(ctx context.Context, req *tezcatlv1.ListEventsReq
 		},
 	}
 
-	res := &tezcatlv1.ListEventsResponse{}
-	for _, event := range events {
-		encoded, err := json.Marshal(event)
-		if err != nil {
-			return nil, err
-		}
-
-		res.Events = append(res.Events, &tezcatlv1.EventEnvelope{Json: string(encoded)})
-	}
-
-	return res, nil
 }
 
 func (f *fakeAdmin) ListTemplates(ctx context.Context, req *tezcatlv1.ListTemplatesRequest) (*tezcatlv1.ListTemplatesResponse, error) {

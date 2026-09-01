@@ -289,6 +289,10 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 		}
 
 		attributes["metric"] = obs.Metric.Name
+		// The full series key, labels included: the identity the
+		// marking API takes, so a reader can silence this series and
+		// not every series sharing the metric's name.
+		attributes["series"] = key
 		attributes["value"] = strconv.FormatFloat(value, 'f', -1, 64)
 		attributes["observation_id"] = obs.ID
 

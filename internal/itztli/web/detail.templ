@@ -26,6 +26,9 @@ templ DetailPage(nav Nav, detail IncidentDetail, explain ExplainView) {
 			<h2 class="sec-title">Déclencheur</h2>
 			<p class="trigger-summary">{ detail.TriggerSummary }</p>
 			<p class="trigger-meta">{ detail.TriggerTime } · { detail.TriggerKind }</p>
+			if detail.TriggerMark != nil {
+				@MarkShortcut(*detail.TriggerMark)
+			}
 			<p class="sec-note">Premier dans le temps ne veut pas dire cause. Le serveur ne connaît pas la causalité.</p>
 		</section>
 		if len(detail.Changes) > 0 {
@@ -69,6 +72,9 @@ templ DetailPage(nav Nav, detail IncidentDetail, explain ExplainView) {
 							<span class="evidence-dim">score max { evidence.MaxScore }</span>
 						</div>
 						<p class="evidence-summary">{ evidence.Summary }</p>
+						if evidence.Mark != nil {
+							@MarkShortcut(*evidence.Mark)
+						}
 					</div>
 				}
 			</div>
@@ -210,4 +216,37 @@ templ explainDismiss(id string) {
 		hx-target="#explain-zone"
 		hx-swap="innerHTML"
 	>Rejeter</button>
+}
+
+// MarkShortcut lets a reader answer the server where the judgement is
+// actually made: this pattern is noise, or it is a symptom worth
+// reporting. It is the same feedback loop as `tezcatl mark`, one click
+// from the incident that raised the question.
+templ MarkShortcut(target MarkTarget) {
+	<form class="mark-shortcut" hx-post="/incidents/mark" hx-target="this" hx-swap="outerHTML">
+		<input type="hidden" name="kind" value={ target.Kind }/>
+		<input type="hidden" name="target" value={ target.Value }/>
+		<span class="mark-label">marquer</span>
+		if target.IsTemplate() {
+			<button
+				type="submit"
+				name="marking"
+				value="symptomatic"
+				class={ "chip-btn", templ.KV("active", target.Marking == "symptomatic") }
+			>symptomatique</button>
+		}
+		<button
+			type="submit"
+			name="marking"
+			value="ignore"
+			title={ target.SilencedTitle() }
+			class={ "chip-btn", templ.KV("active", target.Silenced()) }
+		>ignorer</button>
+		<button
+			type="submit"
+			name="marking"
+			value=""
+			class={ "chip-btn", templ.KV("active", target.Marking == "") }
+		>défaut</button>
+	</form>
 }

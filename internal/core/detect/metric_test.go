@@ -42,6 +42,43 @@ func TestMetricDetectorZScore(t *testing.T) {
 	}
 }
 
+// TestMetricSignalsCarryTheSeriesKey guards the identity a reader acts
+// on: marking a series takes "source/metric{labels}", and a signal
+// naming only the metric would silence it on every source.
+func TestMetricSignalsCarryTheSeriesKey(t *testing.T) {
+	detector := NewMetricDetector(nil)
+
+	start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+	labelled := func(value float64, timestamp time.Time) *model.Observation {
+		obs := metricObservation("prod/checkout", "pod_restarts", value, timestamp)
+		obs.Metric.Labels = map[string]string{"namespace": "prod"}
+
+		return obs
+	}
+
+	for i := range 100 {
+		detector.Detect(labelled(100+float64(i%5), start.Add(time.Duration(i)*time.Second)))
+	}
+
+	signals := detector.Detect(labelled(500, start.Add(200*time.Second)))
+	if len(signals) == 0 {
+		t.Fatal("expected a signal for the outlier")
+	}
+
+	const want = "prod/checkout/pod_restarts{namespace=prod}"
+
+	for _, signal := range signals {
+		if got := signal.Attributes["series"]; got != want {
+			t.Errorf("%s carries series %q, want %q", signal.Kind, got, want)
+		}
+
+		if signal.Attributes["metric"] != "pod_restarts" {
+			t.Errorf("%s lost its metric name", signal.Kind)
+		}
+	}
+}
+
 // TestMetricDetectorMinDelta reproduces the idle-container situation:
 // a CPU series flat around 0.03% has a near-zero variance, so a sample
 // at 0.15% scores a huge z — the significance floor must silence it,

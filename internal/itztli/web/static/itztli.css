@@ -105,6 +105,16 @@ input, button { font-family: inherit; }
 
 /* --- Liste des incidents ------------------------------------------------- */
 
+.filters-bar {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: -22px 0 34px; padding-bottom: 26px; border-bottom: 1px solid var(--line);
+}
+.filter-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.filter-label {
+  font: 500 10.5px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text3); min-width: 104px;
+}
+
 .cards { display: flex; flex-direction: column; gap: 14px; }
 .card {
   cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
@@ -184,6 +194,12 @@ input, button { font-family: inherit; }
 .evidence-kind { color: var(--text); }
 .evidence-src { color: var(--text2); }
 .evidence-dim { color: var(--text3); }
+.mark-shortcut { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.mark-label {
+  font: 500 10.5px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text3); margin-right: 4px;
+}
+
 .evidence-summary { margin: 0; font: 400 15px/1.65 var(--sans); color: var(--text); max-width: 760px; text-wrap: pretty; overflow-wrap: anywhere; }
 
 .fold { border-top: 1px solid var(--line); padding-top: 22px; margin-bottom: 20px; }
@@ -283,6 +299,9 @@ input, button { font-family: inherit; }
 /* --- Mobile -------------------------------------------------------------- */
 
 @media (max-width: 840px) {
+  .filter-row { gap: 8px; }
+  .filter-label { min-width: 0; width: 100%; }
+
   .shell { grid-template-columns: 1fr; }
   .nav {
     position: static; height: auto; flex-direction: row; align-items: center;

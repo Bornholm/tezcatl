@@ -116,10 +116,13 @@ type IncidentDetail struct {
 	TriggerSummary string
 	TriggerTime    string
 	TriggerKind    string
-	Changes        []ChangeView
-	Evidence       []EvidenceView
-	ContextLines   []string
-	Events         []EventView
+	// TriggerMark is the shortcut for what set the incident off, nil
+	// when the trigger names nothing markable.
+	TriggerMark  *MarkTarget
+	Changes      []ChangeView
+	Evidence     []EvidenceView
+	ContextLines []string
+	Events       []EventView
 }
 
 type ChangeView struct {
@@ -135,6 +138,8 @@ type EvidenceView struct {
 	Span       string
 	MaxScore   string
 	Summary    string
+	// Mark is the shortcut for this line's strongest occurrence.
+	Mark *MarkTarget
 }
 
 type EventView struct {
@@ -144,7 +149,9 @@ type EventView struct {
 	Summary string
 }
 
-func NewIncidentDetail(entry incident.Incident) IncidentDetail {
+func NewIncidentDetail(entry incident.Incident, index MarkingIndex) IncidentDetail {
+	groups, triggerSignal := strongestSignals(entry)
+
 	absPeriod := AbsPeriod(entry.Start, entry.End)
 	if duration := entry.End.Sub(entry.Start); duration >= time.Second {
 		absPeriod += " · pendant " + FrenchDuration(duration)
@@ -161,6 +168,7 @@ func NewIncidentDetail(entry incident.Incident) IncidentDetail {
 		TriggerTime:    entry.Trigger.Timestamp.Local().Format("15:04:05 (UTC-07:00)"),
 		TriggerKind:    entry.Trigger.Kind,
 		ContextLines:   contextLines(entry.Trigger),
+		TriggerMark:    index.Target(triggerSignal),
 	}
 
 	for _, change := range entry.Changes {
@@ -189,6 +197,7 @@ func NewIncidentDetail(entry incident.Incident) IncidentDetail {
 			Span:       span,
 			MaxScore:   FormatFloat(evidence.MaxScore),
 			Summary:    evidence.Summary,
+			Mark:       index.Target(groups[evidence.Kind+"\x00"+evidence.Source]),
 		})
 	}
 
@@ -246,6 +255,97 @@ const (
 	ExplainPendingState = "pending"
 	ExplainDone         = "done"
 )
+
+// MarkTarget is what a marking shortcut acts on: the template behind a
+// log signal, or the series behind a metric one. Reading an incident
+// is when an operator knows whether a pattern is noise or a symptom,
+// so the marking lives where that judgement is made.
+type MarkTarget struct {
+	// Kind is "template" or "metric".
+	Kind string
+	// Value is the template text, or the series key.
+	Value string
+	// Marking is what the server currently holds: "", "ignore",
+	// "normal" or "symptomatic" for a template, "" or "ignore" for a
+	// series.
+	Marking string
+}
+
+// IsTemplate distinguishes the two markable things, which do not offer
+// the same actions: a series can only be ignored.
+func (t MarkTarget) IsTemplate() bool {
+	return t.Kind == "template"
+}
+
+// Silenced reports whether the target currently produces no signal.
+// "normal" and "ignore" are distinct intents but the detectors treat
+// them alike, so the shortcut shows both as silenced rather than
+// leaving a template marked "normal" looking untouched.
+func (t MarkTarget) Silenced() bool {
+	return t.Marking == "ignore" || t.Marking == "normal"
+}
+
+// SilencedTitle spells out a marking the shortcut does not offer, so
+// "normal" is not silently read as "ignore".
+func (t MarkTarget) SilencedTitle() string {
+	if t.Marking == "normal" {
+		return "marqué normal depuis la page Templates : même effet, ce motif ne produit plus de signal"
+	}
+
+	return ""
+}
+
+// MarkingIndex is what the server currently holds about templates and
+// series, so a shortcut can show which marking is active.
+type MarkingIndex struct {
+	Templates map[string]string
+	Metrics   map[string]bool
+}
+
+// Target reads the markable identity out of a signal, or reports that
+// there is none: a signal from an older event predating the series
+// attribute, for instance.
+func (index MarkingIndex) Target(signal model.Signal) *MarkTarget {
+	if template := signal.Attributes["template"]; template != "" {
+		return &MarkTarget{Kind: "template", Value: template, Marking: index.Templates[template]}
+	}
+
+	if series := signal.Attributes["series"]; series != "" {
+		marking := ""
+		if index.Metrics[series] {
+			marking = "ignore"
+		}
+
+		return &MarkTarget{Kind: "metric", Value: series, Marking: marking}
+	}
+
+	return nil
+}
+
+// strongestSignals returns, per evidence group (kind and source) and
+// for the trigger, the signal an evidence line actually shows: the
+// strongest occurrence. Its identity is the one a shortcut must mark.
+func strongestSignals(entry incident.Incident) (groups map[string]model.Signal, trigger model.Signal) {
+	groups = map[string]model.Signal{}
+
+	for _, event := range entry.Events {
+		for _, signal := range event.Signals {
+			key := signal.Kind + "\x00" + signal.Source
+
+			if best, exists := groups[key]; !exists || signal.Score >= best.Score {
+				groups[key] = signal
+			}
+		}
+	}
+
+	for _, signal := range entry.Trigger.Signals {
+		if signal.Score >= trigger.Score {
+			trigger = signal
+		}
+	}
+
+	return groups, trigger
+}
 
 // TemplateRow is one learned template with its marking actions.
 type TemplateRow struct {

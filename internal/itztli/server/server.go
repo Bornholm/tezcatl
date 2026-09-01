@@ -13,6 +13,7 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/bornholm/tezcatl/internal/core/incident"
+	"github.com/bornholm/tezcatl/internal/core/model"
 	itzclient "github.com/bornholm/tezcatl/internal/itztli/client"
 	itzconfig "github.com/bornholm/tezcatl/internal/itztli/config"
 	"github.com/bornholm/tezcatl/internal/itztli/explain"
@@ -84,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /incidents/{id}/explain/reset", s.authed(s.handleExplainReset))
 	mux.HandleFunc("GET /templates", s.authed(s.handleTemplates))
 	mux.HandleFunc("GET /templates/rows", s.authed(s.handleTemplateRows))
+	mux.HandleFunc("POST /incidents/mark", s.authed(s.handleIncidentMark))
 	mux.HandleFunc("POST /templates/mark", s.authed(s.handleTemplateMark))
 	mux.HandleFunc("GET /metrics", s.authed(s.handleMetrics))
 	mux.HandleFunc("POST /metrics/mark", s.authed(s.handleMetricMark))
@@ -244,8 +246,84 @@ func (s *Server) nav(active string) web.Nav {
 	}
 }
 
+// incidentFilter reads the reader's choices from the URL, falling back
+// to the configured defaults. A chip click arrives as a "-set"
+// parameter, which wins over the hidden field carrying the current
+// value.
+func (s *Server) incidentFilter(r *http.Request) web.IncidentFilter {
+	query := r.URL.Query()
+
+	pick := func(field string) string {
+		if set := query.Get(field + "-set"); set != "" {
+			return set
+		}
+
+		return query.Get(field)
+	}
+
+	filter := web.IncidentFilter{
+		Range:    s.config.Incidents.DefaultRange.AsDuration(),
+		Severity: s.config.Incidents.DefaultSeverity,
+		Gap:      s.config.Incidents.Gap.AsDuration(),
+	}
+
+	if filter.Gap <= 0 {
+		filter.Gap = incident.DefaultGap
+	}
+
+	switch raw := pick("range"); {
+	case raw == "all":
+		filter.Range = 0
+	case raw != "":
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			filter.Range = parsed
+		}
+	}
+
+	switch raw := pick("severity"); raw {
+	case "critical", "warning", "info", "all":
+		filter.Severity = raw
+	}
+
+	if raw := pick("gap"); raw != "" && raw != "all" {
+		if parsed, err := time.ParseDuration(raw); err == nil && parsed > 0 {
+			filter.Gap = parsed
+		}
+	}
+
+	// Asking for more than the server retained is asking for
+	// everything: keep the two readings from differing, so the chip a
+	// reader sees selected is the one in force.
+	if filter.Range >= s.config.Incidents.Window.AsDuration() {
+		filter.Range = 0
+	}
+
+	return filter
+}
+
+func (s *Server) queryOf(filter web.IncidentFilter) itzclient.Query {
+	query := itzclient.Query{Gap: filter.Gap}
+
+	if filter.Range > 0 {
+		query.Since = time.Now().Add(-filter.Range)
+	}
+
+	switch filter.Severity {
+	case "critical":
+		query.MinSeverity = model.SeverityCritical
+	case "warning":
+		query.MinSeverity = model.SeverityWarning
+	case "info":
+		query.MinSeverity = model.SeverityInfo
+	}
+
+	return query
+}
+
 func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
-	snapshot, err := s.client.Incidents(r.Context())
+	filter := s.incidentFilter(r)
+
+	incidents, snapshot, err := s.client.Incidents(r.Context(), s.queryOf(filter))
 	if err != nil {
 		s.renderUpstreamError(w, r, "incidents", err)
 
@@ -254,25 +332,27 @@ func (s *Server) handleIncidents(w http.ResponseWriter, r *http.Request) {
 
 	nav := s.nav("incidents")
 
-	if len(snapshot.Incidents) == 0 {
+	if len(incidents) == 0 {
 		empty := s.emptyState(r.Context(), snapshot)
-		context := nav.WindowContext() + " · aucun incident"
-		s.render(w, r, web.IncidentsPage(nav, context, nil, 0, false, &empty))
+		context := fmt.Sprintf("%s · %s · aucun incident", filter.RangeLabel(nav.Window), filter.SeverityLabel())
+		s.render(w, r, web.IncidentsPage(nav, context, filter, nil, 0, false, &empty))
 
 		return
 	}
 
-	cards, nextOffset, more := s.incidentCards(snapshot, 0)
-	context := fmt.Sprintf("%s · %s · %s chargés",
-		nav.WindowContext(),
-		web.Plural(len(snapshot.Incidents), "incident"),
-		web.Plural(snapshot.TotalEvents, "événement"))
+	cards, nextOffset, more := s.incidentCards(incidents, 0)
+	context := fmt.Sprintf("%s · %s · %s",
+		filter.RangeLabel(nav.Window),
+		filter.SeverityLabel(),
+		web.Plural(len(incidents), "incident"))
 
-	s.render(w, r, web.IncidentsPage(nav, context, cards, nextOffset, more, nil))
+	s.render(w, r, web.IncidentsPage(nav, context, filter, cards, nextOffset, more, nil))
 }
 
 func (s *Server) handleIncidentRows(w http.ResponseWriter, r *http.Request) {
-	snapshot, err := s.client.Incidents(r.Context())
+	filter := s.incidentFilter(r)
+
+	incidents, _, err := s.client.Incidents(r.Context(), s.queryOf(filter))
 	if err != nil {
 		s.renderUpstreamError(w, r, "incidents", err)
 
@@ -280,30 +360,30 @@ func (s *Server) handleIncidentRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset := parseOffset(r.URL.Query().Get("offset"))
-	cards, nextOffset, more := s.incidentCards(snapshot, offset)
+	cards, nextOffset, more := s.incidentCards(incidents, offset)
 
-	s.render(w, r, web.IncidentBatch(cards, nextOffset, more))
+	s.render(w, r, web.IncidentBatch(filter, cards, nextOffset, more))
 }
 
-func (s *Server) incidentCards(snapshot *itzclient.Snapshot, offset int) ([]web.IncidentCard, int, bool) {
+func (s *Server) incidentCards(incidents []incident.Incident, offset int) ([]web.IncidentCard, int, bool) {
 	pageSize := s.config.Incidents.PageSize
 	now := time.Now()
 
-	if offset > len(snapshot.Incidents) {
-		offset = len(snapshot.Incidents)
+	if offset > len(incidents) {
+		offset = len(incidents)
 	}
 
 	end := offset + pageSize
-	if end > len(snapshot.Incidents) {
-		end = len(snapshot.Incidents)
+	if end > len(incidents) {
+		end = len(incidents)
 	}
 
 	cards := make([]web.IncidentCard, 0, end-offset)
-	for _, entry := range snapshot.Incidents[offset:end] {
+	for _, entry := range incidents[offset:end] {
 		cards = append(cards, web.NewIncidentCard(entry, now))
 	}
 
-	return cards, end, end < len(snapshot.Incidents)
+	return cards, end, end < len(incidents)
 }
 
 // emptyState gathers the honest numbers behind "no incident". Best
@@ -327,7 +407,9 @@ func (s *Server) emptyState(ctx context.Context, snapshot *itzclient.Snapshot) w
 }
 
 func (s *Server) handleIncidentDetail(w http.ResponseWriter, r *http.Request) {
-	entry, found, err := s.client.Incident(r.Context(), r.PathValue("id"))
+	filter := s.incidentFilter(r)
+
+	entry, found, err := s.client.Incident(r.Context(), r.PathValue("id"), filter.Gap)
 	if err != nil {
 		s.renderUpstreamError(w, r, "incidents", err)
 
@@ -341,7 +423,9 @@ func (s *Server) handleIncidentDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, r, web.DetailPage(s.nav("incidents"), web.NewIncidentDetail(entry), s.explainView(r.PathValue("id"))))
+	index := s.markingIndex(r.Context(), entry)
+
+	s.render(w, r, web.DetailPage(s.nav("incidents"), web.NewIncidentDetail(entry, index), s.explainView(r.PathValue("id"))))
 }
 
 // explainView reads the current state of an incident's explanation.
@@ -381,7 +465,7 @@ func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
 	incidentID := r.PathValue("id")
 
 	if s.explains.start(incidentID) {
-		entry, found, err := s.client.Incident(r.Context(), incidentID)
+		entry, found, err := s.client.Incident(r.Context(), incidentID, s.incidentFilter(r).Gap)
 		switch {
 		case err != nil:
 			s.explains.finish(incidentID, "", err.Error())
@@ -428,6 +512,100 @@ func (s *Server) handleExplainReset(w http.ResponseWriter, r *http.Request) {
 	view := s.explainView(incidentID)
 
 	s.render(w, r, web.ExplainZone(view), web.ExplainButtonSlot(view, true))
+}
+
+// markingIndex reads what the server currently holds about the
+// templates and series this incident names, so the shortcuts show the
+// marking in force. Best effort: a listing failure costs the active
+// state, not the page.
+func (s *Server) markingIndex(ctx context.Context, entry incident.Incident) web.MarkingIndex {
+	index := web.MarkingIndex{}
+
+	var wantsTemplates, wantsMetrics bool
+
+	for _, event := range entry.Events {
+		for _, signal := range event.Signals {
+			if signal.Attributes["template"] != "" {
+				wantsTemplates = true
+			}
+
+			if signal.Attributes["series"] != "" {
+				wantsMetrics = true
+			}
+		}
+	}
+
+	if wantsTemplates {
+		if templates, err := s.client.Templates(ctx); err == nil {
+			index.Templates = make(map[string]string, len(templates))
+			for _, template := range templates {
+				if template.Marking != "" {
+					index.Templates[template.Template] = template.Marking
+				}
+			}
+		}
+	}
+
+	if wantsMetrics {
+		if metrics, err := s.client.Metrics(ctx); err == nil {
+			index.Metrics = make(map[string]bool, len(metrics))
+			for _, metric := range metrics {
+				if metric.Ignored {
+					index.Metrics[metric.Key] = true
+				}
+			}
+		}
+	}
+
+	return index
+}
+
+// handleIncidentMark is the shortcut from an incident: the same
+// feedback loop as the templates and metrics pages, where the reader
+// has just seen why it matters.
+func (s *Server) handleIncidentMark(w http.ResponseWriter, r *http.Request) {
+	target := web.MarkTarget{
+		Kind:    r.FormValue("kind"),
+		Value:   r.FormValue("target"),
+		Marking: r.FormValue("marking"),
+	}
+
+	if target.Value == "" || !validMarking(target.Marking) {
+		http.Error(w, "malformed marking request", http.StatusBadRequest)
+
+		return
+	}
+
+	var err error
+
+	switch target.Kind {
+	case "template":
+		err = s.client.MarkTemplate(r.Context(), target.Value, target.Marking)
+	case "metric":
+		// A series is either ignored or not; "symptomatic" has no
+		// meaning there and the shortcut never offers it.
+		if target.Marking == "symptomatic" || target.Marking == "normal" {
+			http.Error(w, "a series can only be ignored", http.StatusBadRequest)
+
+			return
+		}
+
+		err = s.client.MarkMetric(r.Context(), target.Value, target.Marking == "ignore")
+	default:
+		http.Error(w, "unknown marking kind", http.StatusBadRequest)
+
+		return
+	}
+
+	if err != nil {
+		s.renderUpstreamError(w, r, "incidents", err)
+
+		return
+	}
+
+	s.client.Invalidate()
+
+	s.render(w, r, web.MarkShortcut(target))
 }
 
 // --- Templates -----------------------------------------------------------
