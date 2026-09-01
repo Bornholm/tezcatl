@@ -19,6 +19,14 @@ import (
 const (
 	initialBackoff = time.Second
 	maxBackoff     = 30 * time.Second
+
+	// maxRecvBytes lifts the client's 4 MB gRPC receive default for
+	// what the admin API legitimately returns: ListEvents over the
+	// whole retention is one unary response, and two weeks of events
+	// on a modest instance already weigh several megabytes. The cap
+	// still exists so a confused server cannot make a client swallow
+	// arbitrary memory.
+	maxRecvBytes = 128 * 1024 * 1024
 )
 
 // Client forwards observations produced by a local ingester to a remote
@@ -85,7 +93,9 @@ func Dial(target string, caFile string) (*grpc.ClientConn, error) {
 		transport = credentials.NewTLS(tlsConfig)
 	}
 
-	conn, err := grpc.NewClient(dialTarget, grpc.WithTransportCredentials(transport))
+	conn, err := grpc.NewClient(dialTarget,
+		grpc.WithTransportCredentials(transport),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxRecvBytes)))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
