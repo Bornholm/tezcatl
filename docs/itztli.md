@@ -8,10 +8,12 @@ Trois écrans, volontairement peu denses :
 
 - **Incidents** : l'écran d'accueil liste les derniers incidents,
   assemblés à la volée depuis le journal d'événements du serveur avec
-  le même regroupement que `tezcatl incidents`. Le détail d'un incident
-  montre le déclencheur, les changements corrélés (étiquetés comme une
-  corrélation, rien d'autre), les preuves agrégées, les lignes de log
-  autour du déclencheur et les événements sous-jacents.
+  le même regroupement que `tezcatl incidents`. Trois filtres en tête
+  de page : la période, la sévérité minimale et le gap de regroupement.
+  Le détail d'un incident montre le déclencheur, les changements
+  corrélés (étiquetés comme une corrélation, rien d'autre), les preuves
+  agrégées, les lignes de log autour du déclencheur et les événements
+  sous-jacents, chacun avec un raccourci de marquage.
 - **Templates** : les templates appris, filtrables par texte et par
   marquage. Les boutons `ignorer`, `normal`, `symptomatique` et
   `effacer` appellent la même API que `tezcatl mark` et prennent effet
@@ -24,6 +26,41 @@ Trois écrans, volontairement peu denses :
 Itztli ne stocke rien : chaque page est une lecture de l'API
 d'administration du serveur. Fermer l'onglet ne perd rien, redémarrer
 itztli non plus.
+
+## Filtrer la liste
+
+À l'ouverture, la liste montre **les incidents critiques des dernières
+24 heures** : ce qui demande une réponse maintenant, pas deux semaines
+d'histoire. Les valeurs de départ se règlent par
+`incidents.default_range` et `incidents.default_severity`.
+
+Trois réglages, chacun une rangée de puces :
+
+- **période** : 1 h, 6 h, 24 h, 7 j, ou toute la fenêtre chargée.
+- **sévérité** : c'est un plancher, « warning et + » montre aussi les
+  critiques.
+- **regroupement** : le silence après lequel un incident est clos. Un
+  gap court découpe une nuit agitée en incidents distincts, un gap long
+  les fond en une seule histoire. Le changer ne recharge rien depuis le
+  serveur : les événements de la fenêtre sont déjà là, seul le
+  regroupement est refait.
+
+Le filtre voyage dans l'URL, une vue se partage donc telle qu'elle est
+lue. Le lien vers un incident emporte le gap, sans quoi la page de
+détail regrouperait autrement que la liste dont elle vient.
+
+## Marquer depuis un incident
+
+Le détail d'un incident porte, sous le déclencheur et sous chaque
+ligne de preuve, un raccourci `symptomatique` / `ignorer` / `défaut`.
+C'est la boucle de `tezcatl mark`, au moment où le jugement se fait :
+le lecteur vient de voir pourquoi ce motif compte.
+
+Le raccourci vise le template du signal le plus fort de la ligne, ou sa
+série pour un signal de métrique — une série ne connaît que `ignorer`,
+`symptomatique` n'y a pas de sens. Un template marqué `normal` depuis
+la page Templates s'affiche comme silencié : les détecteurs traitent
+`normal` et `ignore` de la même façon.
 
 ## Installation
 

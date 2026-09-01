@@ -42,15 +42,29 @@ type Client struct {
 	snapshot *Snapshot
 }
 
-// Snapshot is one consistent read of the server's event log.
+// Snapshot is one consistent read of the server's event log. It keeps
+// the anomalies rather than the incidents: grouping depends on the gap
+// the reader asked for, so it is recomputed per request while the
+// events, which do not depend on it, are fetched once.
 type Snapshot struct {
 	FetchedAt time.Time
 	// TotalEvents counts every event of the window, whatever its
 	// kind; the incidents only aggregate the anomalies.
 	TotalEvents int
-	// Incidents come newest first: the dashboard leads with what just
-	// happened.
-	Incidents []incident.Incident
+	// Anomalies are the anomaly events of the window, oldest first.
+	Anomalies []model.Event
+}
+
+// Query is what a reader asked to see.
+type Query struct {
+	// Since bounds the incidents kept: an incident with no activity
+	// after it is not shown. Zero means the whole window.
+	Since time.Time
+	// MinSeverity keeps the incidents at least this severe. Empty
+	// keeps everything.
+	MinSeverity model.Severity
+	// Gap overrides the configured grouping gap.
+	Gap time.Duration
 }
 
 // Template mirrors the AdminService's TemplateInfo.
@@ -89,9 +103,61 @@ func (c *Client) Close() error {
 	return c.conn.Close()
 }
 
-// Incidents returns the current snapshot, refetching it when the
-// cached one is older than the TTL.
-func (c *Client) Incidents(ctx context.Context) (*Snapshot, error) {
+// Incidents groups and filters the cached events for one query. The
+// grouping runs on every call, which costs microseconds and lets a
+// reader change the gap without waiting for the network.
+func (c *Client) Incidents(ctx context.Context, query Query) ([]incident.Incident, *Snapshot, error) {
+	snapshot, err := c.snapshotOf(ctx)
+	if err != nil {
+		return nil, nil, errors.WithStack(err)
+	}
+
+	options := c.options.Grouping
+	if query.Gap > 0 {
+		options.Gap = query.Gap
+	}
+
+	incidents := incident.Group(snapshot.Anomalies, options)
+
+	kept := incidents[:0]
+	for _, entry := range incidents {
+		// An incident is in range when it was still active in it: one
+		// that started before the window but is still going matters.
+		if !query.Since.IsZero() && entry.End.Before(query.Since) {
+			continue
+		}
+
+		if severityRank(entry.Severity) < severityRank(query.MinSeverity) {
+			continue
+		}
+
+		kept = append(kept, entry)
+	}
+
+	// Group returns oldest first; the UI leads with the latest.
+	sort.SliceStable(kept, func(i, j int) bool {
+		return kept[i].Start.After(kept[j].Start)
+	})
+
+	return kept, snapshot, nil
+}
+
+func severityRank(severity model.Severity) int {
+	switch severity {
+	case model.SeverityCritical:
+		return 3
+	case model.SeverityWarning:
+		return 2
+	case model.SeverityInfo:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// snapshotOf returns the cached events, refetching them when the
+// cached read is older than the TTL.
+func (c *Client) snapshotOf(ctx context.Context) (*Snapshot, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -115,14 +181,17 @@ func (c *Client) Incidents(ctx context.Context) (*Snapshot, error) {
 	return snapshot, nil
 }
 
-// Incident finds one incident of the current snapshot by its ID.
-func (c *Client) Incident(ctx context.Context, id string) (incident.Incident, bool, error) {
-	snapshot, err := c.Incidents(ctx)
+// Incident finds one incident by its ID, over the whole window and
+// whatever the reader's filters: a link must not break because the
+// list is currently narrowed. It groups with the given gap, since the
+// incident's identity depends on it.
+func (c *Client) Incident(ctx context.Context, id string, gap time.Duration) (incident.Incident, bool, error) {
+	incidents, _, err := c.Incidents(ctx, Query{Gap: gap})
 	if err != nil {
 		return incident.Incident{}, false, errors.WithStack(err)
 	}
 
-	for _, entry := range snapshot.Incidents {
+	for _, entry := range incidents {
 		if IncidentID(entry) == id {
 			return entry, true, nil
 		}
@@ -160,17 +229,10 @@ func (c *Client) fetch(ctx context.Context) (*Snapshot, error) {
 		}
 	}
 
-	incidents := incident.Group(anomalies, c.options.Grouping)
-
-	// Group returns oldest first; the UI leads with the latest.
-	sort.SliceStable(incidents, func(i, j int) bool {
-		return incidents[i].Start.After(incidents[j].Start)
-	})
-
 	return &Snapshot{
 		FetchedAt:   time.Now(),
 		TotalEvents: len(res.GetEvents()),
-		Incidents:   incidents,
+		Anomalies:   anomalies,
 	}, nil
 }
 

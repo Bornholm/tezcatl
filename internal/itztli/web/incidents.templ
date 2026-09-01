@@ -2,31 +2,63 @@ package web
 
 import "fmt"
 
-// IncidentsPage is the home dashboard: the latest incidents first.
-templ IncidentsPage(nav Nav, context string, cards []IncidentCard, nextOffset int, more bool, empty *EmptyState) {
+// IncidentsPage is the home dashboard: the latest incidents first,
+// narrowed by the filter the reader chose.
+templ IncidentsPage(nav Nav, context string, filter IncidentFilter, cards []IncidentCard, nextOffset int, more bool, empty *EmptyState) {
 	@Shell(nav) {
 		<h1 class="page-title">Derniers incidents</h1>
 		<p class="page-context">{ context }</p>
+		@IncidentFilters(nav, filter)
 		if empty != nil {
 			@EmptyStateView(*empty)
 		} else {
 			<div class="cards" id="incident-cards">
-				@IncidentBatch(cards, nextOffset, more)
+				@IncidentBatch(filter, cards, nextOffset, more)
 			</div>
 		}
 	}
 }
 
+// IncidentFilters is a plain GET form: every chip is a submit button,
+// so the filter ends up in the URL and the page can be bookmarked or
+// shared as it is read.
+templ IncidentFilters(nav Nav, filter IncidentFilter) {
+	<form class="filters-bar" method="get" action="/">
+		<input type="hidden" name="range" value={ durationParam(filter.Range) }/>
+		<input type="hidden" name="severity" value={ filter.Severity }/>
+		<input type="hidden" name="gap" value={ durationParam(filter.Gap) }/>
+		@filterRow("période", "range-set", filter.RangeChoices(nav.Window))
+		@filterRow("sévérité", "severity-set", filter.SeverityChoices())
+		@filterRow("regroupement", "gap-set", filter.GapChoices())
+	</form>
+}
+
+templ filterRow(label string, field string, choices []Choice) {
+	<div class="filter-row">
+		<span class="filter-label">{ label }</span>
+		<div class="filter-group">
+			for _, choice := range choices {
+				<button
+					type="submit"
+					name={ field }
+					value={ choice.Value }
+					class={ "filter-chip", templ.KV("active", choice.Active) }
+				>{ choice.Label }</button>
+			}
+		</div>
+	</div>
+}
+
 // IncidentBatch is one page of cards plus, when the list goes on, the
 // button that fetches the next batch in place.
-templ IncidentBatch(cards []IncidentCard, nextOffset int, more bool) {
+templ IncidentBatch(filter IncidentFilter, cards []IncidentCard, nextOffset int, more bool) {
 	for _, card := range cards {
 		@IncidentCardView(card)
 	}
 	if more {
 		<button
 			class="btn-ghost"
-			hx-get={ fmt.Sprintf("/incidents/rows?offset=%d", nextOffset) }
+			hx-get={ fmt.Sprintf("/incidents/rows?%s&offset=%d", filter.Query(), nextOffset) }
 			hx-target="this"
 			hx-swap="outerHTML"
 		>Charger les incidents plus anciens</button>
@@ -79,9 +111,11 @@ templ MaskedText(parts []Part) {
 // does not.
 templ EmptyStateView(empty EmptyState) {
 	<div class="empty">
-		<p class="empty-title">Aucun incident sur la période.</p>
+		<p class="empty-title">Aucun incident avec ce filtre.</p>
 		<p class="empty-text">
-			Cela signifie que rien ne s'écarte de ce que le serveur a appris.
+			Élargissez la période ou la sévérité pour en voir davantage. Si
+			la vue la plus large reste vide, c'est que rien ne s'écarte de ce
+			que le serveur a appris.
 			Ce n'est pas une garantie que les services vont bien : une panne
 			uniforme, une série en apprentissage ou un motif marqué comme
 			ignoré ne produisent pas d'écart.

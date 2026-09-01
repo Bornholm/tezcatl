@@ -96,6 +96,13 @@ type Incidents struct {
 	// Window is how far back the incident list looks. The server's own
 	// event retention (360h by default) bounds it in practice.
 	Window Duration `yaml:"window"`
+	// DefaultRange preselects how far back the list looks. The reader
+	// can widen it up to Window without reloading anything from the
+	// server, since the whole window is fetched anyway.
+	DefaultRange Duration `yaml:"default_range"`
+	// DefaultSeverity preselects the minimum severity shown: critical,
+	// warning, info, or all.
+	DefaultSeverity string `yaml:"default_severity"`
 	// Gap, MaxDuration and CoOccurrence tune the grouping, with the
 	// same meaning as `tezcatl incidents`.
 	Gap          Duration `yaml:"gap"`
@@ -135,12 +142,17 @@ func Default() *Config {
 			SessionTTL: Duration(12 * time.Hour),
 		},
 		Incidents: Incidents{
-			Window:       Duration(15 * 24 * time.Hour),
-			CacheTTL:     Duration(10 * time.Second),
-			PageSize:     20,
-			Gap:          0, // zero values fall back to incident.Group's defaults
-			MaxDuration:  0,
-			CoOccurrence: 0,
+			Window: Duration(15 * 24 * time.Hour),
+			// A dashboard opens on what needs an answer now, not on
+			// two weeks of history: today, and only what the detectors
+			// scored critical.
+			DefaultRange:    Duration(24 * time.Hour),
+			DefaultSeverity: "critical",
+			CacheTTL:        Duration(10 * time.Second),
+			PageSize:        20,
+			Gap:             0, // zero values fall back to incident.Group's defaults
+			MaxDuration:     0,
+			CoOccurrence:    0,
 		},
 	}
 }
@@ -217,6 +229,20 @@ func (c *Config) Validate() error {
 
 	if c.Incidents.PageSize <= 0 {
 		return errors.New("incidents.page_size must be positive")
+	}
+
+	if c.Incidents.DefaultRange.AsDuration() <= 0 {
+		return errors.New("incidents.default_range must be positive")
+	}
+
+	if c.Incidents.DefaultRange.AsDuration() > c.Incidents.Window.AsDuration() {
+		return errors.New("incidents.default_range must not exceed incidents.window")
+	}
+
+	switch c.Incidents.DefaultSeverity {
+	case "critical", "warning", "info", "all":
+	default:
+		return errors.Errorf("unknown incidents.default_severity %q (critical, warning, info, all)", c.Incidents.DefaultSeverity)
 	}
 
 	if c.GenAI.Provider != "" && c.GenAI.Model == "" {

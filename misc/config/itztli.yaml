@@ -53,11 +53,23 @@ auth:
   #   button_label: Se connecter avec Keycloak
 
 incidents:
-  # Fenêtre du tableau de bord. La rétention d'événements du serveur
-  # (360h par défaut) la borne en pratique.
+  # Fenêtre chargée depuis le serveur, et borne maximale des filtres.
+  # La rétention d'événements du serveur (360h par défaut) la borne à
+  # son tour.
   window: 360h
+  # Ce que la liste montre à l'ouverture : le lecteur élargit ensuite
+  # sans rien recharger, puisque toute la fenêtre est déjà là. La
+  # période et la sévérité voyagent dans l'URL, une vue filtrée se
+  # partage donc par lien.
+  default_range: 24h
+  # critical, warning, info ou all. C'est un plancher : warning montre
+  # aussi les critiques.
+  default_severity: critical
   # Regroupement des événements en incidents, mêmes réglages que
   # `tezcatl incidents` (les défauts du serveur s'appliquent si absents).
+  # gap est le silence qui clôt un incident ; c'est aussi la valeur
+  # préselectionnée dans la barre de filtres, que le lecteur peut
+  # changer par écran.
   # gap: 30m
   # max_duration: 1h
   # co_occurrence: 30s
