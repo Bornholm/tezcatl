@@ -1,0 +1,49 @@
+package web
+
+// MetricsPage lists the learned series: no value history, only what
+// the server actually keeps — mean, spread and recent level.
+templ MetricsPage(nav Nav, context string, rows []MetricRow) {
+	@Shell(nav) {
+		<h1 class="page-title">Métriques</h1>
+		<p class="page-context">{ context }</p>
+		<div class="met-rows">
+			for _, row := range rows {
+				@MetricRowView(row)
+			}
+			if len(rows) == 0 {
+				<div class="rows-empty">Aucune série apprise pour le moment.</div>
+			}
+		</div>
+	}
+}
+
+templ MetricRowView(row MetricRow) {
+	<div class="met-row">
+		<div class="met-main">
+			<div class={ "met-key", templ.KV("muted", row.Ignored) }>{ row.Key }</div>
+			<div class="met-sub">{ row.StatsLabel }</div>
+		</div>
+		<div class="met-gauge">
+			<div class="met-line">
+				<span class={ "met-recent", "dev-" + row.DevClass }>{ row.Recent }</span>
+				<span class="met-unit">récent</span>
+				<span class={ "met-sigma", "dev-" + row.DevClass }>{ row.SigmaLabel }</span>
+			</div>
+			<div class="bar">
+				<div class={ "bar-fill", "dev-" + row.DevClass } style={ templ.SafeCSS("width:" + row.BarWidth) }></div>
+				<div class="bar-mean"></div>
+			</div>
+			<div class="met-compare">{ row.CompareLabel }</div>
+		</div>
+		<form class="met-action" hx-post="/metrics/mark" hx-target="closest .met-row" hx-swap="outerHTML">
+			<input type="hidden" name="pattern" value={ row.Key }/>
+			if row.Ignored {
+				<input type="hidden" name="ignore" value="false"/>
+				<button type="submit" class="chip-btn active">{ row.ButtonLabel }</button>
+			} else {
+				<input type="hidden" name="ignore" value="true"/>
+				<button type="submit" class="chip-btn">{ row.ButtonLabel }</button>
+			}
+		</form>
+	</div>
+}

@@ -10,6 +10,10 @@ build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/tezcatl ./cmd/tezcatl
 
+build-itztli:
+	mkdir -p bin
+	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/itztli ./cmd/itztli
+
 test:
 	go test -race -count=1 ./...
 
@@ -25,6 +29,14 @@ tools/bin/protoc-gen-go:
 tools/bin/protoc-gen-go-grpc:
 	GOBIN=$(PWD)/tools/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
+tools/bin/templ:
+	GOBIN=$(PWD)/tools/bin go install github.com/a-h/templ/cmd/templ@v0.3.906
+
+# Régénère les *_templ.go d'itztli (commités, le build n'en a pas
+# besoin).
+templ: tools/bin/templ
+	tools/bin/templ generate ./internal/itztli/web/
+
 generate: tools/bin/protoc-gen-go tools/bin/protoc-gen-go-grpc
 	PATH="$(PWD)/tools/bin:$(PATH)" protoc \
 		-I api/proto \
@@ -32,4 +44,4 @@ generate: tools/bin/protoc-gen-go tools/bin/protoc-gen-go-grpc
 		--go-grpc_out=. --go-grpc_opt=module=github.com/bornholm/tezcatl \
 		api/proto/tezcatl/v1/*.proto
 
-.PHONY: build test bench tidy generate
+.PHONY: build build-itztli test bench tidy generate templ

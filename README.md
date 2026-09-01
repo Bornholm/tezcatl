@@ -99,11 +99,13 @@ La sortie `--format markdown` est faite pour être donnée telle quelle à un ag
 
 `tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue l'historique persisté, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline et permet de faire taire une série avec `i`.
 
+[Itztli](./docs/itztli.md) est le pendant web de `tezcatl top` : un binaire séparé et optionnel qui sert les mêmes données dans un navigateur. Derniers incidents en écran d'accueil, détail avec déclencheur, preuves et changements corrélés, marquage des templates et des métriques, et en option un bouton « Explain » qui fait lire le rapport d'un incident à un LLM. L'accès se protège par un mot de passe unique ou par OIDC.
+
 ## Déploiement
 
 Les sources actives sont des plugins : `host` (CPU, mémoire, disque, conteneurs Docker), `kubernetes` (events, logs de pods, rollouts), `prometheus` (requêtes PromQL), `journald` (le journal systemd) et `scaleway` (conteneurs serverless, via le CLI `scw` pour la découverte et Cockpit pour les données).
 
-Chaque release publie des paquets Debian et Arch (`tezcatl`, `tezcatl-server`, les plugins, `tezcatl-dokku`) et une image de conteneur, `ghcr.io/bornholm/tezcatl`. Le script [install.sh](./install.sh) installe le jeu de paquets d'une variante et vérifie les sommes de contrôle avant d'installer quoi que ce soit :
+Chaque release publie des paquets Debian et Arch (`tezcatl`, `tezcatl-server`, les plugins, `tezcatl-dokku`, `tezcatl-itztli`) et une image de conteneur, `ghcr.io/bornholm/tezcatl`. Le script [install.sh](./install.sh) installe le jeu de paquets d'une variante et vérifie les sommes de contrôle avant d'installer quoi que ce soit :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sh -s -- --variant dokku
@@ -116,6 +118,8 @@ Sur une machine systemd, le plugin `journald` s'ajoute à la variante choisie, q
 ```bash
 systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald.json
 ```
+
+L'interface web s'ajoute de la même façon à n'importe quelle variante, avec `--itztli` : elle aussi est un choix, pas un défaut, parce qu'elle expose le serveur en HTTP derrière un mot de passe ou un fournisseur d'identité ([guide](./docs/itztli.md)).
 
 Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
 

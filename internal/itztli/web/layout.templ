@@ -1,0 +1,64 @@
+package web
+
+templ page(title string) {
+	<!DOCTYPE html>
+	<html lang="fr">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='4.5' y='4.5' width='7' height='7' fill='%23d9925a' transform='rotate(45 8 8)'/%3E%3C/svg%3E"/>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+			<link rel="stylesheet" href="/static/itztli.css"/>
+			<script src="/static/htmx.min.js" defer></script>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+// Shell is the authenticated frame: sidebar navigation on desktop, a
+// top bar on mobile (the stylesheet handles the switch).
+templ Shell(nav Nav) {
+	@page("itztli") {
+		<div class="shell">
+			<nav class="nav">
+				<div class="brand">
+					<span class="brand-name">itztli</span>
+					<span class="brand-sub">{ nav.Version }</span>
+				</div>
+				<div class="nav-items">
+					<a class={ "nav-item", templ.KV("active", nav.Active == "incidents") } href="/">Incidents</a>
+					<a class={ "nav-item", templ.KV("active", nav.Active == "templates") } href="/templates">Templates</a>
+					<a class={ "nav-item", templ.KV("active", nav.Active == "metrics") } href="/metrics">Métriques</a>
+				</div>
+				<div class="nav-foot">
+					<div class="nav-meta">
+						{ nav.Target }
+						<br/>
+						{ nav.WindowLabel() }
+					</div>
+					<form method="post" action="/logout">
+						<button class="btn-link" type="submit">Se déconnecter</button>
+					</form>
+				</div>
+			</nav>
+			<main class="main">
+				{ children... }
+			</main>
+		</div>
+	}
+}
+
+// ErrorPage tells the truth when the tezcatl server is unreachable.
+templ ErrorPage(nav Nav, detail string) {
+	@Shell(nav) {
+		<div class="error-box">
+			<p>Le serveur tezcatl est injoignable.</p>
+			<p class="err-detail">{ detail }</p>
+		</div>
+	}
+}

@@ -1,0 +1,91 @@
+package web
+
+import "fmt"
+
+// IncidentsPage is the home dashboard: the latest incidents first.
+templ IncidentsPage(nav Nav, context string, cards []IncidentCard, nextOffset int, more bool, empty *EmptyState) {
+	@Shell(nav) {
+		<h1 class="page-title">Derniers incidents</h1>
+		<p class="page-context">{ context }</p>
+		if empty != nil {
+			@EmptyStateView(*empty)
+		} else {
+			<div class="cards" id="incident-cards">
+				@IncidentBatch(cards, nextOffset, more)
+			</div>
+		}
+	}
+}
+
+// IncidentBatch is one page of cards plus, when the list goes on, the
+// button that fetches the next batch in place.
+templ IncidentBatch(cards []IncidentCard, nextOffset int, more bool) {
+	for _, card := range cards {
+		@IncidentCardView(card)
+	}
+	if more {
+		<button
+			class="btn-ghost"
+			hx-get={ fmt.Sprintf("/incidents/rows?offset=%d", nextOffset) }
+			hx-target="this"
+			hx-swap="outerHTML"
+		>Charger les incidents plus anciens</button>
+	}
+}
+
+templ IncidentCardView(card IncidentCard) {
+	<a class="card" href={ "/incidents/" + card.ID }>
+		<div class="card-head">
+			<div class="card-title">{ card.Title }</div>
+			@SeverityChip(card.Severity)
+		</div>
+		<div class="card-trigger">
+			<div class="trigger-kind">{ card.TriggerKind }</div>
+			<div class="trigger-text">
+				@MaskedText(card.TriggerParts)
+			</div>
+		</div>
+		<div class="card-meta">
+			<span class="card-services">{ card.Services }</span>
+			<span>{ card.RelPeriod }</span>
+			<span>{ card.EventsLabel }</span>
+			if card.ChangeLabel != "" {
+				<span class="card-change"><span class="dot"></span>{ card.ChangeLabel }</span>
+			}
+		</div>
+	</a>
+}
+
+templ SeverityChip(severity Severity) {
+	<div class={ "sev", "sev-" + severity.Class }>
+		<span class="sev-glyph">{ severity.Glyph }</span>
+		<span class="sev-word">{ severity.Word }</span>
+	</div>
+}
+
+// MaskedText renders a template with its placeholders highlighted, so
+// nobody reads a mask as a value.
+templ MaskedText(parts []Part) {
+	for _, part := range parts {
+		if part.Mask {
+			<span class="mask">{ part.Text }</span>
+		} else {
+			<span>{ part.Text }</span>
+		}
+	}
+}
+
+// EmptyStateView says what "no incident" means and, honestly, what it
+// does not.
+templ EmptyStateView(empty EmptyState) {
+	<div class="empty">
+		<p class="empty-title">Aucun incident sur la période.</p>
+		<p class="empty-text">
+			Cela signifie que rien ne s'écarte de ce que le serveur a appris.
+			Ce n'est pas une garantie que les services vont bien : une panne
+			uniforme, une série en apprentissage ou un motif marqué comme
+			ignoré ne produisent pas d'écart.
+		</p>
+		<p class="empty-stats">{ empty.StatsLabel() }</p>
+	</div>
+}

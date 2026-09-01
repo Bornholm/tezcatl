@@ -1,0 +1,30 @@
+package web
+
+// LoginPage shows exactly one way in: the mode is a server-side
+// configuration, never a user choice.
+templ LoginPage(login Login) {
+	@page("itztli — connexion") {
+		<div class="login">
+			<div class="login-box">
+				<div class="brand">
+					<span class="brand-name">itztli</span>
+					<span class="brand-sub">tezcatl</span>
+				</div>
+				if login.Error != "" {
+					<p class="login-error">{ login.Error }</p>
+				}
+				if login.Mode == "oidc" {
+					<a class="btn-oidc" href="/oidc/start">{ login.ButtonLabel }</a>
+					<p class="login-note">Le serveur est configuré en OIDC. Aucun autre mode d'accès n'est proposé.</p>
+				} else {
+					<form class="login-form" method="post" action="/login">
+						<label for="pw">Mot de passe</label>
+						<input id="pw" name="password" type="password" autofocus autocomplete="current-password"/>
+						<button class="btn-primary" type="submit">Entrer</button>
+					</form>
+					<p class="login-note">Un seul compte, défini dans la configuration du serveur. Pas d'identifiant à saisir.</p>
+				}
+			</div>
+		</div>
+	}
+}

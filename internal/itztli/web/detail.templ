@@ -1,0 +1,192 @@
+package web
+
+import "fmt"
+
+// DetailPage tells one incident's story: trigger, correlated changes,
+// evidence, then the raw material in folds. explainModel is empty when
+// no LLM is configured, and the Explain button simply does not exist.
+templ DetailPage(nav Nav, detail IncidentDetail, explainModel string) {
+	@Shell(nav) {
+		<a class="back" href="/">← Incidents</a>
+		<div class="detail-head">
+			<h1 class="detail-title">{ detail.Title }</h1>
+			<div id="explain-btn-slot">
+				if explainModel != "" {
+					@ExplainButton(detail.ID)
+				}
+			</div>
+		</div>
+		<div class="detail-meta">
+			@SeverityChip(detail.Severity)
+			<span class="meta-mono">{ detail.ConfLabel }</span>
+			<span class="meta-mono">{ detail.AbsPeriod }</span>
+			<span class="meta-mono">{ detail.Services }</span>
+		</div>
+		<div id="explain-zone">
+			if explainModel != "" {
+				@explainLoading(explainModel)
+			}
+		</div>
+		<section class="sec">
+			<h2 class="sec-title">Déclencheur</h2>
+			<p class="trigger-summary">{ detail.TriggerSummary }</p>
+			<p class="trigger-meta">{ detail.TriggerTime } · { detail.TriggerKind }</p>
+			<p class="sec-note">Premier dans le temps ne veut pas dire cause. Le serveur ne connaît pas la causalité.</p>
+		</section>
+		if len(detail.Changes) > 0 {
+			<section class="sec">
+				<h2 class="sec-title">Changements corrélés</h2>
+				<div class="changes">
+					for _, change := range detail.Changes {
+						<div class="change">
+							<div class="change-line">
+								<span>{ change.Type }</span>
+								if change.Version != "" {
+									<span class="change-version">{ change.Version }</span>
+								}
+								<span class="change-delta">{ change.Delta }</span>
+							</div>
+						</div>
+					}
+				</div>
+				<p class="sec-note">
+					Coïncidence dans le temps, et rien d'autre. Le rapprochement est
+					fait sur l'horodatage ; aucun lien n'a été établi entre
+					if len(detail.Changes) > 1 {
+						ces changements
+					} else {
+						ce changement
+					}
+					et l'anomalie.
+				</p>
+			</section>
+		}
+		<section class="sec">
+			<h2 class="sec-title">Preuves</h2>
+			<div class="evidence">
+				for _, evidence := range detail.Evidence {
+					<div class="evidence-item">
+						<div class="evidence-meta">
+							<span class="evidence-kind">{ evidence.Kind }</span>
+							<span class="evidence-src">{ evidence.Source }</span>
+							<span class="evidence-src">{ evidence.CountLabel }</span>
+							<span class="evidence-dim">{ evidence.Span }</span>
+							<span class="evidence-dim">score max { evidence.MaxScore }</span>
+						</div>
+						<p class="evidence-summary">{ evidence.Summary }</p>
+					</div>
+				}
+			</div>
+		</section>
+		if len(detail.ContextLines) > 0 {
+			<details class="fold">
+				<summary><span class="caret"></span>Contexte · { Plural(len(detail.ContextLines), "ligne") } de log autour du déclencheur</summary>
+				<div class="ctx">
+					for _, line := range detail.ContextLines {
+						<div class="ctx-line">{ line }</div>
+					}
+				</div>
+			</details>
+		}
+		<details class="fold">
+			<summary><span class="caret"></span>Événements sous-jacents · { fmt.Sprint(len(detail.Events)) }</summary>
+			<div class="events">
+				for _, event := range detail.Events {
+					<div class="event">
+						<span class="event-time">{ event.Time }</span>
+						<span class={ "event-kind", "fg-" + event.Class }>{ event.Kind }</span>
+						<span class="event-summary">{ event.Summary }</span>
+					</div>
+				}
+			</div>
+		</details>
+	}
+}
+
+templ ExplainButton(id string) {
+	<button
+		class="btn-accent"
+		hx-post={ "/incidents/" + id + "/explain" }
+		hx-target="#explain-zone"
+		hx-swap="innerHTML"
+		hx-indicator="#explain-loading"
+		hx-disabled-elt="this"
+	>Explain</button>
+}
+
+// explainLoading is the panel shown while the model is answering. It
+// sits hidden in the explain zone and htmx reveals it during the
+// request, so the wait is visible without any script of our own.
+templ explainLoading(model string) {
+	<div class="explain htmx-indicator" id="explain-loading">
+		<div class="explain-head">
+			<div class="explain-tag">
+				<span class="diamond"></span>
+				<span class="explain-label">Explication générée</span>
+			</div>
+		</div>
+		<div class="explain-loading">
+			<span class="pulse"></span>
+			{ model } · rapport envoyé, réponse en cours
+		</div>
+	</div>
+}
+
+// ExplainPanel is the model's answer (or its failure), with the
+// actions to regenerate or dismiss, a fresh hidden loading panel for
+// the next request, and an out-of-band swap hiding the header button.
+templ ExplainPanel(view ExplainView) {
+	<div class="explain">
+		<div class="explain-head">
+			<div class="explain-tag">
+				<span class="diamond"></span>
+				<span class="explain-label">Explication générée</span>
+			</div>
+			<div class="explain-actions">
+				<button
+					class="btn-small"
+					hx-post={ "/incidents/" + view.IncidentID + "/explain" }
+					hx-target="#explain-zone"
+					hx-swap="innerHTML"
+					hx-indicator="#explain-loading"
+					hx-disabled-elt="this"
+				>Régénérer</button>
+				<button
+					class="btn-small"
+					hx-get={ "/incidents/" + view.IncidentID + "/explain/reset" }
+					hx-target="#explain-zone"
+					hx-swap="innerHTML"
+				>Rejeter</button>
+			</div>
+		</div>
+		if view.Error != "" {
+			<div class="explain-error">
+				<p>Le modèle est injoignable.</p>
+				<p class="muted">
+					Vérifiez, dans le YAML d'itztli : la clé
+					<span class="code-inline">genai.provider</span>, la validité de
+					<span class="code-inline">genai.api_key</span>, et l'accès réseau
+					sortant vers le fournisseur.
+				</p>
+				<p class="err-detail">{ view.Error }</p>
+			</div>
+		} else {
+			<p class="explain-text">{ view.Text }</p>
+			<p class="explain-disclaimer">
+				Interprétation produite par un modèle de langage à partir du
+				rapport de l'incident. Elle peut se tromper et n'est pas conservée.
+			</p>
+		}
+	</div>
+	@explainLoading(view.Model)
+	<div id="explain-btn-slot" hx-swap-oob="true"></div>
+}
+
+// ExplainReset restores the idle state: the hidden loading panel in
+// the zone, and the Explain button back in the header.
+templ ExplainReset(view ExplainView) {
+	@explainLoading(view.Model)
+	<div id="explain-btn-slot" hx-swap-oob="true">
+		@ExplainButton(view.IncidentID)
+	</div>
+}
