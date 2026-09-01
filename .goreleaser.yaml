@@ -24,6 +24,20 @@ builds:
     ldflags:
       - -w -s -X 'github.com/bornholm/tezcatl/internal/build.ShortVersion={{ .Version }}' -X 'github.com/bornholm/tezcatl/internal/build.LongVersion={{ .Version }} ({{ .Commit }})'
 
+  # Itztli : l'interface web de consultation, binaire séparé parce
+  # qu'optionnel — le serveur fonctionne à l'identique sans lui.
+  - id: itztli
+    env:
+      - CGO_ENABLED=0
+    targets: [go_first_class]
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    dir: ./cmd/itztli
+    binary: itztli
+    flags:
+      - -trimpath
+    ldflags:
+      - -w -s -X 'github.com/bornholm/tezcatl/internal/build.ShortVersion={{ .Version }}' -X 'github.com/bornholm/tezcatl/internal/build.LongVersion={{ .Version }} ({{ .Commit }})'
+
   # Plugin source « host » : module Go séparé (plugins/host), binaire
   # nommé selon la convention tezcatl-source-<name>.
   - id: tezcatl-source-host
@@ -107,6 +121,16 @@ archives:
       - README.md
       - misc/config/standalone.yaml
       - misc/config/server.yaml
+
+  - id: itztli
+    ids: [itztli]
+    name_template: "itztli_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - misc/config/itztli.yaml
 
   # Archive séparée pour le plugin, au format attendu par
   # `tezcatl plugin install` (<name>_<version>_<os>_<arch>.tar.gz).
@@ -219,6 +243,41 @@ nfpms:
       postinstall: misc/packaging/postinstall.sh
       preremove: misc/packaging/preremove.sh
       postremove: misc/packaging/postremove.sh
+
+  # Itztli : l'interface web, en paquet optionnel. Unité systemd,
+  # configuration /etc/tezcatl/itztli.yaml et utilisateur dédié.
+  - id: tezcatl-itztli
+    package_name: tezcatl-itztli
+    ids: [itztli]
+    formats:
+      - deb
+      - archlinux
+    vendor: bornholm
+    homepage: https://github.com/bornholm/tezcatl
+    maintainer: William Petit <will.arcanadelirium@gmail.com>
+    description: |-
+      Tezcatl - interface web itztli.
+      Consultation des incidents, marquage des templates et des
+      metriques d'un serveur tezcatl, explication d'incident par LLM en
+      option. Authentification par mot de passe local ou OIDC.
+    bindir: /usr/bin
+    contents:
+      - src: misc/packaging/tezcatl-itztli.service
+        dst: /usr/lib/systemd/system/tezcatl-itztli.service
+        file_info: { mode: 0644 }
+      - src: misc/packaging/itztli.yaml
+        dst: /etc/tezcatl/itztli.yaml
+        type: config|noreplace
+        file_info: { mode: 0644 }
+      - src: misc/packaging/itztli.env
+        dst: /etc/tezcatl/itztli.env
+        type: config|noreplace
+        file_info: { mode: 0640 }
+      - src: misc/config/itztli.yaml
+        dst: /usr/share/doc/tezcatl/itztli.yaml
+    scripts:
+      postinstall: misc/packaging/itztli-postinstall.sh
+      preremove: misc/packaging/itztli-preremove.sh
 
   # Plugin source host : le binaire seul, installé dans le répertoire de
   # plugins standard.

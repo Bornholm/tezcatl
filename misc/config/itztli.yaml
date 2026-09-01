@@ -1,0 +1,79 @@
+# Profil commenté d'itztli, l'interface web de consultation d'un
+# serveur tezcatl.
+#
+#   itztli --config itztli.yaml
+#
+# Itztli est un pur client : tout ce qu'il affiche vient de l'API
+# d'administration du serveur (incidents assemblés à la volée,
+# templates, métriques), rien n'est stocké de son côté. Les valeurs
+# ci-dessous sont les défauts ; les ${VAR} sont remplacées par les
+# variables d'environnement au chargement.
+
+server:
+  # Adresse d'écoute HTTP. Itztli ne termine pas le TLS : exposez-le
+  # derrière un reverse proxy (Caddy, nginx…) et gardez une écoute
+  # locale.
+  listen: 127.0.0.1:8484
+
+  # URL publique vue par les navigateurs. Obligatoire en mode OIDC
+  # (l'URL de retour en dérive) ; recommandée dès qu'un proxy est
+  # devant (les cookies passent en Secure si elle est en https).
+  # base_url: https://itztli.example.com
+
+tezcatl:
+  # Le serveur tezcatl à consulter : unix:///chemin, tcp://hôte:port
+  # ou tls://hôte:port.
+  target: tcp://127.0.0.1:4242
+  # CA PEM vérifiant une cible tls:// auto-signée (vide : les racines
+  # système).
+  # tls_ca: /etc/tezcatl/tls/ca.pem
+
+auth:
+  # Qui peut regarder : "password" (compte local unique) ou "oidc".
+  mode: password
+  # Durée d'une session avant de devoir se reconnecter.
+  session_ttl: 12h
+
+  password:
+    # Le mot de passe du compte unique. Passez-le en variable
+    # d'environnement plutôt qu'en clair dans ce fichier.
+    password: ${ITZTLI_PASSWORD}
+    # Ou son empreinte bcrypt, prioritaire sur password :
+    #   htpasswd -bnBC 10 "" 'secret' | tr -d ':\n'
+    # password_hash: $2y$10$...
+
+  # oidc:
+  #   issuer: https://keycloak.example.com/realms/main
+  #   client_id: itztli
+  #   client_secret: ${ITZTLI_OIDC_SECRET}
+  #   # openid est toujours demandé ; scopes supplémentaires ici.
+  #   scopes: [profile]
+  #   # Texte du bouton de connexion (défaut : « Se connecter via
+  #   # <hôte de l'issuer> »).
+  #   button_label: Se connecter avec Keycloak
+
+incidents:
+  # Fenêtre du tableau de bord. La rétention d'événements du serveur
+  # (360h par défaut) la borne en pratique.
+  window: 360h
+  # Regroupement des événements en incidents, mêmes réglages que
+  # `tezcatl incidents` (les défauts du serveur s'appliquent si absents).
+  # gap: 30m
+  # max_duration: 1h
+  # co_occurrence: 30s
+  # Durée de réutilisation d'une lecture du journal d'événements avant
+  # de redemander au serveur.
+  cache_ttl: 10s
+  # Incidents affichés avant le bouton « Charger les plus anciens ».
+  page_size: 20
+
+# Le bouton « Explain » envoie le rapport auto-descriptif d'un incident
+# à un LLM et affiche sa lecture. Section absente ou provider vide :
+# le bouton n'existe pas. L'explication n'est jamais conservée.
+# genai:
+#   # openai, mistral ou openrouter.
+#   provider: mistral
+#   model: mistral-large-latest
+#   api_key: ${ITZTLI_GENAI_API_KEY}
+#   # Endpoint compatible OpenAI (passerelle locale, vLLM…) :
+#   # base_url: http://127.0.0.1:8000/v1

@@ -1,0 +1,27 @@
+# Configuration d'itztli installée par le paquet tezcatl-itztli.
+# Profil commenté complet : /usr/share/doc/tezcatl/itztli.yaml.
+
+server:
+  # Itztli parle HTTP en clair : exposez-le derrière un reverse proxy
+  # qui termine le TLS, et renseignez base_url avec l'URL publique.
+  listen: 127.0.0.1:8484
+  # base_url: https://itztli.example.com
+
+tezcatl:
+  # Le serveur tezcatl à consulter (celui du paquet tezcatl-server
+  # écoute aussi sur unix:///run/tezcatl/tezcatl.sock).
+  target: tcp://127.0.0.1:4242
+
+auth:
+  # Un seul compte local : définissez ITZTLI_PASSWORD dans
+  # /etc/tezcatl/itztli.env. Pour l'OIDC, voir le profil commenté.
+  mode: password
+  password:
+    password: ${ITZTLI_PASSWORD}
+
+# Pour activer le bouton « Explain » (lecture d'un incident par un
+# LLM), configurez un fournisseur et sa clé dans itztli.env :
+# genai:
+#   provider: mistral
+#   model: mistral-large-latest
+#   api_key: ${ITZTLI_GENAI_API_KEY}

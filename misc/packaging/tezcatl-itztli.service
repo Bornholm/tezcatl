@@ -1,0 +1,28 @@
+[Unit]
+Description=Itztli, web UI for the tezcatl server
+Documentation=https://github.com/bornholm/tezcatl
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=itztli
+Group=itztli
+EnvironmentFile=-/etc/tezcatl/itztli.env
+ExecStart=/usr/bin/itztli --config /etc/tezcatl/itztli.yaml
+Restart=on-failure
+RestartSec=5s
+
+# Durcissement : itztli ne touche à rien localement, il parle au
+# serveur tezcatl et sert du HTTP.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

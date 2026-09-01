@@ -17,6 +17,7 @@
 #   --version <tag>  TEZCATL_VERSION    tag de release, ex. v0.7.0 (défaut : latest)
 #   --force          TEZCATL_FORCE=1    réinstalle même si la version est déjà là
 #   --no-journald    TEZCATL_JOURNALD=0 n'installe pas le plugin journald
+#   --itztli         TEZCATL_ITZTLI=1   ajoute l'interface web itztli
 #   --download-only                     télécharge et vérifie sans installer
 #                    TEZCATL_REPO       dépôt GitHub (défaut : bornholm/tezcatl)
 #                    TEZCATL_PACKAGES   liste de paquets explicite (remplace la variante)
@@ -29,6 +30,7 @@ VERSION="${TEZCATL_VERSION:-}"
 PACKAGES="${TEZCATL_PACKAGES:-}"
 FORCE="${TEZCATL_FORCE:-0}"
 JOURNALD="${TEZCATL_JOURNALD:-1}"
+ITZTLI="${TEZCATL_ITZTLI:-0}"
 WITH_JOURNALD=0
 DOWNLOAD_ONLY=0
 
@@ -40,7 +42,7 @@ Installe ou met à jour tezcatl depuis les GitHub Releases.
 
 Variantes : client (défaut), server, docker, dokku, kubernetes.
 Options : --variant <v>, --version <tag>, --force, --no-journald,
-          --download-only.
+          --itztli, --download-only.
 
 Sur une machine systemd, le plugin journald est ajouté au jeu de
 paquets ; son unité reste à activer.
@@ -72,6 +74,10 @@ while [ $# -gt 0 ]; do
         ;;
     --no-journald)
         JOURNALD=0
+        shift
+        ;;
+    --itztli)
+        ITZTLI=1
         shift
         ;;
     --download-only)
@@ -169,6 +175,12 @@ if [ -z "$PACKAGES" ]; then
     if [ "$JOURNALD" = 1 ] && [ -d /run/systemd/system ]; then
         PACKAGES="$PACKAGES tezcatl-plugin-journald"
         WITH_JOURNALD=1
+    fi
+
+    # L'interface web est un choix, pas un défaut : elle expose le
+    # serveur en HTTP et demande un mot de passe ou un IdP.
+    if [ "$ITZTLI" = 1 ]; then
+        PACKAGES="$PACKAGES tezcatl-itztli"
     fi
 fi
 
@@ -304,5 +316,9 @@ esac
 if [ "$WITH_JOURNALD" = 1 ]; then
     echo "  systemctl enable --now tezcatl-journald      # ingérer le journal systemd"
     echo "  (réglages dans /etc/tezcatl/journald.json)"
+fi
+if [ "$ITZTLI" = 1 ]; then
+    echo "  définir ITZTLI_PASSWORD dans /etc/tezcatl/itztli.env puis :"
+    echo "  systemctl enable --now tezcatl-itztli        # interface web (http://127.0.0.1:8484)"
 fi
 echo "  tezcatl top                                   # inspecter ce qui est appris"
