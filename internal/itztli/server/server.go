@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/a-h/templ"
+	"github.com/bornholm/tezcatl/internal/core/incident"
 	itzclient "github.com/bornholm/tezcatl/internal/itztli/client"
 	itzconfig "github.com/bornholm/tezcatl/internal/itztli/config"
 	"github.com/bornholm/tezcatl/internal/itztli/explain"
@@ -26,6 +27,10 @@ const (
 	templatePageSize = 50
 	// explainTimeout bounds one LLM round trip.
 	explainTimeout = 2 * time.Minute
+	// explainRetention is how long a finished explanation stays
+	// available, so a reload or a second reader finds the answer
+	// instead of paying for it again.
+	explainRetention = 30 * time.Minute
 )
 
 type Server struct {
@@ -33,6 +38,7 @@ type Server struct {
 	client    *itzclient.Client
 	explainer *explain.Explainer
 	sessions  *sessionStore
+	explains  *explainJobs
 	oidc      *oidcAuth
 	version   string
 	logger    *slog.Logger
@@ -44,6 +50,7 @@ func New(cfg *itzconfig.Config, client *itzclient.Client, explainer *explain.Exp
 		client:    client,
 		explainer: explainer,
 		sessions:  newSessionStore(cfg.Auth.SessionTTL.AsDuration()),
+		explains:  newExplainJobs(explainRetention),
 		version:   version,
 		logger:    logger,
 	}
@@ -73,6 +80,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /incidents/rows", s.authed(s.handleIncidentRows))
 	mux.HandleFunc("GET /incidents/{id}", s.authed(s.handleIncidentDetail))
 	mux.HandleFunc("POST /incidents/{id}/explain", s.authed(s.handleExplain))
+	mux.HandleFunc("GET /incidents/{id}/explain/status", s.authed(s.handleExplainStatus))
 	mux.HandleFunc("GET /incidents/{id}/explain/reset", s.authed(s.handleExplainReset))
 	mux.HandleFunc("GET /templates", s.authed(s.handleTemplates))
 	mux.HandleFunc("GET /templates/rows", s.authed(s.handleTemplateRows))
@@ -333,53 +341,93 @@ func (s *Server) handleIncidentDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model := ""
-	if s.explainer != nil {
-		model = s.explainer.Model()
-	}
-
-	s.render(w, r, web.DetailPage(s.nav("incidents"), web.NewIncidentDetail(entry), model))
+	s.render(w, r, web.DetailPage(s.nav("incidents"), web.NewIncidentDetail(entry), s.explainView(r.PathValue("id"))))
 }
 
+// explainView reads the current state of an incident's explanation.
+func (s *Server) explainView(incidentID string) web.ExplainView {
+	view := web.ExplainView{IncidentID: incidentID, State: web.ExplainIdle}
+
+	if s.explainer == nil {
+		return view
+	}
+
+	view.Model = s.explainer.Model()
+
+	job, exists := s.explains.get(incidentID)
+	switch {
+	case !exists:
+	case !job.Done:
+		view.State = web.ExplainPendingState
+	default:
+		view.State = web.ExplainDone
+		view.Text = job.Text
+		view.Error = job.Err
+	}
+
+	return view
+}
+
+// handleExplain starts a generation and answers immediately with the
+// pending panel. The model's own pace is nobody's HTTP timeout: the
+// work runs past this request and the browser polls for it.
 func (s *Server) handleExplain(w http.ResponseWriter, r *http.Request) {
-	view := web.ExplainView{IncidentID: r.PathValue("id")}
 	if s.explainer == nil {
 		http.NotFound(w, r)
 
 		return
 	}
 
-	view.Model = s.explainer.Model()
+	incidentID := r.PathValue("id")
 
-	entry, found, err := s.client.Incident(r.Context(), view.IncidentID)
-	switch {
-	case err != nil:
-		view.Error = err.Error()
-	case !found:
-		view.Error = "l'incident n'est plus dans la fenêtre du serveur"
-	default:
-		ctx, cancel := context.WithTimeout(r.Context(), explainTimeout)
-		defer cancel()
-
-		text, err := s.explainer.Explain(ctx, entry)
-		if err != nil {
-			s.logger.Error("explain failed", "incident", view.IncidentID, "error", err)
-			view.Error = err.Error()
-		} else {
-			view.Text = text
+	if s.explains.start(incidentID) {
+		entry, found, err := s.client.Incident(r.Context(), incidentID)
+		switch {
+		case err != nil:
+			s.explains.finish(incidentID, "", err.Error())
+		case !found:
+			s.explains.finish(incidentID, "", "l'incident n'est plus dans la fenêtre du serveur")
+		default:
+			go s.runExplain(incidentID, entry)
 		}
 	}
 
-	s.render(w, r, web.ExplainPanel(view))
+	view := s.explainView(incidentID)
+
+	s.render(w, r, web.ExplainZone(view), web.ExplainButtonSlot(view, true))
+}
+
+// runExplain generates outside any request: its context is the
+// server's, not the browser's, so a reader who closes the tab does not
+// cancel a call already paid for.
+func (s *Server) runExplain(incidentID string, entry incident.Incident) {
+	ctx, cancel := context.WithTimeout(context.Background(), explainTimeout)
+	defer cancel()
+
+	text, err := s.explainer.Explain(ctx, entry)
+	if err != nil {
+		s.logger.Error("explain failed", "incident", incidentID, "error", err)
+		s.explains.finish(incidentID, "", err.Error())
+
+		return
+	}
+
+	s.explains.finish(incidentID, text, "")
+}
+
+// handleExplainStatus answers the pending panel's poll.
+func (s *Server) handleExplainStatus(w http.ResponseWriter, r *http.Request) {
+	s.render(w, r, web.ExplainZone(s.explainView(r.PathValue("id"))))
 }
 
 func (s *Server) handleExplainReset(w http.ResponseWriter, r *http.Request) {
-	view := web.ExplainView{IncidentID: r.PathValue("id")}
-	if s.explainer != nil {
-		view.Model = s.explainer.Model()
-	}
+	incidentID := r.PathValue("id")
 
-	s.render(w, r, web.ExplainReset(view))
+	s.explains.forget(incidentID)
+
+	view := s.explainView(incidentID)
+
+	s.render(w, r, web.ExplainZone(view), web.ExplainButtonSlot(view, true))
 }
 
 // --- Templates -----------------------------------------------------------

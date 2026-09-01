@@ -40,7 +40,13 @@ func New(ctx context.Context, cfg itzconfig.GenAI) (*Explainer, error) {
 		return nil, errors.WithStack(err)
 	}
 
-	return &Explainer{client: client, model: cfg.Model}, nil
+	return NewWithClient(client, cfg.Model), nil
+}
+
+// NewWithClient builds an explainer around an already-built chat
+// completion client.
+func NewWithClient(client llm.ChatCompletionClient, model string) *Explainer {
+	return &Explainer{client: client, model: model}
 }
 
 // chatCompletionOption maps the YAML provider name to the provider's

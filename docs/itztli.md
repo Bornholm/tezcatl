@@ -123,10 +123,16 @@ genai:
 ```
 
 `base_url` pointe vers n'importe quel endpoint compatible OpenAI, y
-compris un modèle local. L'explication est produite à la demande,
-affichée avec son avertissement, et jamais conservée : c'est une
-lecture du rapport, pas une donnée. Sans section `genai`, le bouton
-n'existe pas.
+compris un modèle local. Sans section `genai`, le bouton n'existe pas.
+
+La génération tourne côté serveur, hors de la requête qui l'a lancée,
+et la page interroge le résultat toutes les deux secondes. Un modèle
+qui met trois minutes aboutit donc quand même derrière un reverse
+proxy, dont le délai d'attente vaut souvent soixante secondes : rien à
+régler de ce côté. Fermer l'onglet n'annule pas un appel déjà payé, et
+y revenir retrouve la réponse. Elle reste affichée avec son
+avertissement, conservée une demi-heure en mémoire, puis oubliée :
+c'est une lecture du rapport, pas une donnée.
 
 ## Ce qu'itztli ne fait pas
 

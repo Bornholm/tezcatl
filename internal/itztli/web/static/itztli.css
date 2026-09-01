@@ -41,10 +41,6 @@ input, button { font-family: inherit; }
 @keyframes itz-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.9; } }
 @keyframes itz-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-/* htmx : l'indicateur de chargement n'apparaît que pendant la requête. */
-.htmx-indicator { display: none; }
-.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: block; }
-
 /* --- Connexion ----------------------------------------------------------- */
 
 .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px; }

@@ -231,12 +231,21 @@ func contextLines(event model.Event) []string {
 type ExplainView struct {
 	IncidentID string
 	Model      string
-	// Text is the model's reading; empty with Error empty means the
-	// initial state (just the button).
+	// State is "idle" (nothing asked yet), "pending" (the model is
+	// answering) or "done".
+	State string
+	// Text is the model's reading, once done.
 	Text string
 	// Error is the failure to reach or use the model.
 	Error string
 }
+
+// Explain state names, matching the job the server runs.
+const (
+	ExplainIdle         = "idle"
+	ExplainPendingState = "pending"
+	ExplainDone         = "done"
+)
 
 // TemplateRow is one learned template with its marking actions.
 type TemplateRow struct {
