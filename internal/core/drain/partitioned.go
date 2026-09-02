@@ -3,6 +3,7 @@ package drain
 import (
 	"encoding/json"
 	"maps"
+	"path"
 	"sort"
 	"sync"
 
@@ -49,6 +50,33 @@ func (p *PartitionedMiner) Partition(name string) (*TemplateMiner, error) {
 	p.partitions[name] = miner
 
 	return miner, nil
+}
+
+// Forget drops every partition matching a path.Match pattern, with
+// everything mined in it. Learning is not always something to keep:
+// units that never come back, or lines ingested by mistake, leave
+// templates that will never match again and that no marking can
+// remove. Returns the partitions dropped.
+func (p *PartitionedMiner) Forget(pattern string) ([]string, error) {
+	if _, err := path.Match(pattern, ""); err != nil {
+		return nil, errors.Wrapf(err, "malformed pattern %q", pattern)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	dropped := []string{}
+
+	for name := range p.partitions {
+		if matched, _ := path.Match(pattern, name); matched {
+			delete(p.partitions, name)
+			dropped = append(dropped, name)
+		}
+	}
+
+	sort.Strings(dropped)
+
+	return dropped, nil
 }
 
 func (p *PartitionedMiner) Partitions() []string {

@@ -334,45 +334,71 @@ func templatesFromProto(infos []*tezcatlv1.TemplateInfo) []admin.TemplateInfo {
 
 // offlineService rebuilds the miner and detector from a persisted state
 // directory, without a running process.
+// offlineRuntime is a stopped server's state, opened for reading or
+// editing: the same objects the running server holds, restored from
+// disk.
+type offlineRuntime struct {
+	service        *admin.Service
+	miner          *drain.PartitionedMiner
+	logDetector    *detect.LogDetector
+	metricDetector *detect.MetricDetector
+	store          port.StateStore
+}
+
 func offlineService(ctx context.Context, configPath string, stateDir string) (*admin.Service, *detect.LogDetector, *detect.MetricDetector, port.StateStore, error) {
-	cfg, err := config.Load(configPath)
+	runtime, err := openOffline(ctx, configPath, stateDir)
 	if err != nil {
 		return nil, nil, nil, nil, errors.WithStack(err)
 	}
 
+	return runtime.service, runtime.logDetector, runtime.metricDetector, runtime.store, nil
+}
+
+func openOffline(ctx context.Context, configPath string, stateDir string) (*offlineRuntime, error) {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
 	store, err := fs.NewStateStore(stateDir)
 	if err != nil {
-		return nil, nil, nil, nil, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	miner := drain.NewPartitionedMiner(&cfg.Logs.Drain)
 	if data, err := store.Load(ctx, "drain"); err == nil {
 		if err := miner.Restore(data); err != nil {
-			return nil, nil, nil, nil, errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, nil, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	detector := detect.NewLogDetector(cfg.LogDetectionConfig())
 	if data, err := store.Load(ctx, detector.SnapshotKey()); err == nil {
 		if err := detector.Restore(data); err != nil {
-			return nil, nil, nil, nil, errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, nil, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
 	metricDetector := detect.NewMetricDetector(cfg.MetricDetectionConfig())
 	if data, err := store.Load(ctx, metricDetector.SnapshotKey()); err == nil {
 		if err := metricDetector.Restore(data); err != nil {
-			return nil, nil, nil, nil, errors.WithStack(err)
+			return nil, errors.WithStack(err)
 		}
 	} else if !errors.Is(err, port.ErrStateNotFound) {
-		return nil, nil, nil, nil, errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 
-	return admin.NewService(miner, detector, metricDetector), detector, metricDetector, store, nil
+	return &offlineRuntime{
+		service:        admin.NewService(miner, detector, metricDetector),
+		miner:          miner,
+		logDetector:    detector,
+		metricDetector: metricDetector,
+		store:          store,
+	}, nil
 }
 
 func markOffline(ctx context.Context, configPath string, stateDir string, template string, marking detect.Marking) error {

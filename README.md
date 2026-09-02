@@ -61,6 +61,12 @@ tezcatl mark --metric "docker.memory.used_percent" --as ignore  # ou une clé de
 tezcatl top
 ```
 
+```bash
+# Oublier ce qui a été appris sur des partitions qui ne reviendront pas
+tezcatl forget --dry-run 'production/session-*'   # ce que ça toucherait
+tezcatl forget 'production/session-*'             # puis pour de vrai
+```
+
 Les marquages `normal`, `ignore` et `symptomatic` prennent effet tout de suite et sont persistés avec l'état. La détection apprend une baseline par heure de la journée (`seasonality: hourly`), donc un cron nocturne ou un pic de trafic quotidien ne déclenche rien, alors que le même pic à 3 h du matin est signalé. Le transport accepte `unix://`, `tcp://` et `tls://`, avec certificat côté serveur et `--tls-ca` côté client.
 
 Tezcatl parse les logs JSON tout seul : il extrait le message, le niveau et le timestamp, puis fait porter la découverte de templates sur le message plutôt que sur l'enveloppe. Il reconnaît des formes, pas des produits, et cherche les noms de clés que les journaliseurs JSON ont en commun. Un flux qui nomme les siennes autrement, comme `journalctl -o json`, se déclare en trois lignes dans `logs.parsing` (voir `standalone.yaml`). Mieux encore, une source peut remplir elle-même le message et le niveau : le serveur les prend tels quels, et la connaissance du format reste dans le plugin qui lit ce format.
@@ -91,7 +97,11 @@ Voici un événement produit, une ligne JSON par événement :
 
 Le `related_changes` dit qu'un déploiement a eu lieu 180 secondes avant l'anomalie. C'est une corrélation, pas une preuve de causalité, et Tezcatl s'arrête là volontairement.
 
-Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.dir` et le recharge au démarrage. Un redémarrage ne relance donc pas une salve de fausses alertes sur des templates déjà connus.
+Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.dir` et le recharge au démarrage. Un redémarrage ne relance donc pas une salve de fausses alertes sur des templates déjà connus. Tout apprentissage ne mérite pas d'être gardé, cela dit : des unités qui ne reviendront jamais sous le même nom, ou des lignes ingérées par erreur, laissent des templates qu'aucun marquage n'enlève. `tezcatl forget` les efface par partition, avec `--dry-run` pour voir avant. Les marquages survivent : faire taire un motif est une décision, pas un apprentissage.
+
+Un détecteur n'a aucune mémoire de ce qu'il vient de dire : sans amortissement, un template qui déborde toutes les vingt minutes produit un signal toutes les vingt minutes. Le silence après un rapport double à chaque redite (`dampening.cooldown`), une aggravation le coupe, et un motif qui se tait assez longtemps repart de zéro. Sur l'instance de dogfooding, cela retire un quart des événements d'une journée sans en faire taire un seul définitivement.
+
+Enfin, `critical` demande une corroboration et pas seulement un écart : deux modalités qui concordent, un changement déclaré juste avant, ou un jugement humain déjà posé (template symptomatique, seuil configuré). Un z-score solitaire, aussi extrême soit-il, s'arrête à `warning`. Autrement dit, la statistique seule ne crie jamais.
 
 `tezcatl incidents` remonte d'un cran : il assemble les anomalies en récits. Deux événements appartiennent au même incident quand ils sont **apparentés**, pas simplement voisins dans le temps : même service, même changement corrélé, ou assez simultanés pour être un seul événement qui se propage (le même cycle de collecte). Un incident se termine après un silence (`--gap`) et ne dépasse jamais une durée plafond (`--max-duration`), parce qu'un service qui déraille toute la nuit est un état chronique, pas une histoire. Sans ce critère de parenté, une machine qui produit une anomalie toutes les huit minutes voit sa nuit entière fondue en un seul « incident » de cinq heures, ce qui n'apprend rien.
 

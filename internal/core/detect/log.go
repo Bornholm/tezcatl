@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -280,6 +281,30 @@ func (d *LogDetector) SetMarking(template string, marking Marking) error {
 }
 
 // Markings returns a copy of the current markings.
+// Forget drops everything learned about the sources matching a
+// path.Match pattern: template statistics, baselines, intervals.
+// Markings survive, being an operator's decisions rather than
+// something learned.
+func (d *LogDetector) Forget(pattern string) (int, error) {
+	if _, err := path.Match(pattern, "x"); err != nil {
+		return 0, errors.Wrapf(err, "malformed pattern %q", pattern)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	dropped := 0
+
+	for source := range d.sources {
+		if matched, _ := path.Match(pattern, source); matched {
+			delete(d.sources, source)
+			dropped++
+		}
+	}
+
+	return dropped, nil
+}
+
 func (d *LogDetector) Markings() map[string]Marking {
 	d.mu.Lock()
 	defer d.mu.Unlock()

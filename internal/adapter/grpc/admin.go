@@ -78,6 +78,20 @@ func sendEvent(stream tezcatlv1.AdminService_StreamEventsServer, event model.Eve
 	return errors.WithStack(stream.Send(&tezcatlv1.EventEnvelope{Json: string(encoded)}))
 }
 
+// Forget drops what was learned about a set of partitions.
+func (s *AdminServer) Forget(ctx context.Context, req *tezcatlv1.ForgetRequest) (*tezcatlv1.ForgetResponse, error) {
+	result, err := s.service.Forget(req.GetPattern())
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	return &tezcatlv1.ForgetResponse{
+		Partitions: result.Partitions,
+		Templates:  int32(result.Templates),
+		Series:     int32(result.Series),
+	}, nil
+}
+
 // ListEvents returns past events from the server's local event log.
 func (s *AdminServer) ListEvents(ctx context.Context, req *tezcatlv1.ListEventsRequest) (*tezcatlv1.ListEventsResponse, error) {
 	since, err := parseEventBound(req.GetSince())

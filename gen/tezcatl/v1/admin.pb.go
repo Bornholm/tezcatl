@@ -534,6 +534,114 @@ func (x *ListMetricsResponse) GetMetrics() []*MetricInfo {
 	return nil
 }
 
+type ForgetRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// pattern is a path.Match glob over partition names
+	// ("production/session-*"); an exact name forgets one partition.
+	Pattern       string `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForgetRequest) Reset() {
+	*x = ForgetRequest{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForgetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForgetRequest) ProtoMessage() {}
+
+func (x *ForgetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForgetRequest.ProtoReflect.Descriptor instead.
+func (*ForgetRequest) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ForgetRequest) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+type ForgetResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// partitions names what was dropped.
+	Partitions []string `protobuf:"bytes,1,rep,name=partitions,proto3" json:"partitions,omitempty"`
+	// templates and series count what was learned about them.
+	Templates     int32 `protobuf:"varint,2,opt,name=templates,proto3" json:"templates,omitempty"`
+	Series        int32 `protobuf:"varint,3,opt,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ForgetResponse) Reset() {
+	*x = ForgetResponse{}
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ForgetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ForgetResponse) ProtoMessage() {}
+
+func (x *ForgetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ForgetResponse.ProtoReflect.Descriptor instead.
+func (*ForgetResponse) Descriptor() ([]byte, []int) {
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ForgetResponse) GetPartitions() []string {
+	if x != nil {
+		return x.Partitions
+	}
+	return nil
+}
+
+func (x *ForgetResponse) GetTemplates() int32 {
+	if x != nil {
+		return x.Templates
+	}
+	return 0
+}
+
+func (x *ForgetResponse) GetSeries() int32 {
+	if x != nil {
+		return x.Series
+	}
+	return 0
+}
+
 type StreamEventsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// history is how many recent events to replay before live ones; 0
@@ -545,7 +653,7 @@ type StreamEventsRequest struct {
 
 func (x *StreamEventsRequest) Reset() {
 	*x = StreamEventsRequest{}
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[10]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -557,7 +665,7 @@ func (x *StreamEventsRequest) String() string {
 func (*StreamEventsRequest) ProtoMessage() {}
 
 func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[10]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -570,7 +678,7 @@ func (x *StreamEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamEventsRequest.ProtoReflect.Descriptor instead.
 func (*StreamEventsRequest) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{10}
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StreamEventsRequest) GetHistory() int32 {
@@ -597,7 +705,7 @@ type EventEnvelope struct {
 
 func (x *EventEnvelope) Reset() {
 	*x = EventEnvelope{}
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[11]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +717,7 @@ func (x *EventEnvelope) String() string {
 func (*EventEnvelope) ProtoMessage() {}
 
 func (x *EventEnvelope) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[11]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +730,7 @@ func (x *EventEnvelope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventEnvelope.ProtoReflect.Descriptor instead.
 func (*EventEnvelope) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{11}
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EventEnvelope) GetJson() string {
@@ -653,7 +761,7 @@ type ListEventsRequest struct {
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[12]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +773,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[12]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +786,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{12}
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListEventsRequest) GetSince() string {
@@ -713,7 +821,7 @@ type ListEventsResponse struct {
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[13]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -725,7 +833,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tezcatl_v1_admin_proto_msgTypes[13]
+	mi := &file_tezcatl_v1_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -738,7 +846,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{13}
+	return file_tezcatl_v1_admin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListEventsResponse) GetEvents() []*EventEnvelope {
@@ -782,7 +890,15 @@ const file_tezcatl_v1_admin_proto_rawDesc = "" +
 	"\x06ignore\x18\x02 \x01(\bR\x06ignore\"\x14\n" +
 	"\x12MarkMetricResponse\"G\n" +
 	"\x13ListMetricsResponse\x120\n" +
-	"\ametrics\x18\x01 \x03(\v2\x16.tezcatl.v1.MetricInfoR\ametrics\"/\n" +
+	"\ametrics\x18\x01 \x03(\v2\x16.tezcatl.v1.MetricInfoR\ametrics\")\n" +
+	"\rForgetRequest\x12\x18\n" +
+	"\apattern\x18\x01 \x01(\tR\apattern\"f\n" +
+	"\x0eForgetResponse\x12\x1e\n" +
+	"\n" +
+	"partitions\x18\x01 \x03(\tR\n" +
+	"partitions\x12\x1c\n" +
+	"\ttemplates\x18\x02 \x01(\x05R\ttemplates\x12\x16\n" +
+	"\x06series\x18\x03 \x01(\x05R\x06series\"/\n" +
 	"\x13StreamEventsRequest\x12\x18\n" +
 	"\ahistory\x18\x01 \x01(\x05R\ahistory\"9\n" +
 	"\rEventEnvelope\x12\x12\n" +
@@ -793,11 +909,12 @@ const file_tezcatl_v1_admin_proto_rawDesc = "" +
 	"\x05until\x18\x02 \x01(\tR\x05until\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\"G\n" +
 	"\x12ListEventsResponse\x121\n" +
-	"\x06events\x18\x01 \x03(\v2\x19.tezcatl.v1.EventEnvelopeR\x06events2\xef\x03\n" +
+	"\x06events\x18\x01 \x03(\v2\x19.tezcatl.v1.EventEnvelopeR\x06events2\xb0\x04\n" +
 	"\fAdminService\x12Q\n" +
 	"\fMarkTemplate\x12\x1f.tezcatl.v1.MarkTemplateRequest\x1a .tezcatl.v1.MarkTemplateResponse\x12K\n" +
 	"\n" +
-	"MarkMetric\x12\x1d.tezcatl.v1.MarkMetricRequest\x1a\x1e.tezcatl.v1.MarkMetricResponse\x12T\n" +
+	"MarkMetric\x12\x1d.tezcatl.v1.MarkMetricRequest\x1a\x1e.tezcatl.v1.MarkMetricResponse\x12?\n" +
+	"\x06Forget\x12\x19.tezcatl.v1.ForgetRequest\x1a\x1a.tezcatl.v1.ForgetResponse\x12T\n" +
 	"\rListTemplates\x12 .tezcatl.v1.ListTemplatesRequest\x1a!.tezcatl.v1.ListTemplatesResponse\x12N\n" +
 	"\vListMetrics\x12\x1e.tezcatl.v1.ListMetricsRequest\x1a\x1f.tezcatl.v1.ListMetricsResponse\x12L\n" +
 	"\fStreamEvents\x12\x1f.tezcatl.v1.StreamEventsRequest\x1a\x19.tezcatl.v1.EventEnvelope0\x01\x12K\n" +
@@ -816,7 +933,7 @@ func file_tezcatl_v1_admin_proto_rawDescGZIP() []byte {
 	return file_tezcatl_v1_admin_proto_rawDescData
 }
 
-var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_tezcatl_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_tezcatl_v1_admin_proto_goTypes = []any{
 	(*MarkTemplateRequest)(nil),   // 0: tezcatl.v1.MarkTemplateRequest
 	(*MarkTemplateResponse)(nil),  // 1: tezcatl.v1.MarkTemplateResponse
@@ -828,29 +945,33 @@ var file_tezcatl_v1_admin_proto_goTypes = []any{
 	(*MarkMetricRequest)(nil),     // 7: tezcatl.v1.MarkMetricRequest
 	(*MarkMetricResponse)(nil),    // 8: tezcatl.v1.MarkMetricResponse
 	(*ListMetricsResponse)(nil),   // 9: tezcatl.v1.ListMetricsResponse
-	(*StreamEventsRequest)(nil),   // 10: tezcatl.v1.StreamEventsRequest
-	(*EventEnvelope)(nil),         // 11: tezcatl.v1.EventEnvelope
-	(*ListEventsRequest)(nil),     // 12: tezcatl.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),    // 13: tezcatl.v1.ListEventsResponse
+	(*ForgetRequest)(nil),         // 10: tezcatl.v1.ForgetRequest
+	(*ForgetResponse)(nil),        // 11: tezcatl.v1.ForgetResponse
+	(*StreamEventsRequest)(nil),   // 12: tezcatl.v1.StreamEventsRequest
+	(*EventEnvelope)(nil),         // 13: tezcatl.v1.EventEnvelope
+	(*ListEventsRequest)(nil),     // 14: tezcatl.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),    // 15: tezcatl.v1.ListEventsResponse
 }
 var file_tezcatl_v1_admin_proto_depIdxs = []int32{
 	3,  // 0: tezcatl.v1.ListTemplatesResponse.templates:type_name -> tezcatl.v1.TemplateInfo
 	6,  // 1: tezcatl.v1.ListMetricsResponse.metrics:type_name -> tezcatl.v1.MetricInfo
-	11, // 2: tezcatl.v1.ListEventsResponse.events:type_name -> tezcatl.v1.EventEnvelope
+	13, // 2: tezcatl.v1.ListEventsResponse.events:type_name -> tezcatl.v1.EventEnvelope
 	0,  // 3: tezcatl.v1.AdminService.MarkTemplate:input_type -> tezcatl.v1.MarkTemplateRequest
 	7,  // 4: tezcatl.v1.AdminService.MarkMetric:input_type -> tezcatl.v1.MarkMetricRequest
-	2,  // 5: tezcatl.v1.AdminService.ListTemplates:input_type -> tezcatl.v1.ListTemplatesRequest
-	5,  // 6: tezcatl.v1.AdminService.ListMetrics:input_type -> tezcatl.v1.ListMetricsRequest
-	10, // 7: tezcatl.v1.AdminService.StreamEvents:input_type -> tezcatl.v1.StreamEventsRequest
-	12, // 8: tezcatl.v1.AdminService.ListEvents:input_type -> tezcatl.v1.ListEventsRequest
-	1,  // 9: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
-	8,  // 10: tezcatl.v1.AdminService.MarkMetric:output_type -> tezcatl.v1.MarkMetricResponse
-	4,  // 11: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
-	9,  // 12: tezcatl.v1.AdminService.ListMetrics:output_type -> tezcatl.v1.ListMetricsResponse
-	11, // 13: tezcatl.v1.AdminService.StreamEvents:output_type -> tezcatl.v1.EventEnvelope
-	13, // 14: tezcatl.v1.AdminService.ListEvents:output_type -> tezcatl.v1.ListEventsResponse
-	9,  // [9:15] is the sub-list for method output_type
-	3,  // [3:9] is the sub-list for method input_type
+	10, // 5: tezcatl.v1.AdminService.Forget:input_type -> tezcatl.v1.ForgetRequest
+	2,  // 6: tezcatl.v1.AdminService.ListTemplates:input_type -> tezcatl.v1.ListTemplatesRequest
+	5,  // 7: tezcatl.v1.AdminService.ListMetrics:input_type -> tezcatl.v1.ListMetricsRequest
+	12, // 8: tezcatl.v1.AdminService.StreamEvents:input_type -> tezcatl.v1.StreamEventsRequest
+	14, // 9: tezcatl.v1.AdminService.ListEvents:input_type -> tezcatl.v1.ListEventsRequest
+	1,  // 10: tezcatl.v1.AdminService.MarkTemplate:output_type -> tezcatl.v1.MarkTemplateResponse
+	8,  // 11: tezcatl.v1.AdminService.MarkMetric:output_type -> tezcatl.v1.MarkMetricResponse
+	11, // 12: tezcatl.v1.AdminService.Forget:output_type -> tezcatl.v1.ForgetResponse
+	4,  // 13: tezcatl.v1.AdminService.ListTemplates:output_type -> tezcatl.v1.ListTemplatesResponse
+	9,  // 14: tezcatl.v1.AdminService.ListMetrics:output_type -> tezcatl.v1.ListMetricsResponse
+	13, // 15: tezcatl.v1.AdminService.StreamEvents:output_type -> tezcatl.v1.EventEnvelope
+	15, // 16: tezcatl.v1.AdminService.ListEvents:output_type -> tezcatl.v1.ListEventsResponse
+	10, // [10:17] is the sub-list for method output_type
+	3,  // [3:10] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -867,7 +988,7 @@ func file_tezcatl_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tezcatl_v1_admin_proto_rawDesc), len(file_tezcatl_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

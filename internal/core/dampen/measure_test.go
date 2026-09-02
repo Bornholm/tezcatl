@@ -40,6 +40,10 @@ func TestMeasureOnInstanceEvents(t *testing.T) {
 		events = append(events, event)
 	}
 
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
 	sort.Slice(events, func(i, j int) bool { return events[i].Timestamp.Before(events[j].Timestamp) })
 
 	for _, cooldown := range []time.Duration{0, 30 * time.Minute, time.Hour, 3 * time.Hour} {

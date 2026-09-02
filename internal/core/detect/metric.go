@@ -160,6 +160,40 @@ func NewMetricDetector(config *MetricConfig) *MetricDetector {
 }
 
 // SetIgnored silences (or, with ignore false, restores) the statistical
+// Forget drops the learned baselines of every series whose source
+// matches a path.Match pattern. A series key is "source/metric{labels}",
+// so forgetting "production/session-*" drops what was learned about
+// those sources and nothing else.
+func (d *MetricDetector) Forget(pattern string) (int, error) {
+	if _, err := path.Match(pattern, "x"); err != nil {
+		return 0, errors.Wrapf(err, "malformed pattern %q", pattern)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	dropped := 0
+
+	for key := range d.series {
+		if matched, _ := path.Match(pattern, sourceOf(key)); matched {
+			delete(d.series, key)
+			dropped++
+		}
+	}
+
+	return dropped, nil
+}
+
+// sourceOf recovers the source from a series key: everything before the
+// last path element, which is the metric name and its labels.
+func sourceOf(key string) string {
+	if cut := strings.LastIndex(key, "/"); cut > 0 {
+		return key[:cut]
+	}
+
+	return key
+}
+
 // signals of the series matching pattern: an exact series key, an exact
 // metric name, or a path.Match glob over either.
 func (d *MetricDetector) SetIgnored(pattern string, ignore bool) error {

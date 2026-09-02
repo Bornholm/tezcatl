@@ -57,6 +57,20 @@ message ListMetricsResponse {
   repeated MetricInfo metrics = 1;
 }
 
+message ForgetRequest {
+  // pattern is a path.Match glob over partition names
+  // ("production/session-*"); an exact name forgets one partition.
+  string pattern = 1;
+}
+
+message ForgetResponse {
+  // partitions names what was dropped.
+  repeated string partitions = 1;
+  // templates and series count what was learned about them.
+  int32 templates = 2;
+  int32 series = 3;
+}
+
 message StreamEventsRequest {
   // history is how many recent events to replay before live ones; 0
   // replays everything the server still holds.
@@ -95,6 +109,7 @@ message ListEventsResponse {
 service AdminService {
   rpc MarkTemplate(MarkTemplateRequest) returns (MarkTemplateResponse);
   rpc MarkMetric(MarkMetricRequest) returns (MarkMetricResponse);
+  rpc Forget(ForgetRequest) returns (ForgetResponse);
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
   rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse);
   rpc StreamEvents(StreamEventsRequest) returns (stream EventEnvelope);

@@ -15,6 +15,7 @@ func NewApp() *cli.App {
 			NewIngestCommand(),
 			NewStandaloneCommand(),
 			NewMarkCommand(),
+			NewForgetCommand(),
 			NewTemplatesCommand(),
 			NewMetricsCommand(),
 			NewEventsCommand(),

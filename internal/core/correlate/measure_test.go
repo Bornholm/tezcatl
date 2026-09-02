@@ -42,6 +42,10 @@ func TestMeasureSeverityOnCapturedEvents(t *testing.T) {
 		now[severityOf(event.Confidence, event.Signals, multimodal, len(event.RelatedChanges) > 0)]++
 	}
 
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, severity := range []model.Severity{model.SeverityCritical, model.SeverityWarning, model.SeverityInfo} {
 		t.Logf("%-9s avant %3d  après %3d", severity, was[severity], now[severity])
 	}

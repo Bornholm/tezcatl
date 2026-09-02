@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"path"
 	"sort"
 	"time"
 
@@ -166,6 +167,70 @@ func (s *Service) MarkTemplate(template string, marking detect.Marking) error {
 	}
 
 	return nil
+}
+
+// ForgetResult reports what a Forget dropped, so an operator sees the
+// size of what they just did.
+type ForgetResult struct {
+	Partitions []string
+	Templates  int
+	Series     int
+}
+
+// Forget drops everything learned about the partitions matching a
+// path.Match pattern. Markings are kept: they are decisions, not
+// learning, and an operator who silenced a template did not ask for
+// that to be undone.
+//
+// Learning is normally worth keeping, which is why this is explicit
+// and never automatic. It exists because some learning is worth
+// nothing: units that will never come back under the same name, or
+// lines ingested by mistake, leave templates no marking can remove.
+func (s *Service) Forget(pattern string) (ForgetResult, error) {
+	result := ForgetResult{}
+
+	if pattern == "" {
+		return result, errors.New("missing partition pattern")
+	}
+
+	if s.miner != nil {
+		// Count the templates before dropping them, so the answer
+		// says how much was forgotten rather than how many
+		// partitions.
+		for _, partition := range s.miner.Partitions() {
+			if matched, _ := path.Match(pattern, partition); !matched {
+				continue
+			}
+
+			if miner, err := s.miner.Partition(partition); err == nil {
+				result.Templates += len(miner.Clusters())
+			}
+		}
+
+		dropped, err := s.miner.Forget(pattern)
+		if err != nil {
+			return result, errors.WithStack(err)
+		}
+
+		result.Partitions = dropped
+	}
+
+	if s.logDetector != nil {
+		if _, err := s.logDetector.Forget(pattern); err != nil {
+			return result, errors.WithStack(err)
+		}
+	}
+
+	if s.metricDetector != nil {
+		series, err := s.metricDetector.Forget(pattern)
+		if err != nil {
+			return result, errors.WithStack(err)
+		}
+
+		result.Series = series
+	}
+
+	return result, nil
 }
 
 // Templates lists the learned templates across every partition, with
