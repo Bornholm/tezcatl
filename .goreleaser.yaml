@@ -208,6 +208,10 @@ nfpms:
         dst: /usr/share/doc/tezcatl/standalone.yaml
       - src: misc/config/server.yaml
         dst: /usr/share/doc/tezcatl/server.yaml
+    scripts:
+      # Les unités exécutent ce binaire : remplacer le fichier ne suffit
+      # pas, il faut relancer ce qui tourne encore l'ancien code.
+      postinstall: misc/packaging/client-postinstall.sh
 
   # Paquet serveur : méta-paquet sans binaire qui dépend du paquet
   # client (le binaire est unique) et ajoute l'intégration système :

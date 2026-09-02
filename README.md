@@ -133,7 +133,7 @@ systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald
 
 L'interface web s'ajoute de la même façon à n'importe quelle variante, avec `--itztli` : elle aussi est un choix, pas un défaut, parce qu'elle expose le serveur en HTTP derrière un mot de passe ou un fournisseur d'identité ([guide](./docs/itztli.md)).
 
-Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
+Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. La mise à jour redémarre les unités qui tournent : toutes exécutent le même binaire, et remplacer le fichier ne change rien aux processus déjà lancés — l'écart ne se verrait qu'au moment où une commande neuve parle à un serveur resté sur l'ancien code. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
 
 [Prise en main](./docs/getting-started.md) explique les concepts à un
 administrateur système qui n'a pas à connaître les statistiques : ce
