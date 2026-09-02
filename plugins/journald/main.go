@@ -22,6 +22,7 @@
 //	  "user": false,               // read the user journal
 //	  "environment": "production",
 //	  "service": "",               // overrides the unit-derived identity
+//	  "collapse_transient_units": true, // session-2174 -> session
 //	  "journalctl_path": "journalctl"
 //	}
 package main
@@ -54,6 +55,11 @@ type config struct {
 	Environment    string    `json:"environment"`
 	Service        string    `json:"service"`
 	JournalctlPath string    `json:"journalctl_path"`
+	// CollapseTransient names transient units by their kind rather
+	// than by their instance: every login session becomes "session"
+	// instead of "session-2174". Unset means true; set it to false to
+	// keep one service per unit, and one set of baselines with it.
+	CollapseTransient *bool `json:"collapse_transient_units"`
 }
 
 const defaultEnvironment = "production"
@@ -148,6 +154,10 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 		service := cfg.Service
 		if service == "" {
 			service = entry.Service()
+
+			if cfg.CollapseTransient == nil || *cfg.CollapseTransient {
+				service = collapseTransient(service)
+			}
 		}
 
 		if service == "" {
