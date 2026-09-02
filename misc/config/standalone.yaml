@@ -165,6 +165,17 @@ logs:
     # redémarrage, quelques occurrences suffisent à la reconstruire.
     # 0 attend tous les templates.
     disappearance_max_cv: 0.5
+    # Combien de lettres et de chiffres un template doit garder, une
+    # fois les masques retirés, pour que sa *forme* mérite d'être
+    # signalée. Un log d'accès réduit par le minage à
+    #   <IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>
+    # ne garde que « HTTP » et matche toutes les requêtes jamais
+    # servies : dire de cette forme qu'elle est nouvelle, rare ou
+    # fréquente ne dit rien. En dessous du seuil, new_template,
+    # rare_template et frequency_spike se taisent. missing_template
+    # continue de parler : « ça s'est arrêté » porte sur le volume,
+    # pas sur la forme. 0 signale tous les templates.
+    min_template_literals: 8
     # Saisonnalité :
     #   hourly — baselines par heure de la journée : un pic quotidien à
     #            9h ou un cron nocturne ne sont pas des anomalies ; un

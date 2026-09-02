@@ -448,3 +448,69 @@ func TestLogDetectorRestoredTemplateIsNotExpectedBack(t *testing.T) {
 		}
 	}
 }
+
+// TestTemplateLiterals checks the measure that tells a message from a
+// format: the real templates from the dogfooding instance on one side,
+// the mined access log on the other.
+func TestTemplateLiterals(t *testing.T) {
+	for template, want := range map[string]bool{
+		// Degenerate: everything is a placeholder, so the shape
+		// matches every HTTP request ever served.
+		`<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>`: false,
+		`<NUM>/<NUM>/<NUM> <NUM>:<NUM>:<NUM>`:                        false,
+		`<*> <*> <*>`:                                                false,
+		`<IP>`:                                                       false,
+
+		// Real messages: whole words survive the masking.
+		"Invalid user <*> from <IP> port <NUM>":        true,
+		"HTTP server listening on <IP>:<NUM>":          true,
+		"Received disconnect from <IP> port <NUM>":     true,
+		"payment gateway refused handshake":            true,
+		"INFO GET /api/cart <NUM> in <*>":              true,
+		"Received SIGTERM. Shutting down HTTP server.": true,
+	} {
+		detector := NewLogDetector(&LogConfig{MinTemplateLiterals: DefaultMinTemplateLiterals})
+
+		if got := detector.informative(template); got != want {
+			t.Errorf("informative(%q) = %v, want %v (%d literals)",
+				template, got, want, templateLiterals(template))
+		}
+	}
+}
+
+// TestDegenerateTemplatesStayQuietAboutTheirShape covers the top noise
+// family on the instance: an access-log template spiking twenty-two
+// times a day, saying only that traffic changed.
+func TestDegenerateTemplatesStayQuietAboutTheirShape(t *testing.T) {
+	const degenerate = `<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>`
+
+	detector := NewLogDetector(&LogConfig{
+		LearningPeriod:      time.Minute,
+		SpikeBucket:         time.Minute,
+		SpikeFactor:         3,
+		SpikeMinCount:       5,
+		RareThreshold:       2,
+		RareMinObservations: 10,
+		MinTemplateLiterals: DefaultMinTemplateLiterals,
+	})
+
+	start := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
+
+	// A quiet baseline past the learning period.
+	for i := range 40 {
+		detector.Detect(logObservation("blog", "t1", degenerate, "none", start.Add(time.Duration(i)*time.Minute)))
+	}
+
+	// Then a burst in one bucket.
+	burst := start.Add(60 * time.Minute)
+	for i := range 30 {
+		signals := detector.Detect(logObservation("blog", "t1", degenerate, "none", burst.Add(time.Duration(i)*time.Second)))
+
+		for _, signal := range signals {
+			switch signal.Kind {
+			case SignalLogFrequencySpike, SignalLogNewTemplate, SignalLogRareTemplate:
+				t.Fatalf("a template with no literal content must not report its shape: %s", signal.Summary)
+			}
+		}
+	}
+}

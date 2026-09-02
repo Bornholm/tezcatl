@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,6 +63,10 @@ type LogConfig struct {
 	// mean interval predicts nothing. 0 or less expects every template
 	// back, however irregular.
 	DisappearanceMaxCV float64 `yaml:"disappearance_max_cv"`
+	// MinTemplateLiterals is how much literal text a template must
+	// keep, in letters and digits outside the placeholders, for its
+	// shape to be worth reporting. 0 or less reports every template.
+	MinTemplateLiterals int `yaml:"min_template_literals"`
 	// Seasonality is "hourly" to learn hour-of-day baselines (crons,
 	// nightly jobs, daily traffic patterns) or "none" for flat
 	// baselines.
@@ -99,6 +104,14 @@ const DefaultMaxTemplates = 2000
 // nginx access logs of a blog nobody was reading. A mean interval only
 // predicts the next occurrence when the intervals cluster around it.
 const DefaultDisappearanceMaxCV = 0.5
+
+// DefaultMinTemplateLiterals is the floor a template must clear to be
+// worth naming as a shape. An access log mined down to
+// `<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>` keeps
+// four letters, "HTTP", and matches every HTTP request ever served:
+// saying that shape is new, rare or frequent says nothing. A real
+// message keeps whole words.
+const DefaultMinTemplateLiterals = 8
 
 const (
 	SeasonalityNone   = "none"
@@ -375,10 +388,16 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 			fmt.Sprintf("symptomatic template observed: %s", obs.Log.Template), nil))
 	}
 
-	if !learning && changeType == "cluster_created" {
+	// A template made almost entirely of placeholders matches
+	// everything, so its shape being new, rare or unusually frequent
+	// is not information. Its silence still is: "this stopped" is
+	// about volume, not shape, and stays worth saying.
+	informative := d.informative(obs.Log.Template)
+
+	if !learning && informative && changeType == "cluster_created" {
 		signals = append(signals, newSignal(SignalLogNewTemplate, 0.8,
 			fmt.Sprintf("new log template after learning period: %s", obs.Log.Template), nil))
-	} else if !learning && stats.Count <= d.config.RareThreshold && state.Total >= d.config.RareMinObservations {
+	} else if !learning && informative && stats.Count <= d.config.RareThreshold && state.Total >= d.config.RareMinObservations {
 		signals = append(signals, newSignal(SignalLogRareTemplate, 0.6,
 			fmt.Sprintf("rare log template (%d/%d observations): %s", stats.Count, state.Total, obs.Log.Template),
 			map[string]string{
@@ -390,7 +409,7 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 	baseline := d.spikeBaseline(stats, timestamp)
 
 	spikeThreshold := max(float64(d.config.SpikeMinCount), baseline*d.config.SpikeFactor)
-	if !learning && !stats.SpikeSignaled && baseline > 0 && float64(stats.BucketCount) >= spikeThreshold {
+	if !learning && informative && !stats.SpikeSignaled && baseline > 0 && float64(stats.BucketCount) >= spikeThreshold {
 		stats.SpikeSignaled = true
 
 		signals = append(signals, newSignal(SignalLogFrequencySpike, 0.7,
@@ -406,6 +425,48 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 
 	return signals
 }
+
+// informative reports whether a template says enough to be worth
+// reporting as a shape. It counts the letters and digits left once the
+// placeholders are removed: a template that keeps whole words
+// describes a message, one that keeps punctuation describes a format.
+func (d *LogDetector) informative(template string) bool {
+	floor := d.config.MinTemplateLiterals
+	if floor <= 0 {
+		return true
+	}
+
+	return templateLiterals(template) >= floor
+}
+
+// templateLiterals counts the alphanumeric characters outside the
+// placeholders. Exported behaviour, unexported name: the threshold is
+// what an operator tunes, not the counting.
+func templateLiterals(template string) int {
+	literals := 0
+
+	for i := 0; i < len(template); i++ {
+		if template[i] == '<' {
+			// Skip the placeholder, if this is one: <NUM>, <IP>, <*>...
+			if end := strings.IndexByte(template[i:], '>'); end > 0 && end <= maxPlaceholderLength {
+				i += end
+
+				continue
+			}
+		}
+
+		switch c := template[i]; {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+			literals++
+		}
+	}
+
+	return literals
+}
+
+// maxPlaceholderLength bounds what counts as a placeholder, so a line
+// of shell redirections is not read as one long mask.
+const maxPlaceholderLength = 8
 
 func (d *LogDetector) seasonal() bool {
 	return d.config.Seasonality == SeasonalityHourly

@@ -108,6 +108,7 @@ type LogDetection struct {
 	DisappearanceMinCount     int64                     `yaml:"disappearance_min_count"`
 	DisappearanceScanInterval Duration                  `yaml:"disappearance_scan_interval"`
 	DisappearanceMaxCV        float64                   `yaml:"disappearance_max_cv"`
+	MinTemplateLiterals       int                       `yaml:"min_template_literals"`
 	Seasonality               string                    `yaml:"seasonality"`
 	SeasonalMinObservations   int64                     `yaml:"seasonal_min_observations"`
 	Markings                  map[string]detect.Marking `yaml:"markings"`
@@ -279,6 +280,7 @@ func Default() *Config {
 				DisappearanceMinCount:     10,
 				DisappearanceScanInterval: Duration(30 * time.Second),
 				DisappearanceMaxCV:        detect.DefaultDisappearanceMaxCV,
+				MinTemplateLiterals:       detect.DefaultMinTemplateLiterals,
 				Seasonality:               detect.SeasonalityHourly,
 				SeasonalMinObservations:   50,
 				MaxTemplates:              detect.DefaultMaxTemplates,
@@ -468,6 +470,7 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		DisappearanceMinCount:     detection.DisappearanceMinCount,
 		DisappearanceScanInterval: detection.DisappearanceScanInterval.AsDuration(),
 		DisappearanceMaxCV:        detection.DisappearanceMaxCV,
+		MinTemplateLiterals:       detection.MinTemplateLiterals,
 		Seasonality:               detection.Seasonality,
 		SeasonalMinObservations:   detection.SeasonalMinObservations,
 		Markings:                  detection.Markings,
