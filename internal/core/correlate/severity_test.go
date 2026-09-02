@@ -34,6 +34,11 @@ func TestSeverityAsksForCorroboration(t *testing.T) {
 		"the same z-score right after a deployment": {
 			confidence: 0.99, signals: lone, nearChange: true, want: model.SeverityCritical,
 		},
+		"a threshold an operator set": {
+			confidence: 0.9,
+			signals:    []model.Signal{signal(detect.SignalMetricThreshold, model.ModalityMetric)},
+			want:       model.SeverityCritical,
+		},
 		"a template an operator called a symptom": {
 			confidence: 0.9,
 			signals:    []model.Signal{signal(detect.SignalLogSymptomatic, model.ModalityLog)},

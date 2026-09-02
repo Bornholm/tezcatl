@@ -131,8 +131,13 @@ parse those rather than the prose.
 - **Evidence**: every signal of the incident, folded by kind and source.
   A count of x14 means fourteen occurrences, and the summary shown is the
   strongest single occurrence, not an average.
-- **Severity**: the worst severity among the incident's events. It comes
-  from the detectors' own scoring, not from any judgment about impact.
+- **Severity**: the worst severity among the incident's events. It grades
+  how far from baseline the deviation is, and "critical" additionally
+  requires corroboration: two modalities agreeing, a declared change
+  nearby, or an operator's own judgement already recorded (a
+  symptomatic template, a threshold they set). A lone statistical
+  outlier, however extreme, stops at "warning". None of this is a
+  judgment about business impact.
 - **Confidence**: how sure the detector is that this is a departure from
   the baseline. It says nothing about how serious the departure is.
 - **Related changes**: deployments, restarts and configuration changes

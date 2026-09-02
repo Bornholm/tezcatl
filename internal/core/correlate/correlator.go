@@ -300,9 +300,14 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 //
 // So critical also asks for corroboration, something a lone number
 // cannot fake: two modalities agreeing on the same service, a change
-// declared right before, or a template an operator marked as a
-// symptom. Without it the strongest deviation stops at warning, which
-// is exactly what it deserves: worth reading, not worth waking up for.
+// declared right before, or an operator's own judgement already
+// recorded, as a symptomatic template or as a threshold they set.
+// Without it the strongest deviation stops at warning, which is
+// exactly what it deserves: worth reading, not worth waking up for.
+//
+// A site that only collects metrics therefore has one way to reach
+// critical: say which values matter, with a threshold. That is the
+// intended answer, not a gap. Statistics alone never scream.
 func severityOf(confidence float64, signals []model.Signal, multimodal bool, nearChange bool) model.Severity {
 	if confidence < 0.6 {
 		return model.SeverityInfo
@@ -312,16 +317,19 @@ func severityOf(confidence float64, signals []model.Signal, multimodal bool, nea
 		return model.SeverityWarning
 	}
 
-	symptomatic := false
+	intended := false
 	for _, signal := range signals {
-		if signal.Kind == detect.SignalLogSymptomatic {
-			symptomatic = true
+		// Both of these carry a human decision rather than a
+		// measurement: a template someone called a symptom, and a
+		// bound someone set.
+		if signal.Kind == detect.SignalLogSymptomatic || signal.Kind == detect.SignalMetricThreshold {
+			intended = true
 
 			break
 		}
 	}
 
-	if multimodal || nearChange || symptomatic {
+	if multimodal || nearChange || intended {
 		return model.SeverityCritical
 	}
 

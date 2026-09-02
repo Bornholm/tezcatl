@@ -389,6 +389,20 @@ plugins:
             query: 100 * db_pool_in_use / db_pool_size
             service: app
 
+# --- Sévérité ------------------------------------------------------------
+#
+# Rien à régler ici, mais une règle à connaître : « critical » ne
+# récompense pas l'écart le plus grand. Un écart fort (confiance ≥ 0.85)
+# reste « warning » tant que rien ne le corrobore. Pour atteindre
+# « critical », il faut l'une de ces quatre choses : deux modalités qui
+# concordent sur le même service, un changement déclaré juste avant, un
+# template marqué symptomatique, ou un seuil que vous avez posé.
+#
+# Autrement dit, la statistique seule ne crie jamais. Si vous ne
+# collectez que des métriques, la façon prévue d'obtenir un « critical »
+# est de dire quelles valeurs comptent, avec un seuil
+# (metrics.detection.thresholds).
+
 # --- Amortissement des redites -------------------------------------------
 #
 # Un détecteur n'a aucune mémoire de ce qu'il a déjà dit : un template
