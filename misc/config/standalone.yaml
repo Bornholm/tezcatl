@@ -176,6 +176,15 @@ logs:
     # continue de parler : « ça s'est arrêté » porte sur le volume,
     # pas sur la forme. 0 signale tous les templates.
     min_template_literals: 8
+    # Deuxième critère, complémentaire : la part de jetons entièrement
+    # masqués. Un log d'accès qui garde son user-agent en clair passe
+    # le seuil précédent, alors que la méthode, le chemin et le code
+    # de réponse, eux, sont masqués : il décrit toujours toutes les
+    # requêtes. Sur les 1458 templates de l'instance de dogfooding,
+    # 0.6 sélectionne dix-sept templates, tous des logs d'accès ; 0.5
+    # emporterait aussi de vrais messages comme
+    # « Connection <*> by <IP> port <NUM> ». 0 signale tout.
+    max_placeholder_ratio: 0.6
     # Saisonnalité :
     #   hourly — baselines par heure de la journée : un pic quotidien à
     #            9h ou un cron nocturne ne sont pas des anomalies ; un

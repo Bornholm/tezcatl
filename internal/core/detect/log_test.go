@@ -467,6 +467,8 @@ func TestTemplateLiterals(t *testing.T) {
 		"Received disconnect from <IP> port <NUM>":     true,
 		"payment gateway refused handshake":            true,
 		"INFO GET /api/cart <NUM> in <*>":              true,
+		"Connection <*> by <IP> port <NUM>":            true,
+		"Renaming container <*> <*> to <*>":            true,
 		"Received SIGTERM. Shutting down HTTP server.": true,
 	} {
 		detector := NewLogDetector(&LogConfig{MinTemplateLiterals: DefaultMinTemplateLiterals})

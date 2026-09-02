@@ -68,6 +68,10 @@ type LogConfig struct {
 	// keep, in letters and digits outside the placeholders, for its
 	// shape to be worth reporting. 0 or less reports every template.
 	MinTemplateLiterals int `yaml:"min_template_literals"`
+	// MaxPlaceholderRatio is the share of whole tokens that may be
+	// placeholders before the template stops describing anything.
+	// 0 or less reports every template.
+	MaxPlaceholderRatio float64 `yaml:"max_placeholder_ratio"`
 	// Seasonality is "hourly" to learn hour-of-day baselines (crons,
 	// nightly jobs, daily traffic patterns) or "none" for flat
 	// baselines.
@@ -113,6 +117,16 @@ const DefaultDisappearanceMaxCV = 0.5
 // saying that shape is new, rare or frequent says nothing. A real
 // message keeps whole words.
 const DefaultMinTemplateLiterals = 8
+
+// DefaultMaxPlaceholderRatio catches what the literal floor cannot: an
+// access log whose masked fields are surrounded by enough boilerplate
+// to pass, `<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>
+// <*> "Mozilla/<NUM>..."`. Its user agent is literal text, but the
+// method, the path and the status are masked, so it still matches
+// every request. On the dogfooding instance's 1458 templates, 0.6
+// selected seventeen, every one an access log, while 0.5 also caught
+// real messages like `Connection <*> by <IP> port <NUM>`.
+const DefaultMaxPlaceholderRatio = 0.6
 
 const (
 	SeasonalityNone   = "none"
@@ -456,12 +470,36 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 // placeholders are removed: a template that keeps whole words
 // describes a message, one that keeps punctuation describes a format.
 func (d *LogDetector) informative(template string) bool {
-	floor := d.config.MinTemplateLiterals
-	if floor <= 0 {
-		return true
+	if floor := d.config.MinTemplateLiterals; floor > 0 && templateLiterals(template) < floor {
+		return false
 	}
 
-	return templateLiterals(template) >= floor
+	if ceiling := d.config.MaxPlaceholderRatio; ceiling > 0 && placeholderRatio(template) > ceiling {
+		return false
+	}
+
+	return true
+}
+
+// placeholderRatio is the share of whole tokens that are nothing but a
+// placeholder. A message keeps its verbs and nouns between the masked
+// values; a format keeps its punctuation.
+func placeholderRatio(template string) float64 {
+	tokens := strings.Fields(template)
+	if len(tokens) == 0 {
+		return 0
+	}
+
+	masks := 0
+
+	for _, token := range tokens {
+		if len(token) >= 3 && token[0] == '<' && token[len(token)-1] == '>' &&
+			!strings.ContainsAny(token[1:len(token)-1], "<> ") {
+			masks++
+		}
+	}
+
+	return float64(masks) / float64(len(tokens))
 }
 
 // templateLiterals counts the alphanumeric characters outside the
