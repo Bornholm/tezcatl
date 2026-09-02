@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/bornholm/tezcatl/internal/core/window"
 )
@@ -262,13 +263,9 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 		summary = fmt.Sprintf("%s (+%d correlated signals)", dominant.Summary, len(signals)-1)
 	}
 
-	severity := model.SeverityInfo
-	switch {
-	case confidence >= 0.85:
-		severity = model.SeverityCritical
-	case confidence >= 0.6:
-		severity = model.SeverityWarning
-	}
+	changes := c.relatedChanges(state, pending)
+
+	severity := severityOf(confidence, signals, multimodal, len(changes) > 0)
 
 	return model.Event{
 		ID:             model.NewID(),
@@ -281,7 +278,7 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 		Confidence:     confidence,
 		Summary:        summary,
 		Signals:        signals,
-		RelatedChanges: c.relatedChanges(state, pending),
+		RelatedChanges: changes,
 		Context: model.Context{
 			Before: pending.before,
 			After:  pending.after,
@@ -292,6 +289,43 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 			"multimodal":       strconv.FormatBool(multimodal),
 		},
 	}
+}
+
+// severityOf grades an event. Confidence measures how far an
+// observation is from its baseline, which is a statement about
+// statistics, not about consequences: a load average wobbling on an
+// idle machine reaches 0.99 as easily as a payment gateway failing.
+// Calling that "critical" makes the word mean "unusual", and an
+// operator who wires an alert on it is woken by arithmetic.
+//
+// So critical also asks for corroboration, something a lone number
+// cannot fake: two modalities agreeing on the same service, a change
+// declared right before, or a template an operator marked as a
+// symptom. Without it the strongest deviation stops at warning, which
+// is exactly what it deserves: worth reading, not worth waking up for.
+func severityOf(confidence float64, signals []model.Signal, multimodal bool, nearChange bool) model.Severity {
+	if confidence < 0.6 {
+		return model.SeverityInfo
+	}
+
+	if confidence < 0.85 {
+		return model.SeverityWarning
+	}
+
+	symptomatic := false
+	for _, signal := range signals {
+		if signal.Kind == detect.SignalLogSymptomatic {
+			symptomatic = true
+
+			break
+		}
+	}
+
+	if multimodal || nearChange || symptomatic {
+		return model.SeverityCritical
+	}
+
+	return model.SeverityWarning
 }
 
 // relatedChanges surfaces the changes observed shortly before the event

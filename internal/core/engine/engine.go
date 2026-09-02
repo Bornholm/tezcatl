@@ -34,13 +34,21 @@ type stats struct {
 	events    atomic.Int64
 }
 
-func (s *stats) log(ctx context.Context, message string) {
-	slog.InfoContext(ctx, message,
+func (s *stats) log(ctx context.Context, message string, extra func() []slog.Attr) {
+	attrs := []any{
 		slog.Int64("observations_ingested", s.ingested.Load()),
 		slog.Int64("observations_processed", s.processed.Load()),
 		slog.Int64("observations_rejected", s.rejected.Load()),
 		slog.Int64("events_published", s.events.Load()),
-	)
+	}
+
+	if extra != nil {
+		for _, attr := range extra() {
+			attrs = append(attrs, attr)
+		}
+	}
+
+	slog.InfoContext(ctx, message, attrs...)
 }
 
 func New(funcs ...OptionFunc) *Engine {
@@ -115,7 +123,7 @@ func (e *Engine) Run(ctx context.Context) error {
 			for {
 				select {
 				case <-ticker.C:
-					e.stats.log(gctx, "pipeline stats")
+					e.stats.log(gctx, "pipeline stats", e.opts.ExtraStats)
 				case <-statsDone:
 					return nil
 				case <-gctx.Done():
@@ -188,7 +196,7 @@ func (e *Engine) Run(ctx context.Context) error {
 
 	err := g.Wait()
 
-	e.stats.log(ctx, "pipeline stopped")
+	e.stats.log(ctx, "pipeline stopped", e.opts.ExtraStats)
 
 	if err != nil {
 		return errors.WithStack(err)

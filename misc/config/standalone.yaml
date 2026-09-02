@@ -389,6 +389,29 @@ plugins:
             query: 100 * db_pool_in_use / db_pool_size
             service: app
 
+# --- Amortissement des redites -------------------------------------------
+#
+# Un détecteur n'a aucune mémoire de ce qu'il a déjà dit : un template
+# qui déborde toutes les vingt minutes produit un signal toutes les
+# vingt minutes, et personne ne lit le treizième. L'amortissement est
+# cette mémoire manquante. Il ne fait jamais taire un motif pour de
+# bon : ça, c'est un marquage, et c'est une décision humaine.
+dampening:
+  # Silence après un rapport, doublé à chaque redite : le premier
+  # signal passe, le suivant après une heure, puis deux, puis quatre.
+  # Un motif qui se tait plus longtemps que son propre silence repart
+  # de zéro, parce qu'il est redevenu une nouvelle. 0 désactive tout.
+  cooldown: 1h
+  # Plafond de ce doublement : même en boucle, un motif encore actif
+  # mérite une ligne deux fois par jour.
+  max_cooldown: 12h
+  # Une aggravation coupe le silence : il faut que le score dépasse le
+  # précédent maximum d'au moins cette marge (les scores vont de 0 à 1).
+  escalation: 0.1
+  # Nombre de motifs mémorisés ; au-delà, les moins récents sont
+  # oubliés, ce qui laisse au pire passer un signal de plus.
+  max_tracked: 20000
+
 # --- Corrélation ---------------------------------------------------------
 correlation:
   # Fenêtre d'agrégation : les signaux d'une même source émis dans cette

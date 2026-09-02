@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bornholm/tezcatl/internal/core/correlate"
+	"github.com/bornholm/tezcatl/internal/core/dampen"
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
 	"github.com/pkg/errors"
@@ -43,6 +44,7 @@ type Config struct {
 	Logs        Logs        `yaml:"logs"`
 	Metrics     Metrics     `yaml:"metrics"`
 	Plugins     Plugins     `yaml:"plugins"`
+	Dampening   Dampening   `yaml:"dampening"`
 	Correlation Correlation `yaml:"correlation"`
 	State       State       `yaml:"state"`
 	Events      Events      `yaml:"events"`
@@ -144,6 +146,22 @@ type MetricDetection struct {
 	TrendThreshold float64                `yaml:"trend_threshold"`
 	Thresholds     []detect.ThresholdRule `yaml:"thresholds"`
 	MaxSeries      int                    `yaml:"max_series"`
+}
+
+// Dampening keeps a detector from repeating itself. It applies to
+// every signal, whatever its modality: the noise a reader stops seeing
+// is the same noise whether it comes from a log or a series.
+type Dampening struct {
+	// Cooldown is how long a repeat of the same pattern stays quiet.
+	// Zero disables dampening and every occurrence is reported.
+	Cooldown Duration `yaml:"cooldown"`
+	// Escalation is the score increase that lets a repeat speak up
+	// before the cooldown ends.
+	Escalation float64 `yaml:"escalation"`
+	// MaxCooldown caps that doubling.
+	MaxCooldown Duration `yaml:"max_cooldown"`
+	// MaxTracked bounds how many patterns are remembered at once.
+	MaxTracked int `yaml:"max_tracked"`
 }
 
 type Correlation struct {
@@ -278,6 +296,12 @@ func Default() *Config {
 				TrendThreshold: 0.5,
 				MaxSeries:      detect.DefaultMaxSeries,
 			},
+		},
+		Dampening: Dampening{
+			Cooldown:    Duration(dampen.DefaultCooldown),
+			MaxCooldown: Duration(dampen.DefaultMaxCooldown),
+			Escalation:  dampen.DefaultEscalation,
+			MaxTracked:  dampen.DefaultMaxTracked,
 		},
 		Correlation: Correlation{
 			Window:        Duration(30 * time.Second),
@@ -464,6 +488,16 @@ func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
 		TrendThreshold: detection.TrendThreshold,
 		Thresholds:     detection.Thresholds,
 		MaxSeries:      detection.MaxSeries,
+	}
+}
+
+// DampeningConfig maps the YAML section to the dampener's own.
+func (c *Config) DampeningConfig() dampen.Config {
+	return dampen.Config{
+		Cooldown:    c.Dampening.Cooldown.AsDuration(),
+		MaxCooldown: c.Dampening.MaxCooldown.AsDuration(),
+		Escalation:  c.Dampening.Escalation,
+		MaxTracked:  c.Dampening.MaxTracked,
 	}
 }
 

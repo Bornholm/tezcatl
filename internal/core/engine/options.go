@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"log/slog"
 	"runtime"
 	"time"
 
@@ -19,6 +20,10 @@ type Options struct {
 	// StatsInterval is how often internal health counters are logged;
 	// 0 disables periodic logging (the final summary is always logged).
 	StatsInterval time.Duration
+	// ExtraStats lets a stage add its own counters to that line. An
+	// operator who is told signals are being held back needs to see
+	// how many, or the dampening is something taken on faith.
+	ExtraStats func() []slog.Attr
 }
 
 type OptionFunc func(opts *Options)
@@ -85,5 +90,12 @@ func WithFlushInterval(interval time.Duration) OptionFunc {
 func WithStatsInterval(interval time.Duration) OptionFunc {
 	return func(opts *Options) {
 		opts.StatsInterval = interval
+	}
+}
+
+// WithExtraStats adds counters to the periodic stats line.
+func WithExtraStats(stats func() []slog.Attr) OptionFunc {
+	return func(opts *Options) {
+		opts.ExtraStats = stats
 	}
 }

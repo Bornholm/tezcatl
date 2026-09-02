@@ -14,6 +14,7 @@ import (
 	"github.com/bornholm/tezcatl/internal/config"
 	"github.com/bornholm/tezcatl/internal/core/admin"
 	"github.com/bornholm/tezcatl/internal/core/correlate"
+	"github.com/bornholm/tezcatl/internal/core/dampen"
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/drain"
 	"github.com/bornholm/tezcatl/internal/core/engine"
@@ -39,6 +40,7 @@ type Runtime struct {
 	eventsOut    io.Writer
 
 	miner          *drain.PartitionedMiner
+	dampener       *dampen.Dampener
 	logDetector    *detect.LogDetector
 	metricDetector *detect.MetricDetector
 	broadcast      *sink.Broadcast
@@ -121,7 +123,8 @@ func (r *Runtime) build(ctx context.Context) error {
 
 	if len(detectors) > 0 {
 		correlator := correlate.NewCorrelator(cfg.CorrelationConfig())
-		r.processors = append(r.processors, processor.NewAnalysis(correlator, detectors...))
+		r.dampener = dampen.New(cfg.DampeningConfig())
+		r.processors = append(r.processors, processor.NewAnalysis(correlator, r.dampener, detectors...))
 	}
 
 	if cfg.Pipeline.DebugEvents {
@@ -223,6 +226,10 @@ func (r *Runtime) Run(ctx context.Context, ingesters ...port.Ingester) error {
 		engine.WithEventBufferSize(r.config.Pipeline.EventBufferSize),
 		engine.WithFlushInterval(r.config.Pipeline.FlushInterval.AsDuration()),
 		engine.WithStatsInterval(r.config.Logging.StatsInterval.AsDuration()),
+	}
+
+	if r.dampener != nil {
+		opts = append(opts, engine.WithExtraStats(r.dampener.Stats))
 	}
 
 	if r.config.Pipeline.Workers > 0 {

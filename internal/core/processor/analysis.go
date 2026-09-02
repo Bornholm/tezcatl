@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/bornholm/tezcatl/internal/core/correlate"
+	"github.com/bornholm/tezcatl/internal/core/dampen"
 	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/model"
 	"github.com/bornholm/tezcatl/internal/core/port"
@@ -14,12 +15,16 @@ import (
 // once their correlation window expires.
 type Analysis struct {
 	detectors  []detect.Detector
+	dampener   *dampen.Dampener
 	correlator *correlate.Correlator
 }
 
-func NewAnalysis(correlator *correlate.Correlator, detectors ...detect.Detector) *Analysis {
+// NewAnalysis wires the detectors to the correlator. dampener may be
+// nil, in which case every signal a detector produces is reported.
+func NewAnalysis(correlator *correlate.Correlator, dampener *dampen.Dampener, detectors ...detect.Detector) *Analysis {
 	return &Analysis{
 		detectors:  detectors,
+		dampener:   dampener,
 		correlator: correlator,
 	}
 }
@@ -36,6 +41,12 @@ func (a *Analysis) Process(ctx context.Context, obs *model.Observation, emit por
 	signals := []model.Signal{}
 	for _, detector := range a.detectors {
 		signals = append(signals, detector.Detect(obs)...)
+	}
+
+	// Held back before correlation: a repeat that says nothing new
+	// should not build an event, nor keep an event alive.
+	if a.dampener != nil {
+		signals = a.dampener.Filter(signals)
 	}
 
 	a.correlator.Add(obs, signals)
