@@ -19,6 +19,7 @@ type Drain struct {
 	paramStr                 string
 	extraDelimiters          []string
 	parametrizeNumericTokens bool
+	maxTokens                int
 
 	root            *node
 	clusters        *clusterCache
@@ -61,6 +62,7 @@ func NewDrain(config *Config) *Drain {
 		paramStr:                 config.ParamStr,
 		extraDelimiters:          config.ExtraDelimiters,
 		parametrizeNumericTokens: config.ParametrizeNumericTokens != nil && *config.ParametrizeNumericTokens,
+		maxTokens:                config.MaxTokens,
 		root:                     newNode(),
 		clusters:                 newClusterCache(config.MaxClusters),
 	}
@@ -76,7 +78,20 @@ func (d *Drain) tokenize(content string) []string {
 		content = strings.ReplaceAll(content, delimiter, " ")
 	}
 
-	return strings.Fields(content)
+	tokens := strings.Fields(content)
+
+	// The prefix tree keys its first level on the token count, so two
+	// lines of the same shape that differ by one token can never land
+	// in the same cluster. That is fine for a message and wrong for a
+	// payload: a serialized structure printed into a log line varies in
+	// length with its own content, and every variant becomes a template
+	// of its own. Cutting the tail folds them back together, and the
+	// marker says the shape was cut rather than ends there.
+	if d.maxTokens > 0 && len(tokens) > d.maxTokens {
+		tokens = append(tokens[:d.maxTokens-1:d.maxTokens-1], TruncationMarker)
+	}
+
+	return tokens
 }
 
 // AddLogMessage learns from a (masked) log message, either updating the

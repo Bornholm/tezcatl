@@ -18,7 +18,34 @@ type Config struct {
 	MaskPrefix               string               `yaml:"mask_prefix" json:"mask_prefix"`
 	MaskSuffix               string               `yaml:"mask_suffix" json:"mask_suffix"`
 	Masking                  []MaskingInstruction `yaml:"masking" json:"masking"`
+	// MaxTokens caps the length of a mined line, marker included; past
+	// it the tail is cut. Unset takes DefaultMaxTokens; negative mines
+	// whole lines. (MaxClusters reads 0 as "no bound"; this one cannot,
+	// since a cap that a partial configuration silently removes is a
+	// cap nobody gets.)
+	MaxTokens int `yaml:"max_tokens" json:"max_tokens"`
 }
+
+// TruncationMarker ends a template whose line was cut. It is a token
+// like any other, so it counts against MaxTokens and shows up in the
+// template an operator reads.
+const TruncationMarker = "<TRUNCATED>"
+
+// DefaultMaxTokens bounds the churn a line whose length varies with
+// its own payload can cause. On the dogfooding instance, 593 of the
+// 620 learned templates were 32 tokens or shorter, so the cap leaves
+// 96% of real messages untouched; of the 27 above it, 21 came from one
+// application printing protocol frames into its logs, and the two
+// longest, 92 and 85 tokens, had been seen four times and once. That
+// is the signature worth cutting: a template nothing will ever match
+// again, because the next frame carries a different number of fields.
+//
+// It is a bound, not a merge. Frames that already fit under the cap
+// stay apart, and folding those is a masking question: an unmasked
+// quoted string with spaces in it costs as many tokens as it has
+// words. The full line is never lost either way, it stays on the
+// observation; only the mined shape is cut.
+const DefaultMaxTokens = 32
 
 // DefaultMaxClusters bounds the per-partition cluster cache (LRU, as in
 // drain3). Far above what healthy logging produces, so it only bites on
@@ -37,6 +64,7 @@ func DefaultConfig() *Config {
 		ParametrizeNumericTokens: &parametrize,
 		MaskPrefix:               "<",
 		MaskSuffix:               ">",
+		MaxTokens:                DefaultMaxTokens,
 	}
 }
 
@@ -75,6 +103,18 @@ func (c *Config) normalized() (*Config, error) {
 
 	if normalized.MaskSuffix == "" {
 		normalized.MaskSuffix = defaults.MaskSuffix
+	}
+
+	if normalized.MaxTokens == 0 {
+		normalized.MaxTokens = defaults.MaxTokens
+	}
+
+	if normalized.MaxTokens < 0 {
+		normalized.MaxTokens = 0
+	}
+
+	if normalized.MaxTokens == 1 {
+		return nil, errors.New("max_tokens must be at least 2: one token of line plus the truncation marker")
 	}
 
 	return &normalized, nil

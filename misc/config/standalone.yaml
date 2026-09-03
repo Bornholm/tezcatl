@@ -91,6 +91,18 @@ logs:
     # Nombre maximal d'enfants par nœud de l'arbre avant de router vers
     # le joker <*>.
     max_children: 100
+    # Longueur maximale d'une ligne minée, en tokens, marqueur compris ;
+    # au-delà, la queue est coupée et le template se termine par
+    # <TRUNCATED>. L'arbre de préfixes indexe son premier niveau sur le
+    # nombre de tokens, donc une ligne dont la longueur varie avec son
+    # propre contenu (une structure sérialisée imprimée dans un log)
+    # crée un template par variante, que rien ne rematchera. Sur
+    # l'instance de dogfooding, 593 des 620 templates appris tenaient en
+    # 32 tokens ou moins ; les deux plus longs, 92 et 85 tokens, avaient
+    # été vus quatre fois et une fois. La ligne complète n'est jamais
+    # perdue, elle reste sur l'observation ; seule la forme est coupée.
+    # Vide = 32 ; une valeur négative mine les lignes entières.
+    max_tokens: 32
     # Nombre maximal de clusters par partition, avec éviction LRU.
     # 0 = illimité ; le défaut est volontairement large, l'éviction ne
     # mord que sur le churn de templates (identifiants qui échappent
