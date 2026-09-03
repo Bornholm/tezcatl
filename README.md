@@ -127,6 +127,18 @@ Sur une machine systemd, le plugin `journald` s'ajoute à la variante choisie, q
 
 Il regroupe aussi les unités jetables sous le nom de ce qu'elles sont : chaque connexion SSH crée `session-2174.scope`, chaque conteneur un `docker-<hex>.scope`, et prises au mot ces unités deviennent autant de services dont les baselines n'ont jamais le temps de mûrir. Sur l'instance de dogfooding, elles représentaient deux templates appris sur trois, et 100 des 130 partitions. Elles sont désormais lues comme `session`, `user`, `docker` ; l'unité exacte reste sur l'observation, en attribut `journald.unit`. Réglage : `"collapse_transient_units": false` dans `/etc/tezcatl/journald.json`.
 
+Regrouper les unités jetables fait apparaître le cas inverse : une unité qui héberge deux activités sans rapport. Sur l'instance de dogfooding, un `dokku deploy` arrive par SSH, donc la construction du conteneur tourne dans un scope de session : `session` contenait à la fois les lignes de connexion d'un opérateur et la sortie de progression de BuildKit, soit 34 de ses 102 templates. Une baseline apprise sur ce mélange ne prédit ni l'un ni l'autre, et chaque déploiement devenait un pic de fréquence par construction. Un routage par contenu sépare la partition selon ce que dit la ligne :
+
+```json
+{
+  "routes": [
+    { "match": "^#[0-9]+ ", "service": "build" }
+  ]
+}
+```
+
+La première règle qui correspond gagne, et la liste est vide par défaut : quelles activités partagent une unité est une propriété de la machine, pas de journald.
+
 ```bash
 systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald.json
 ```

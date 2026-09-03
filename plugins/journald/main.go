@@ -23,6 +23,9 @@
 //	  "environment": "production",
 //	  "service": "",               // overrides the unit-derived identity
 //	  "collapse_transient_units": true, // session-2174 -> session
+//	  "routes": [                        // a unit hosting two activities
+//	    {"match": "^#[0-9]+ ", "service": "build"}
+//	  ],
 //	  "journalctl_path": "journalctl"
 //	}
 package main
@@ -60,6 +63,11 @@ type config struct {
 	// instead of "session-2174". Unset means true; set it to false to
 	// keep one service per unit, and one set of baselines with it.
 	CollapseTransient *bool `json:"collapse_transient_units"`
+	// Routes send a line to a service of its own when the unit it came
+	// from hosts more than one activity, first match winning. Empty by
+	// default: which activities share a unit is a property of the
+	// machine. See route.go.
+	Routes []routeSpec `json:"routes"`
 }
 
 const defaultEnvironment = "production"
@@ -127,6 +135,11 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 
 	cursors := newCursorWriter(cfg.CursorFile)
 
+	routes, err := compileRoutes(cfg.Routes)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	cursorCtx, stopCursors := context.WithCancel(ctx)
 	defer stopCursors()
 
@@ -159,6 +172,8 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 				service = collapseTransient(service)
 			}
 		}
+
+		service = routeMessage(routes, service, entry.Message)
 
 		if service == "" {
 			service = "journal"
