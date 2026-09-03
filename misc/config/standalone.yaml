@@ -268,17 +268,24 @@ metrics:
     # donc "*.percent" raterait docker.memory.used_percent.
     # Seul le pourcentage a une échelle connue sans connaître la
     # métrique (0 à 100, quel que soit l'émetteur) : c'est le seul
-    # plancher livré par défaut. Les 5 points viennent de la mesure :
-    # sur une nuit calme, 27 des 34 signaux sur pourcentages bougeaient
-    # moins que ça, dont un CPU passant de 0,87 % à 1,91 % remonté en
-    # critical. Pour les autres unités, ajoutez le vôtre, par exemple
-    # pour une charge système :
-    #   system.load1: 0.5
+    # plancher livré par défaut. Les 10 points viennent de la mesure.
+    # Une première passe sur une nuit calme avait posé 5 : 27 des 34
+    # signaux sur pourcentages bougeaient moins, dont un CPU passant de
+    # 0,87 % à 1,91 % remonté en critical. Une journée entière, une
+    # fois le côté logs devenu silencieux, a montré ce que 5 laissait
+    # encore passer : treize signaux entre 5 et 10 points, tous une
+    # machine au repos qui travaille un peu. Un CPU hôte de 1,5 % à
+    # 7 %, un conteneur qui se réveille à 6 %, une mémoire qui bouge de
+    # six points, avec des z-scores jusqu'à 1385 parce qu'une baseline
+    # proche de zéro rend toute activité extrême. Pour les autres
+    # unités, ajoutez le vôtre, par exemple pour une charge système
+    # sur une petite machine :
+    #   system.load1: 2
     # Les clés que vous posez ici s'ajoutent aux planchers par défaut,
     # elles ne les remplacent pas : pour annuler celui des pourcentages,
     # redéfinissez-le à 0 plutôt que de vider la table.
     min_deltas:
-      "*percent": 5       # points de pourcentage
+      "*percent": 10      # points de pourcentage
     # Plafond du nombre de séries suivies. Les environnements créent des
     # identités jetables (conteneur de déploiement, job ponctuel, nom de
     # pod) : autant de séries écrites une fois et jamais réalimentées.

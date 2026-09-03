@@ -100,6 +100,13 @@ func TestMetricDetectorMinDelta(t *testing.T) {
 		t.Fatalf("expected the significance floor to silence a 0.12 point move, got %+v", signals)
 	}
 
+	// 6.3%: a container waking up. Ninety-four sigmas on the dogfooding
+	// instance, and nothing anyone would read.
+	signals = detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 6.3, start.Add(205*time.Second)))
+	if hasSignal(signals, SignalMetricZScore) {
+		t.Fatalf("expected the floor to silence a six point move on an idle container, got %+v", signals)
+	}
+
 	// 42%: above the floor, must still signal.
 	signals = detector.Detect(metricObservation("prod/app", "docker.cpu.percent", 42, start.Add(210*time.Second)))
 	if !hasSignal(signals, SignalMetricZScore) {
@@ -143,9 +150,13 @@ func TestDefaultMinDeltasCoverPercentages(t *testing.T) {
 		"system.memory.used_percent",
 	}
 
+	// The test guards the glob, not the number: compare against the
+	// shipped value rather than a copy of it.
+	want := DefaultMinDeltas()["*percent"]
+
 	for _, metric := range metrics {
-		if floor := config.minDelta(metric); floor != 5 {
-			t.Errorf("expected the percentage floor for %s, got %v", metric, floor)
+		if floor := config.minDelta(metric); floor != want {
+			t.Errorf("expected the percentage floor %v for %s, got %v", want, metric, floor)
 		}
 	}
 

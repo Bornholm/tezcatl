@@ -87,16 +87,21 @@ func DefaultMetricConfig() *MetricConfig {
 // Any other unit needs a floor an operator sets, since the core cannot
 // guess the scale of a name it has never seen.
 //
-// Five points comes from measurement, not taste: on the dogfooding
-// instance, 27 of the 34 percentage z-scores of a quiet night moved
-// less than that, the smallest of them barely above one point (a host
-// CPU going from 0.87% to 1.91%, reported critical). Everything a
-// person would act on cleared it.
+// Ten points comes from measurement. A first pass on a quiet night put
+// the floor at five: 27 of 34 percentage z-scores moved less, down to
+// a host CPU going from 0.87% to 1.91%, reported critical. A full day
+// once the log side had gone quiet showed what five still let through:
+// thirteen signals between five and ten points, every one of them a
+// machine at rest doing a little work. A host CPU from 1.5% to 7%, a
+// container waking up to 6%, memory moving six points. The z-scores
+// ran to 1385, because a baseline near zero makes any activity extreme,
+// and none of them was worth a line. Everything above ten was at least
+// arguable.
 func DefaultMinDeltas() map[string]float64 {
 	return map[string]float64{
 		// Match the suffix, not a separator: "cpu.percent" and
 		// "memory.used_percent" are both percentages.
-		"*percent": 5,
+		"*percent": 10,
 	}
 }
 
