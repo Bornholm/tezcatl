@@ -97,8 +97,8 @@ tezcatl standalone logs \
 ```
 
 `--replay` fait avancer l'horloge interne sur les timestamps des lignes
-plutôt que sur l'heure courante, ce qui permet de rejouer une heure de
-logs en une seconde. `--state-dir` garde ce qui a été appris.
+plutôt que sur l'heure courante, donc une heure de logs se rejoue en une
+seconde. `--state-dir` garde ce qui a été appris.
 
 Une seule ligne sort, et la voici en entier :
 

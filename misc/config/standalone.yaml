@@ -1,5 +1,5 @@
 # =========================================================================
-# Configuration de référence de tezcatl — profil standalone, entièrement
+# Configuration de référence de tezcatl, profil standalone, entièrement
 # commentée. Toutes les clés sont optionnelles : chaque valeur ci-dessous
 # est la valeur par défaut, sauf mention contraire. Les clés inconnues
 # sont rejetées au démarrage (validation stricte).
@@ -19,9 +19,9 @@
 # --- Réseau (mode serveur uniquement, ignoré en standalone) --------------
 server:
   # Points d'écoute gRPC. Trois schémas :
-  #   unix:///chemin/socket  — socket unix locale (recommandé sur l'hôte)
-  #   tcp://hôte:port        — TCP en clair (réseau de confiance)
-  #   tls://hôte:port        — TCP chiffré (exige la section tls)
+  #   unix:///chemin/socket    socket unix locale (recommandé sur l'hôte)
+  #   tcp://hôte:port          TCP en clair (réseau de confiance)
+  #   tls://hôte:port          TCP chiffré (exige la section tls)
   listen:
     - tcp://127.0.0.1:4242
   # Certificat servant les cibles tls:// (les deux champs sont requis dès
@@ -48,7 +48,7 @@ pipeline:
   # Troncature des lignes de log démesurées (octets).
   max_log_length: 8192
   # true : émet un événement debug.observation par observation reçue.
-  # Utile pour vérifier la plomberie, très verbeux — laisser à false.
+  # Utile pour vérifier la plomberie, très verbeux. Laisser à false.
   debug_events: false
 
 # --- Logs : parsing, templates, détection --------------------------------
@@ -119,10 +119,10 @@ logs:
     mask_prefix: "<"
     mask_suffix: ">"
     # Masquage des parties variables AVANT le mining : chaque motif
-    # (syntaxe RE2 — pas de lookaround, utiliser \b) est remplacé par son
+    # (syntaxe RE2, pas de lookaround, utiliser \b) est remplacé par son
     # nom de masque. L'ordre compte (appliqués séquentiellement) : IP,
     # UUID et EMAIL avant NUM (leurs chiffres seraient mangés), et NUM
-    # avant HEX — sinon un epoch comme 1787996498, entièrement composé de
+    # avant HEX, sinon un epoch comme 1787996498, entièrement composé de
     # chiffres hexadécimaux valides, deviendrait <HEX>. EMAIL est autant
     # une question d'hygiène (pas d'adresse dans les templates, les
     # événements ni leurs destinations) que de qualité de clustering.
@@ -217,11 +217,11 @@ logs:
     # « Connection <*> by <IP> port <NUM> ». 0 signale tout.
     max_placeholder_ratio: 0.6
     # Saisonnalité :
-    #   hourly — baselines par heure de la journée : un pic quotidien à
+    #   hourly   baselines par heure de la journée : un pic quotidien à
     #            9h ou un cron nocturne ne sont pas des anomalies ; un
     #            template jamais vu à une heure connue-active n'y est pas
     #            attendu (dès seasonal_min_observations à cette heure) ;
-    #   none   — baselines plates.
+    #   none     baselines plates.
     seasonality: hourly
     seasonal_min_observations: 50
     # Plafond des statistiques de templates par source (pendant de
@@ -232,9 +232,9 @@ logs:
     max_templates: 2000
     # Marquages de templates (chaîne exacte, telle qu'affichée par
     # `tezcatl templates`) :
-    #   normal      — attendu, aucun signal ;
-    #   ignore      — aucun signal non plus (bruit assumé) ;
-    #   symptomatic — signal fort à chaque occurrence.
+    #   normal        attendu, aucun signal ;
+    #   ignore        aucun signal non plus (bruit assumé) ;
+    #   symptomatic   signal fort à chaque occurrence.
     # Ce bloc est la base ; `tezcatl mark` ajuste au runtime sans
     # redémarrage et ses marquages, persistés avec l'état, priment.
     # markings:
@@ -249,7 +249,7 @@ metrics:
     # false : désactive la détection sur les métriques.
     enabled: true
     # Nombre d'échantillons par série avant les signaux statistiques
-    # (z-score, dérive) — les seuils statiques s'appliquent dès le 1er.
+    # (z-score, dérive). Les seuils statiques s'appliquent dès le 1er.
     warmup_samples: 30
     # Lissage de la baseline moyenne/variance (EWMA). Plus petit = plus
     # stable, plus lent à s'adapter.
@@ -356,7 +356,7 @@ plugins:
     # conteneurs serverless : le CLI scw sert à la découverte (quels
     # conteneurs existent, où sont les endpoints Cockpit) et réutilise
     # donc vos identifiants scw existants, tandis que les données sont
-    # lues dans Cockpit — Loki pour les logs, Prometheus pour les
+    # lues dans Cockpit : Loki pour les logs, Prometheus pour les
     # métriques. Le CLI publié ne sait pas encore lire les logs des
     # conteneurs, d'où ce détour.
     #
@@ -386,15 +386,15 @@ plugins:
     # k8s-events), les logs de tous les pods (un stream par conteneur,
     # service dérivé des labels app.kubernetes.io/name/app puis du
     # workload propriétaire, environnement = namespace par défaut) et
-    # les mises à jour de spec des workloads — converties en
-    # changements corrélables : image (deployment), rollout restart
-    # (restart), réplicas (scale), autre (config) —, directement via
-    # l'API server. Sans api_server ni
+    # les mises à jour de spec des workloads, converties en
+    # changements corrélables (image pour deployment, rollout restart
+    # pour restart, réplicas pour scale, le reste pour config),
+    # directement via l'API server. Sans api_server ni
     # kubeconfig : identifiants in-cluster (serviceaccount)
     # autodétectés, puis $KUBECONFIG et ~/.kube/config. Un kubeconfig
     # fournit serveur, CA et identifiants (token, tokenFile,
-    # certificat client — pas les plugins exec type EKS/GKE : utiliser
-    # un token, un certificat ou `kubectl proxy` + api_server).
+    # certificat client), mais pas les plugins exec type EKS/GKE : pour
+    # ceux-là, un token, un certificat ou `kubectl proxy` + api_server.
     kubernetes:
       enabled: false
       config:
@@ -420,7 +420,7 @@ plugins:
     # résultat devient une observation métrique. La corrélation
     # logs/métriques exige la même identité environnement/service que
     # les logs ; service_label dérive le service d'un label du
-    # résultat (prioritaire sur service) — chaque valeur du label
+    # résultat (prioritaire sur service), et chaque valeur du label
     # devient une source distincte.
     prometheus:
       enabled: false
@@ -487,8 +487,8 @@ correlation:
   context_before: 10
   context_after: 10
   # Horloge d'expiration des fenêtres :
-  #   wall  — horloge murale (flux temps réel) ;
-  #   event — timestamps des observations (rejeu d'incidents passés avec
+  #   wall    horloge murale (flux temps réel) ;
+  #   event   timestamps des observations (rejeu d'incidents passés avec
   #           chronologie exacte ; c'est ce que fait le flag --replay).
   clock: wall
   # Ancienneté maximale d'un changement (déploiement…) encore rattaché à
@@ -498,9 +498,9 @@ correlation:
 # --- Persistance de l'état appris ----------------------------------------
 state:
   # Répertoire des snapshots : templates drain3, baselines des
-  # détecteurs, marquages runtime. L'état est restauré au démarrage —
+  # détecteurs, marquages runtime. L'état est restauré au démarrage :
   # pas de réapprentissage, pas de faux positifs après redémarrage.
-  # Vide ("" — le défaut) : aucune persistance.
+  # Vide (le défaut) : aucune persistance.
   dir: ./tezcatl-state
   # Cadence de sauvegarde (plus une sauvegarde finale à l'arrêt).
   save_interval: 30s
@@ -520,12 +520,12 @@ events:
 
 # --- Destinations des événements -----------------------------------------
 sinks:
-  # JSON Lines sur stdout — un événement par ligne. Les logs internes
+  # JSON Lines sur stdout, un événement par ligne. Les logs internes
   # vont sur stderr, stdout reste propre pour du pipe (jq…).
   stdout:
     enabled: true
-  # PostgreSQL : table tezcatl_events (créée au démarrage — la base doit
-  # être joignable à ce moment-là ; les coupures ultérieures sont
+  # PostgreSQL : table tezcatl_events (créée au démarrage, donc la base
+  # doit être joignable à ce moment-là ; les coupures ultérieures sont
   # absorbées par une file bornée avec retries, sans bloquer le
   # pipeline).
   postgres:

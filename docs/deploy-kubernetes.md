@@ -16,7 +16,7 @@ le binaire en entrypoint).
 
 ## 1. Le serveur
 
-Namespace, configuration, état persistant, Deployment (1 réplique — le
+Namespace, configuration, état persistant, Deployment (1 réplique, le
 serveur est mono-instance à ce stade) et Service :
 
 ```yaml
@@ -126,7 +126,7 @@ le PVC.
 
 ## 2. Métriques : brancher Prometheus
 
-C'est l'entrée la plus rentable sur Kubernetes — aucun agent à
+C'est l'entrée la plus rentable sur Kubernetes : aucun agent à
 déployer, le plugin `tezcatl-source-prometheus` interroge l'API
 Prometheus existante. Le plus simple est de l'héberger dans le pod
 collecteur de la section 3 : ajoutez le téléchargement du binaire à
@@ -172,8 +172,8 @@ du JSON, propre au plugin) :
 (Avec kube-prometheus-stack, l'URL est
 `http://prometheus-operated.monitoring:9090`.)
 
-`service_label` fait de chaque valeur du label une source distincte —
-les anomalies de métriques se corrèlent alors avec les logs et
+`service_label` fait de chaque valeur du label une source distincte,
+donc les anomalies de métriques se corrèlent avec les logs et les
 déploiements du même service. Les seuils de détection, eux, restent
 côté serveur, dans la ConfigMap :
 
@@ -190,9 +190,9 @@ côté serveur, dans la ConfigMap :
 
 Le plugin `tezcatl-source-kubernetes` parle directement à l'API server
 (pas de kubectl) : il suit les events du cluster (BackOff, Killing,
-FailedScheduling… — un flux de logs sous l'identité `k8s-events`), les
-logs de **tous** les pods, y compris ceux créés après son démarrage —
-la limite de `kubectl logs --selector` ne s'applique pas — et les
+FailedScheduling…, un flux de logs sous l'identité `k8s-events`), les
+logs de **tous** les pods, y compris ceux créés après son démarrage,
+car la limite de `kubectl logs --selector` ne s'applique pas, et les
 mises à jour de spec des workloads (Deployments, StatefulSets,
 DaemonSets), converties en **changements** corrélables : nouvelle
 image (`type: deployment`, version `checkout:v1.8.2`),
@@ -208,7 +208,7 @@ binaires sont téléchargés depuis la release, l'image tezcatl étant
 distroless) :
 
 ```yaml
-# collector.yaml — namespace tezcatl
+# collector.yaml, namespace tezcatl
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -288,15 +288,15 @@ spec:
 ```
 
 Les identifiants in-cluster (token du serviceaccount, CA) sont
-autodétectés ; la config JSON du plugin permet de restreindre
-(`namespaces`, `label_selector`), de couper une des trois sources
-(`no_events`, `no_logs`, `no_changes`) ou de changer la dérivation d'identité
-(`service_labels`) — schéma complet dans `misc/config/standalone.yaml`.
+autodétectés. La config JSON du plugin restreint le périmètre
+(`namespaces`, `label_selector`), coupe une des trois sources
+(`no_events`, `no_logs`, `no_changes`) ou change la dérivation d'identité
+(`service_labels`). Le schéma complet est dans `misc/config/standalone.yaml`.
 Depuis un poste de travail, le même plugin fonctionne sans rien
 déployer : sans configuration il lit `$KUBECONFIG` puis
 `~/.kube/config` (`--source-config='{"context":"prod"}'` pour choisir
 un contexte ; tokens et certificats clients sont supportés, pas les
-plugins d'authentification `exec` type EKS/GKE — dans ce cas,
+plugins d'authentification `exec` type EKS/GKE, où il faut passer par
 `kubectl proxy` puis
 `--source-config='{"api_server":"http://127.0.0.1:8001"}'`).
 
@@ -307,7 +307,7 @@ sans droits cluster : RBAC minimal + un pod qui pipe `kubectl logs`
 vers `tezcatl ingest logs` :
 
 ```yaml
-# forwarder-checkout.yaml — à créer dans le namespace de l'application
+# forwarder-checkout.yaml, à créer dans le namespace de l'application
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -379,7 +379,7 @@ spec:
 
 Limites assumées de ce forwarder : les pods créés *après* son démarrage
 ne sont suivis qu'à son prochain redémarrage (le processus se termine
-quand tous les flux se ferment — après un rollout par exemple — et
+quand tous les flux se ferment, après un rollout par exemple, et
 Kubernetes le relance, ce qui ré-attache tout) ; réservez-le aux
 applications qui comptent. `--timestamps` fournit l'heure exacte, et les
 logs JSON sont parsés automatiquement.
@@ -428,7 +428,7 @@ tezcatl mark --template "connection reset by peer" --as ignore
 tezcatl mark --metric "pod_restarts" --as ignore   # ou un glob sur les séries
 ```
 
-Relire ce qui s'est passé — le serveur tient un journal local des
+Relire ce qui s'est passé. Le serveur tient un journal local des
 événements, indépendamment des sinks :
 
 ```bash
@@ -440,8 +440,8 @@ tezcatl incidents --since 24h
 tezcatl incidents --since 24h --format markdown    # rapport auto-descriptif
 ```
 
-Ou en interactif, une TUI à trois onglets — événements en direct,
-templates, baselines — avec le marquage au clavier :
+Ou en interactif, une TUI à trois onglets, événements en direct,
+templates et baselines, avec le marquage au clavier :
 
 ```bash
 tezcatl top
@@ -465,5 +465,5 @@ Une seule réplique (l'état n'est pas partagé) et pas de TLS entre pods
 (rajouter `tls://` + certificat si le trafic sort du cluster). La suite
 naturelle : regroupement par workload/namespace, événements
 multi-services et corrélation des déploiements collectés
-automatiquement — ce déploiement minimal sert précisément à valider ce
-qui mérite d'y être industrialisé.
+automatiquement. Ce déploiement minimal sert à valider ce qui mérite
+d'y être industrialisé.

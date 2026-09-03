@@ -101,7 +101,9 @@ Tezcatl persiste ce qu'il apprend, templates Drain3 et baselines, dans `state.di
 
 Un détecteur n'a aucune mémoire de ce qu'il vient de dire : sans amortissement, un template qui déborde toutes les vingt minutes produit un signal toutes les vingt minutes. Le silence après un rapport double à chaque redite (`dampening.cooldown`), une aggravation le coupe, et un motif qui se tait assez longtemps repart de zéro. Sur l'instance de dogfooding, cela retire un quart des événements d'une journée sans en faire taire un seul définitivement.
 
-Deux règles de plus tiennent le bruit à distance, et toutes deux mesurent un template contre sa propre histoire plutôt que contre le volume de sa source. Un template n'est **rare** que si son espacement le confirme : la rareté comptée en proportion du trafic fait de toute ligne périodique une rareté éternelle, et sur l'instance de dogfooding 22 des 49 signaux de rareté d'une journée disaient le même fait, qu'un déploiement avait eu lieu. Au-delà de `rare_max_interval`, le template ne se fait pas rare, il revient lentement. Un template n'est **absent** qu'après un silence absolu (`disappearance_min_silence`) : le facteur de disparition est relatif, donc trois fois un intervalle moyen de 22 secondes déclenchent au bout de 66 secondes, et les scanners SSH de l'instance, assez réguliers pour passer le filtre de régularité, faisaient signaler chaque pause de leur brute-force.
+Deux autres règles jugent un template sur sa propre histoire plutôt que sur le volume de sa source. La première porte sur la rareté. Comptée en proportion du trafic, elle fait de toute ligne périodique une rareté éternelle : sur l'instance de dogfooding, 22 des 49 signaux de rareté d'une journée disaient le même fait, qu'un déploiement avait eu lieu. Un template n'est donc rare que si son espacement le confirme. Au-delà de `rare_max_interval`, il ne se fait pas rare, il revient lentement.
+
+La seconde porte sur l'absence. `disappearance_factor` est relatif, donc trois fois un intervalle moyen de 22 secondes déclenchent au bout de 66 secondes. Les scanners SSH de l'instance frappent avec assez de régularité pour passer le filtre du coefficient de variation, et tezcatl signalait chaque pause de leur brute-force comme un template disparu. Il faut désormais un silence absolu, `disappearance_min_silence`, avant de conclure que quelque chose s'est arrêté.
 
 Enfin, `critical` demande une corroboration et pas seulement un écart : deux modalités qui concordent, un changement déclaré juste avant, ou un jugement humain déjà posé (template symptomatique, seuil configuré). Un z-score solitaire, aussi extrême soit-il, s'arrête à `warning`. Autrement dit, la statistique seule ne crie jamais.
 
@@ -109,7 +111,7 @@ Enfin, `critical` demande une corroboration et pas seulement un écart : deux mo
 
 La sortie `--format markdown` est faite pour être donnée telle quelle à un agent LLM. Elle explique son propre schéma avant de présenter les données : ce qu'est un déclencheur par opposition à une preuve, que `<NUM>` et `<*>` sont des masques et non des valeurs, que les preuves sont agrégées, que les changements associés sont une corrélation et rien d'autre. Elle énonce aussi ce que tezcatl **ne sait pas** : il ignore la causalité, il ne voit que ce qu'on lui donne, un détecteur silencieux n'est pas un système sain, et les frontières d'un incident sont une heuristique. Un agent qui lit ces données sans ces avertissements invente du sens qui n'y est pas.
 
-`tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue l'historique persisté, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline et permet de faire taire une série avec `i`.
+`tezcatl top` ouvre trois onglets sur un serveur en marche. L'onglet **événements** suit le flux en direct et rejoue l'historique persisté, avec le détail des signaux déclencheurs et des changements corrélés sous `entrée`. L'onglet **templates** marque au clavier ce qui est du bruit, sans recopier le template. L'onglet **metrics** trie les séries par écart à leur baseline, et `i` en fait taire une.
 
 [Itztli](./docs/itztli.md) est le pendant web de `tezcatl top` : un binaire séparé et optionnel qui sert les mêmes données dans un navigateur. Derniers incidents en écran d'accueil, détail avec déclencheur, preuves et changements corrélés, marquage des templates et des métriques, et en option un bouton « Explain » qui fait lire le rapport d'un incident à un LLM. L'accès se protège par un mot de passe unique ou par OIDC.
 
@@ -147,7 +149,7 @@ systemctl enable --now tezcatl-journald   # réglages dans /etc/tezcatl/journald
 
 L'interface web s'ajoute de la même façon à n'importe quelle variante, avec `--itztli` : elle aussi est un choix, pas un défaut, parce qu'elle expose le serveur en HTTP derrière un mot de passe ou un fournisseur d'identité ([guide](./docs/itztli.md)).
 
-Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. La mise à jour redémarre les unités qui tournent : toutes exécutent le même binaire, et remplacer le fichier ne change rien aux processus déjà lancés — l'écart ne se verrait qu'au moment où une commande neuve parle à un serveur resté sur l'ancien code. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
+Relancer le même script met à jour vers la dernière release, et ne fait rien si la version est déjà installée. La mise à jour redémarre les unités qui tournent : toutes exécutent le même binaire, et remplacer le fichier ne change rien aux processus déjà lancés. L'écart ne se verrait qu'au moment où une commande neuve parle à un serveur resté sur l'ancien code. Utilisez `--version vX.Y.Z` pour épingler une version, `--download-only` pour récupérer les paquets vérifiés sans les installer.
 
 [Prise en main](./docs/getting-started.md) explique les concepts à un
 administrateur système qui n'a pas à connaître les statistiques : ce
@@ -164,7 +166,7 @@ Trois guides pas à pas :
 
 ## Configuration
 
-Tout se configure en YAML. La validation est stricte au démarrage, une clé inconnue est une erreur, et `${VAR}` permet de sortir les secrets du fichier. Vous réglez les listeners, les buffers, le nombre de workers, les masques Drain3, la période d'apprentissage, les détecteurs, la fenêtre de corrélation, la persistance et les sinks (stdout JSONL, PostgreSQL, webhook). Les profils d'exemple sont dans [misc/config](./misc/config), et `standalone.yaml` documente toutes les options avec leurs valeurs par défaut.
+Tout se configure en YAML. La validation est stricte au démarrage, une clé inconnue est une erreur, et `${VAR}` sort les secrets du fichier. Vous réglez les listeners, les buffers, le nombre de workers, les masques Drain3, la période d'apprentissage, les détecteurs, la fenêtre de corrélation, la persistance et les sinks (stdout JSONL, PostgreSQL, webhook). Les profils d'exemple sont dans [misc/config](./misc/config), et `standalone.yaml` documente toutes les options avec leurs valeurs par défaut.
 
 ## Développement
 

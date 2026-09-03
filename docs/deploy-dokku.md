@@ -9,18 +9,18 @@ en place la boucle de feedback. Les paquets sont téléchargés depuis les
 
 Quatre paquets Debian sont publiés à chaque release :
 
-- **`tezcatl`** — le binaire (`/usr/bin/tezcatl`) : ingestion, mode
+- **`tezcatl`**, le binaire (`/usr/bin/tezcatl`) : ingestion, mode
   standalone, commandes de feedback ;
-- **`tezcatl-server`** — l'intégration système du serveur : unité
+- **`tezcatl-server`**, l'intégration système du serveur : unité
   systemd, configuration `/etc/tezcatl`, utilisateur dédié ;
-- **`tezcatl-plugin-host`** — le plugin de métriques hôte + conteneurs
+- **`tezcatl-plugin-host`**, le plugin de métriques hôte et conteneurs
   Docker (requis par l'unité `tezcatl-metrics`) ;
-- **`tezcatl-dokku`** — l'intégration Dokku : unité d'ingestion par
+- **`tezcatl-dokku`**, l'intégration Dokku : unité d'ingestion par
   application, collecteur de métriques et hook de déploiement.
 
 Le plus simple est le script d'installation (variante `dokku`), qui
 télécharge la dernière release, vérifie les sommes de contrôle et
-installe les quatre paquets — le relancer plus tard met à jour :
+installe les quatre paquets. Le relancer plus tard met à jour :
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bornholm/tezcatl/main/install.sh | sudo sh -s -- --variant dokku
@@ -72,7 +72,7 @@ sudo systemctl enable --now tezcatl-ingest@autre-app
 ```
 
 La cible et l'environnement se règlent dans `/etc/tezcatl/ingest.env`
-(préservé aux mises à jour) — utile pour envoyer vers un serveur
+(préservé aux mises à jour), utile pour envoyer vers un serveur
 distant :
 
 ```bash
@@ -83,9 +83,9 @@ TEZCATL_ENVIRONMENT=production
 
 Notes :
 
-- `dokku logs` préfixe chaque ligne d'un timestamp RFC3339 — il est
-  extrait automatiquement ; si l'application logge en JSON, message et
-  niveau le sont aussi ;
+- `dokku logs` préfixe chaque ligne d'un timestamp RFC3339, que
+  tezcatl extrait ; si l'application logge en JSON, il en tire aussi le
+  message et le niveau ;
 - au redémarrage d'une unité, `dokku logs -t` peut rejouer quelques
   lignes récentes : léger double comptage sans conséquence.
 
@@ -109,7 +109,7 @@ base (`learning_period: 15m`) ; la saisonnalité horaire (crons, trafic
 quotidien) s'affine sur 2 à 3 jours.
 
 **Boucle de feedback.** Inspecter ce qui a été appris et marquer le
-bruit, sans redémarrer — les marquages sont persistés avec l'état :
+bruit, sans redémarrer. Les marquages sont persistés avec l'état :
 
 ```bash
 tezcatl templates --target unix:///run/tezcatl/tezcatl.sock
@@ -123,8 +123,8 @@ tezcatl mark --target unix:///run/tezcatl/tezcatl.sock \
 
 **Notifications.** Pour être prévenu plutôt que de lire le journal,
 activer le sink webhook dans `/etc/tezcatl/server.yaml` (un POST JSON
-par événement, vers n'importe quel endpoint — un petit relais vers
-ntfy/Gotify convient), le secret dans `/etc/tezcatl/server.env` :
+par événement, vers n'importe quel endpoint, et un petit relais vers
+ntfy ou Gotify convient), le secret dans `/etc/tezcatl/server.env` :
 
 ```yaml
 sinks:
@@ -153,7 +153,7 @@ sudo systemctl enable --now tezcatl-metrics
 ```
 
 Comme les unités d'ingestion, la cible se règle dans
-`/etc/tezcatl/ingest.env` — le collecteur fonctionne donc aussi vers un
+`/etc/tezcatl/ingest.env`, donc le collecteur fonctionne aussi vers un
 serveur distant. Ne pas activer en double : si vous utilisez cette
 unité, laissez le plugin `host` désactivé dans `plugins.sources` de
 `/etc/tezcatl/server.yaml` (et réciproquement). Si un Prometheus existe

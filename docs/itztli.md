@@ -57,7 +57,7 @@ C'est la boucle de `tezcatl mark`, au moment où le jugement se fait :
 le lecteur vient de voir pourquoi ce motif compte.
 
 Le raccourci vise le template du signal le plus fort de la ligne, ou sa
-série pour un signal de métrique — une série ne connaît que `ignorer`,
+série pour un signal de métrique. Une série ne connaît que `ignorer`,
 `symptomatique` n'y a pas de sens. Un template marqué `normal` depuis
 la page Templates s'affiche comme silencié : les détecteurs traitent
 `normal` et `ignore` de la même façon.
