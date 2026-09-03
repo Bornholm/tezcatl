@@ -214,6 +214,9 @@ func (t *top) onKey(event *tcell.EventKey) *tcell.EventKey {
 	case 's':
 		t.markSelected(detect.MarkingSymptomatic)
 		return nil
+	case 'h':
+		t.markSelected(detect.MarkingHeartbeat)
+		return nil
 	case 'c':
 		t.markSelected("")
 		return nil
@@ -660,6 +663,8 @@ func renderTemplates(table *tview.Table, templates []admin.TemplateInfo) {
 			color = tcell.ColorGray
 		case detect.MarkingSymptomatic:
 			color = tcell.ColorRed
+		case detect.MarkingHeartbeat:
+			color = tcell.ColorYellow
 		}
 
 		table.SetCell(row, 0, tview.NewTableCell(tview.Escape(info.Partition)).SetTextColor(color))

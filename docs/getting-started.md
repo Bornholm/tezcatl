@@ -394,7 +394,11 @@ tezcatl mark --metric "docker.memory.*" --as ignore   # taire une série
 ```
 
 Il existe aussi `--as symptomatic`, pour l'inverse : un motif que vous
-voulez voir remonter à chaque occurrence, même une fois banalisé.
+voulez voir remonter à chaque occurrence, même une fois banalisé. Et
+`--as heartbeat`, pour être prévenu quand un motif *cesse* d'arriver :
+le cron de sauvegarde, le tick d'un worker. Sans ce marquage, l'absence
+d'un template n'est pas signalée, parce que la statistique sait dire
+qu'un flux s'est arrêté, pas si quelqu'un y tenait.
 
 Comptez quelques jours de marquage avant que le flux devienne lisible.
 Si après une semaine vous marquez encore beaucoup, c'est généralement le

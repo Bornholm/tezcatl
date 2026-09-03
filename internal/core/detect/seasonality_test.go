@@ -74,6 +74,9 @@ func TestSeasonalityMissingTemplate(t *testing.T) {
 	config.DisappearanceScanInterval = 10 * time.Second
 	config.Seasonality = SeasonalityHourly
 	config.SeasonalMinObservations = 50
+	// This test is about the hour of day, so every template is a
+	// candidate.
+	config.DisappearanceScope = DisappearanceScopeAll
 
 	detector := NewLogDetector(config)
 

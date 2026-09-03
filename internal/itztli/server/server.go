@@ -582,9 +582,10 @@ func (s *Server) handleIncidentMark(w http.ResponseWriter, r *http.Request) {
 	case "template":
 		err = s.client.MarkTemplate(r.Context(), target.Value, target.Marking)
 	case "metric":
-		// A series is either ignored or not; "symptomatic" has no
-		// meaning there and the shortcut never offers it.
-		if target.Marking == "symptomatic" || target.Marking == "normal" {
+		// A series is either ignored or not; "symptomatic" and
+		// "heartbeat" have no meaning there and the shortcut never
+		// offers them.
+		if target.Marking == "symptomatic" || target.Marking == "normal" || target.Marking == "heartbeat" {
 			http.Error(w, "a series can only be ignored", http.StatusBadRequest)
 
 			return
@@ -743,7 +744,7 @@ func (s *Server) handleTemplateMark(w http.ResponseWriter, r *http.Request) {
 
 func validMarking(marking string) bool {
 	switch marking {
-	case "", "ignore", "normal", "symptomatic":
+	case "", "ignore", "normal", "symptomatic", "heartbeat":
 		return true
 	default:
 		return false

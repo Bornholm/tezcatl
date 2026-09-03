@@ -44,6 +44,20 @@ func TestSeverityAsksForCorroboration(t *testing.T) {
 			signals:    []model.Signal{signal(detect.SignalLogSymptomatic, model.ModalityLog)},
 			want:       model.SeverityCritical,
 		},
+		"a heartbeat an operator asked about, gone quiet": {
+			confidence: 0.9,
+			signals: []model.Signal{{
+				Kind:       detect.SignalLogMissingTemplate,
+				Modality:   model.ModalityLog,
+				Attributes: map[string]string{"marking": string(detect.MarkingHeartbeat)},
+			}},
+			want: model.SeverityCritical,
+		},
+		"a template nobody named, gone quiet": {
+			confidence: 0.9,
+			signals:    []model.Signal{signal(detect.SignalLogMissingTemplate, model.ModalityLog)},
+			want:       model.SeverityWarning,
+		},
 		"a moderate deviation, corroborated or not": {
 			confidence: 0.7, signals: lone, multimodal: true, want: model.SeverityWarning,
 		},

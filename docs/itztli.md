@@ -15,7 +15,7 @@ Trois écrans, volontairement peu denses :
   agrégées, les lignes de log autour du déclencheur et les événements
   sous-jacents, chacun avec un raccourci de marquage.
 - **Templates** : les templates appris, filtrables par texte et par
-  marquage. Les boutons `ignorer`, `normal`, `symptomatique` et
+  marquage. Les boutons `ignorer`, `normal`, `symptomatique`, `heartbeat` et
   `effacer` appellent la même API que `tezcatl mark` et prennent effet
   tout de suite.
 - **Métriques** : les séries apprises, triées par écart à leur

@@ -116,12 +116,19 @@ func TestMeasureOnInstanceLogs(t *testing.T) {
 		return counts, len(miner.Partitions())
 	}
 
+	// Both runs expect every regular template back: the capture has no
+	// markings, and with the default scope the disappearance column
+	// would read zero without measuring anything. It is the floor and
+	// the rarity rule being measured here, not the scope.
 	before, partitions := replay(t, func(config *LogConfig) {
+		config.DisappearanceScope = DisappearanceScopeAll
 		config.RareMaxInterval = 0
 		config.DisappearanceMinSilence = 0
 	})
 
-	after, _ := replay(t, func(config *LogConfig) {})
+	after, _ := replay(t, func(config *LogConfig) {
+		config.DisappearanceScope = DisappearanceScopeAll
+	})
 
 	t.Logf("partitions: %d", partitions)
 

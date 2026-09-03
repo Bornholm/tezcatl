@@ -124,6 +124,8 @@ func TestLogDetectorMissingTemplate(t *testing.T) {
 	config.DisappearanceScanInterval = 10 * time.Second
 	// This test is about the factor; the absolute floor has its own.
 	config.DisappearanceMinSilence = 0
+	// The heartbeat is named, as an operator would.
+	config.Markings = map[string]Marking{"heartbeat ok": MarkingHeartbeat}
 
 	detector := NewLogDetector(config)
 
@@ -330,6 +332,9 @@ func TestLogDetectorBurstyTemplateIsNotMissing(t *testing.T) {
 		config.DisappearanceFactor = 3
 		config.DisappearanceScanInterval = 10 * time.Second
 		config.DisappearanceMaxCV = maxCV
+		// This test is about regularity, so every template is a
+		// candidate.
+		config.DisappearanceScope = DisappearanceScopeAll
 
 		detector := NewLogDetector(config)
 
@@ -534,6 +539,9 @@ func TestLogDetectorShortSilenceIsALull(t *testing.T) {
 		config.DisappearanceFactor = 3
 		config.DisappearanceScanInterval = 10 * time.Second
 		config.DisappearanceMinSilence = floor
+		// This test is about the floor, so every template is a
+		// candidate.
+		config.DisappearanceScope = DisappearanceScopeAll
 
 		detector := NewLogDetector(config)
 
@@ -638,5 +646,68 @@ func TestLogDetectorSlowRecurrenceIsNotRare(t *testing.T) {
 	// is what the detector is for.
 	if got := spacing(t, 5*time.Minute, DefaultRareMaxInterval); got == 0 {
 		t.Error("a burst of an almost-unseen template must still be reported")
+	}
+}
+
+// TestLogDetectorOnlyAHeartbeatIsMissed guards the scope: statistics
+// can tell a stopped stream from a lull, not a stream worth missing
+// from one nobody wanted. On the dogfooding instance every disappearance
+// of a day was a pause in somebody else's SSH brute-force, 12 minutes
+// of quiet on a 3-minute mean, regular enough to pass every gate. Only
+// a template a person named is expected back.
+func TestLogDetectorOnlyAHeartbeatIsMissed(t *testing.T) {
+	stopped := func(t *testing.T, markings map[string]Marking) []model.Signal {
+		t.Helper()
+
+		config := DefaultLogConfig()
+		config.LearningPeriod = 0
+		config.DisappearanceMinCount = 5
+		config.DisappearanceFactor = 3
+		config.DisappearanceScanInterval = 10 * time.Second
+		config.DisappearanceMinSilence = 0
+		config.Markings = markings
+
+		detector := NewLogDetector(config)
+
+		start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+		timestamp := start
+		for i := range 20 {
+			timestamp = start.Add(time.Duration(i*5) * time.Second)
+			detector.Detect(logObservation("ssh", "1", "Invalid user <*> from <IP> port <NUM>", "none", timestamp))
+		}
+
+		for i := range 30 {
+			other := logObservation("ssh", "2", "Accepted publickey for root", "none", timestamp.Add(time.Duration((i+1)*5)*time.Second))
+			if signals := detector.Detect(other); hasSignal(signals, SignalLogMissingTemplate) {
+				return signals
+			}
+		}
+
+		return nil
+	}
+
+	if signals := stopped(t, nil); signals != nil {
+		t.Errorf("an unmarked template is not expected back, got %+v", signals)
+	}
+
+	signals := stopped(t, map[string]Marking{"Invalid user <*> from <IP> port <NUM>": MarkingHeartbeat})
+	if signals == nil {
+		t.Fatal("a heartbeat that stops must be reported")
+	}
+
+	// Naming it is a judgment, and the signal carries it.
+	for _, signal := range signals {
+		if signal.Kind != SignalLogMissingTemplate {
+			continue
+		}
+
+		if signal.Score < 0.9 {
+			t.Errorf("a named heartbeat gone missing scores %v, want at least 0.9", signal.Score)
+		}
+
+		if signal.Attributes["marking"] != string(MarkingHeartbeat) {
+			t.Errorf("the signal should say which marking let it through, got %q", signal.Attributes["marking"])
+		}
 	}
 }

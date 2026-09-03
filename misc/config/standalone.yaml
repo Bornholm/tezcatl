@@ -180,6 +180,15 @@ logs:
     disappearance_factor: 3
     disappearance_min_count: 10
     disappearance_scan_interval: 30s
+    # Qui est attendu : heartbeat, seuls les templates marqués ainsi ;
+    # all, tout template régulier. La statistique distingue un flux
+    # arrêté d'un creux, pas un flux qui manque d'un flux dont personne
+    # ne voulait : sur l'instance de dogfooding, toutes les disparitions
+    # d'une journée étaient des pauses du brute-force SSH de quelqu'un
+    # d'autre, assez régulier pour passer tous les filtres. Un heartbeat
+    # nommé qui se tait porte le jugement de la personne qui l'a nommé,
+    # et compte comme tel pour la sévérité.
+    disappearance_scope: heartbeat
     # Plancher absolu : disappearance_factor est relatif, donc un
     # template fréquent obtient une alarme proportionnellement
     # fréquente. Trois fois un intervalle moyen de 22 secondes font
@@ -234,7 +243,9 @@ logs:
     # `tezcatl templates`) :
     #   normal        attendu, aucun signal ;
     #   ignore        aucun signal non plus (bruit assumé) ;
-    #   symptomatic   signal fort à chaque occurrence.
+    #   symptomatic   signal fort à chaque occurrence ;
+    #   heartbeat     signal fort quand le template cesse d'arriver
+    #                 (le seul marquage qui demande plus, pas moins).
     # Ce bloc est la base ; `tezcatl mark` ajuste au runtime sans
     # redémarrage et ses marquages, persistés avec l'état, priment.
     # markings:

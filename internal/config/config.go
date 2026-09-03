@@ -109,6 +109,7 @@ type LogDetection struct {
 	DisappearanceMinCount     int64                     `yaml:"disappearance_min_count"`
 	DisappearanceScanInterval Duration                  `yaml:"disappearance_scan_interval"`
 	DisappearanceMinSilence   Duration                  `yaml:"disappearance_min_silence"`
+	DisappearanceScope        string                    `yaml:"disappearance_scope"`
 	DisappearanceMaxCV        float64                   `yaml:"disappearance_max_cv"`
 	MinTemplateLiterals       int                       `yaml:"min_template_literals"`
 	MaxPlaceholderRatio       float64                   `yaml:"max_placeholder_ratio"`
@@ -284,6 +285,7 @@ func Default() *Config {
 				DisappearanceMinCount:     10,
 				DisappearanceScanInterval: Duration(30 * time.Second),
 				DisappearanceMinSilence:   Duration(detect.DefaultDisappearanceMinSilence),
+				DisappearanceScope:        detect.DisappearanceScopeHeartbeat,
 				DisappearanceMaxCV:        detect.DefaultDisappearanceMaxCV,
 				MinTemplateLiterals:       detect.DefaultMinTemplateLiterals,
 				MaxPlaceholderRatio:       detect.DefaultMaxPlaceholderRatio,
@@ -401,6 +403,12 @@ func (c *Config) Validate() error {
 		return errors.Errorf("unsupported correlation.clock %q (expected wall or event)", c.Correlation.Clock)
 	}
 
+	switch c.Logs.Detection.DisappearanceScope {
+	case detect.DisappearanceScopeHeartbeat, detect.DisappearanceScopeAll:
+	default:
+		return errors.Errorf("unsupported logs.detection.disappearance_scope %q (expected heartbeat or all)", c.Logs.Detection.DisappearanceScope)
+	}
+
 	switch c.Logs.Detection.Seasonality {
 	case detect.SeasonalityNone, detect.SeasonalityHourly:
 	default:
@@ -477,6 +485,7 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		DisappearanceMinCount:     detection.DisappearanceMinCount,
 		DisappearanceScanInterval: detection.DisappearanceScanInterval.AsDuration(),
 		DisappearanceMinSilence:   detection.DisappearanceMinSilence.AsDuration(),
+		DisappearanceScope:        detection.DisappearanceScope,
 		DisappearanceMaxCV:        detection.DisappearanceMaxCV,
 		MinTemplateLiterals:       detection.MinTemplateLiterals,
 		MaxPlaceholderRatio:       detection.MaxPlaceholderRatio,

@@ -301,7 +301,8 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 // So critical also asks for corroboration, something a lone number
 // cannot fake: two modalities agreeing on the same service, a change
 // declared right before, or an operator's own judgement already
-// recorded, as a symptomatic template or as a threshold they set.
+// recorded: a symptomatic template, a threshold they set, a heartbeat
+// they asked to be told about.
 // Without it the strongest deviation stops at warning, which is
 // exactly what it deserves: worth reading, not worth waking up for.
 //
@@ -319,12 +320,18 @@ func severityOf(confidence float64, signals []model.Signal, multimodal bool, nea
 
 	intended := false
 	for _, signal := range signals {
-		// Both of these carry a human decision rather than a
-		// measurement: a template someone called a symptom, and a
-		// bound someone set.
-		if signal.Kind == detect.SignalLogSymptomatic || signal.Kind == detect.SignalMetricThreshold {
+		// Each of these carries a human decision rather than a
+		// measurement: a template someone called a symptom, a bound
+		// someone set, and a heartbeat someone asked to be told about
+		// when it stops.
+		switch {
+		case signal.Kind == detect.SignalLogSymptomatic,
+			signal.Kind == detect.SignalMetricThreshold,
+			signal.Kind == detect.SignalLogMissingTemplate && signal.Attributes["marking"] == string(detect.MarkingHeartbeat):
 			intended = true
+		}
 
+		if intended {
 			break
 		}
 	}

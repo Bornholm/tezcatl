@@ -22,6 +22,20 @@ const (
 	MarkingNormal      Marking = "normal"
 	MarkingIgnore      Marking = "ignore"
 	MarkingSymptomatic Marking = "symptomatic"
+	// MarkingHeartbeat says "tell me when this stops". It is the one
+	// marking that asks for more signal rather than less: the absence
+	// of a line only means something when a person decided that line
+	// should keep coming.
+	MarkingHeartbeat Marking = "heartbeat"
+)
+
+const (
+	// DisappearanceScopeHeartbeat expects back only the templates
+	// marked heartbeat.
+	DisappearanceScopeHeartbeat = "heartbeat"
+	// DisappearanceScopeAll expects back every regular template, as
+	// the detector did before markings could say which ones matter.
+	DisappearanceScopeAll = "all"
 )
 
 const (
@@ -63,6 +77,14 @@ type LogConfig struct {
 	// DisappearanceScanInterval bounds the frequency of the per-source
 	// overdue templates scan.
 	DisappearanceScanInterval time.Duration `yaml:"disappearance_scan_interval"`
+	// DisappearanceScope is "heartbeat" to expect back only the
+	// templates marked so, or "all" to expect every regular template.
+	// Empty means heartbeat. Statistics can tell a stopped stream from
+	// a lull, but not a stream worth missing from one nobody wanted:
+	// on the dogfooding instance every disappearance reported over a
+	// day was the pause of somebody else's SSH brute-force, a stream
+	// regular enough to pass every gate and meaningful to no one.
+	DisappearanceScope string `yaml:"disappearance_scope"`
 	// DisappearanceMinSilence is how long a template must have been
 	// quiet, in wall-clock time, before its absence is reported at all.
 	// It bounds DisappearanceFactor from below: three times a 22-second
@@ -186,6 +208,7 @@ func DefaultLogConfig() *LogConfig {
 		DisappearanceFactor:       3,
 		DisappearanceMinCount:     10,
 		DisappearanceScanInterval: 30 * time.Second,
+		DisappearanceScope:        DisappearanceScopeHeartbeat,
 		DisappearanceMinSilence:   DefaultDisappearanceMinSilence,
 		DisappearanceMaxCV:        DefaultDisappearanceMaxCV,
 		Seasonality:               SeasonalityHourly,
@@ -309,7 +332,7 @@ func NewLogDetector(config *LogConfig) *LogDetector {
 // ValidMarking reports whether a marking value is supported.
 func ValidMarking(marking Marking) bool {
 	switch marking {
-	case MarkingNormal, MarkingIgnore, MarkingSymptomatic:
+	case MarkingNormal, MarkingIgnore, MarkingSymptomatic, MarkingHeartbeat:
 		return true
 	default:
 		return false
@@ -659,7 +682,14 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 			continue
 		}
 
-		if marking := d.markings[stats.Template]; marking == MarkingIgnore || marking == MarkingNormal {
+		marking := d.markings[stats.Template]
+		if marking == MarkingIgnore || marking == MarkingNormal {
+			continue
+		}
+
+		// Only a template somebody named is expected back, unless the
+		// operator asked for every regular one.
+		if marking != MarkingHeartbeat && d.config.DisappearanceScope != DisappearanceScopeAll {
 			continue
 		}
 
@@ -693,12 +723,20 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 		if silence > overdue && silence > d.config.DisappearanceScanInterval.Seconds() {
 			stats.MissingSignaled = true
 
+			// A heartbeat is a template a person asked to be told
+			// about, so its silence carries their judgment, like a
+			// symptomatic template does when it appears.
+			score := 0.6
+			if marking == MarkingHeartbeat {
+				score = 0.9
+			}
+
 			signals = append(signals, model.Signal{
 				Kind:      SignalLogMissingTemplate,
 				Modality:  model.ModalityLog,
 				Source:    source,
 				Timestamp: timestamp,
-				Score:     0.6,
+				Score:     score,
 				// The prose is humanized, the attributes below keep raw
 				// seconds: "1h 40m" is for the reader, "6002" is for
 				// whatever parses the event.
@@ -712,6 +750,7 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 					// The dispersion of the intervals, so a reader can
 					// judge how much the mean was worth predicting.
 					"interval_cv": strconv.FormatFloat(cv, 'f', 2, 64),
+					"marking":     string(marking),
 				},
 			})
 		}

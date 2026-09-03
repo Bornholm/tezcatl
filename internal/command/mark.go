@@ -49,7 +49,7 @@ func adminTargetFlags() []cli.Flag {
 func NewMarkCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "mark",
-		Usage: "Mark a log template (normal, ignore, symptomatic) or silence a metric series (ignore)",
+		Usage: "Mark a log template (normal, ignore, symptomatic, heartbeat) or silence a metric series (ignore)",
 		Flags: append(adminTargetFlags(),
 			&cli.StringFlag{
 				Name:  "template",
@@ -61,7 +61,7 @@ func NewMarkCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "as",
-				Usage: "marking: normal, ignore or symptomatic (metrics: ignore only)",
+				Usage: "marking: normal, ignore, symptomatic or heartbeat, which asks to be told when the template stops (metrics: ignore only)",
 			},
 			&cli.BoolFlag{
 				Name:  "clear",
