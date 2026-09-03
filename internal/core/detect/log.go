@@ -58,6 +58,12 @@ type LogConfig struct {
 	// DisappearanceScanInterval bounds the frequency of the per-source
 	// overdue templates scan.
 	DisappearanceScanInterval time.Duration `yaml:"disappearance_scan_interval"`
+	// DisappearanceMinSilence is how long a template must have been
+	// quiet, in wall-clock time, before its absence is reported at all.
+	// It bounds DisappearanceFactor from below: three times a 22-second
+	// mean interval is 66 seconds, and a minute of quiet is a lull
+	// nobody can act on. 0 or less reports whatever the factor allows.
+	DisappearanceMinSilence time.Duration `yaml:"disappearance_min_silence"`
 	// DisappearanceMaxCV is the largest coefficient of variation of the
 	// intervals (standard deviation over mean) a template may have and
 	// still be expected back. Past it the template is bursty, and its
@@ -110,6 +116,21 @@ const DefaultMaxTemplates = 2000
 // predicts the next occurrence when the intervals cluster around it.
 const DefaultDisappearanceMaxCV = 0.5
 
+// DefaultDisappearanceMinSilence is the floor under which a gap is a
+// lull rather than a stop. DisappearanceFactor is relative, so a
+// frequent template gets a proportionally frequent alarm: on the
+// dogfooding instance the SSH scanners hit every 22 seconds, regularly
+// enough to pass the CV filter (0.38), and a 90-second pause in the
+// brute-force was reported as an expected template gone missing.
+//
+// Five minutes is what separates the two questions. Under it, a stop
+// and a pause look alike, whatever the mean interval; past it, a
+// heartbeat that has skipped ten beats is worth a word. The cost is
+// latency on a very frequent heartbeat, which is the right trade: a
+// 30-second heartbeat missing for 90 seconds is usually a restart or a
+// GC pause, and reporting it teaches an operator to stop reading.
+const DefaultDisappearanceMinSilence = 5 * time.Minute
+
 // DefaultMinTemplateLiterals is the floor a template must clear to be
 // worth naming as a shape. An access log mined down to
 // `<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>` keeps
@@ -144,6 +165,7 @@ func DefaultLogConfig() *LogConfig {
 		DisappearanceFactor:       3,
 		DisappearanceMinCount:     10,
 		DisappearanceScanInterval: 30 * time.Second,
+		DisappearanceMinSilence:   DefaultDisappearanceMinSilence,
 		DisappearanceMaxCV:        DefaultDisappearanceMaxCV,
 		Seasonality:               SeasonalityHourly,
 		SeasonalMinObservations:   50,
@@ -625,6 +647,10 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 		}
 
 		overdue := d.config.DisappearanceFactor * stats.MeanIntervalS
+		if floor := d.config.DisappearanceMinSilence.Seconds(); floor > overdue {
+			overdue = floor
+		}
+
 		silence := timestamp.Sub(stats.LastSeen).Seconds()
 
 		if silence > overdue && silence > d.config.DisappearanceScanInterval.Seconds() {

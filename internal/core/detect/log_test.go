@@ -122,6 +122,8 @@ func TestLogDetectorMissingTemplate(t *testing.T) {
 	config.DisappearanceMinCount = 5
 	config.DisappearanceFactor = 3
 	config.DisappearanceScanInterval = 10 * time.Second
+	// This test is about the factor; the absolute floor has its own.
+	config.DisappearanceMinSilence = 0
 
 	detector := NewLogDetector(config)
 
@@ -514,5 +516,62 @@ func TestDegenerateTemplatesStayQuietAboutTheirShape(t *testing.T) {
 				t.Fatalf("a template with no literal content must not report its shape: %s", signal.Summary)
 			}
 		}
+	}
+}
+
+// TestLogDetectorShortSilenceIsALull guards the absolute floor with the
+// numbers that produced it: the SSH scanners of the dogfooding instance
+// hit every 22 seconds, regularly enough to pass the CV gate at 0.38,
+// so three times the mean interval alarmed after 66 seconds. A pause in
+// somebody else's brute-force is not an outage.
+func TestLogDetectorShortSilenceIsALull(t *testing.T) {
+	quiet := func(t *testing.T, floor time.Duration, silence time.Duration) []model.Signal {
+		t.Helper()
+
+		config := DefaultLogConfig()
+		config.LearningPeriod = 0
+		config.DisappearanceMinCount = 5
+		config.DisappearanceFactor = 3
+		config.DisappearanceScanInterval = 10 * time.Second
+		config.DisappearanceMinSilence = floor
+
+		detector := NewLogDetector(config)
+
+		start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+		// A scan attempt every 22 seconds, metronomic enough that the
+		// regularity gate lets it through.
+		timestamp := start
+		for i := range 20 {
+			timestamp = start.Add(time.Duration(i*22) * time.Second)
+			detector.Detect(logObservation("ssh", "1", "Invalid user <*> from <IP> port <NUM>", "none", timestamp))
+		}
+
+		// Other lines keep flowing for the length of the silence, which
+		// is what drives the scan.
+		for elapsed := 10 * time.Second; elapsed <= silence; elapsed += 10 * time.Second {
+			other := logObservation("ssh", "2", "Accepted publickey for root", "none", timestamp.Add(elapsed))
+			if signals := detector.Detect(other); hasSignal(signals, SignalLogMissingTemplate) {
+				return signals
+			}
+		}
+
+		return nil
+	}
+
+	// Two minutes of quiet, well past three times 22 seconds.
+	if signals := quiet(t, DefaultDisappearanceMinSilence, 2*time.Minute); signals != nil {
+		t.Errorf("a two-minute gap in a 22-second stream is a lull, got %+v", signals)
+	}
+
+	// The floor delays the report, it does not remove it: the same
+	// stream still gone after ten minutes is worth a word.
+	if signals := quiet(t, DefaultDisappearanceMinSilence, 10*time.Minute); signals == nil {
+		t.Error("expected the stop to be reported once the silence clears the floor")
+	}
+
+	// Without the floor, the old behavior: 66 seconds and an alarm.
+	if signals := quiet(t, 0, 2*time.Minute); signals == nil {
+		t.Error("the factor alone should still fire; the floor is what holds it back")
 	}
 }

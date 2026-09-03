@@ -156,6 +156,13 @@ logs:
     disappearance_factor: 3
     disappearance_min_count: 10
     disappearance_scan_interval: 30s
+    # Plancher absolu : disappearance_factor est relatif, donc un
+    # template fréquent obtient une alarme proportionnellement
+    # fréquente. Trois fois un intervalle moyen de 22 secondes font
+    # 66 secondes, et une minute de calme est un creux, pas un arrêt.
+    # En dessous de ce plancher, rien n'est signalé, quel que soit
+    # l'intervalle moyen. 0 laisse le facteur décider seul.
+    disappearance_min_silence: 5m
     # Seuls les templates réguliers sont attendus. Le coefficient de
     # variation de leurs intervalles (écart-type sur moyenne) vaut 0
     # pour un métronome, 1 pour des arrivées aléatoires et davantage
