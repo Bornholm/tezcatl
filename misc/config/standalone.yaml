@@ -155,6 +155,18 @@ logs:
     # moins rare_min_observations.
     rare_threshold: 3
     rare_min_observations: 500
+    # La rareté se compte contre le volume de la source, donc dans un
+    # service bavard toute ligne périodique est rare pour toujours. Un
+    # template n'est rare que si son *propre* espacement le confirme :
+    # au-delà de cet intervalle moyen, il ne se fait pas rare, il
+    # revient lentement, et une tâche nocturne n'est pas une nouvelle
+    # chaque nuit. Sur l'instance de dogfooding, 22 des 49 signaux de
+    # rareté d'une journée disaient le même fait, qu'un déploiement
+    # avait eu lieu : progression BuildKit, sortie de dokku, rechargement
+    # nginx, retrait d'image. La première apparition d'un template est
+    # signalée quel que soit son espacement, n'ayant pas encore
+    # d'intervalle. 0 signale tout template peu fréquent.
+    rare_max_interval: 1h
     # Pic de fréquence : les occurrences par template sont comptées par
     # buckets de spike_bucket ; un bucket dépassant spike_factor × la
     # baseline apprise (et au moins spike_min_count) est signalé.

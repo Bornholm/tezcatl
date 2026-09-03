@@ -42,6 +42,11 @@ type LogConfig struct {
 	// RareMinObservations is the number of logs a source must have
 	// produced before rare templates are signaled.
 	RareMinObservations int64 `yaml:"rare_min_observations"`
+	// RareMaxInterval is the longest a rare template may go between
+	// occurrences and still count as rare. Past it the template is not
+	// rare, it recurs slowly, and a nightly job is not news every
+	// night. 0 or less reports every infrequent template.
+	RareMaxInterval time.Duration `yaml:"rare_max_interval"`
 	// SpikeBucket is the width of the frequency buckets.
 	SpikeBucket time.Duration `yaml:"spike_bucket"`
 	// SpikeFactor is the increase over the learned per-bucket baseline
@@ -131,6 +136,21 @@ const DefaultDisappearanceMaxCV = 0.5
 // GC pause, and reporting it teaches an operator to stop reading.
 const DefaultDisappearanceMinSilence = 5 * time.Minute
 
+// DefaultRareMaxInterval separates a shape almost never seen from one
+// seen on a slow schedule. Rarity is counted against the volume of the
+// source, so in a chatty service every periodic line is rare forever:
+// on the dogfooding instance, 22 of the 49 rare signals of one day
+// described the same fact, that a deployment had happened, through the
+// BuildKit progress lines, dokku's own output, the nginx reload and the
+// image retirement. Each recurs, hours or days apart.
+//
+// An hour is the scale that separates them from the ones worth
+// reading. The signals kept include a tool call failing three times in
+// half an hour, which is what the detector is for; the first sighting
+// of any template is reported whatever its spacing, since a template
+// seen once has no interval yet.
+const DefaultRareMaxInterval = time.Hour
+
 // DefaultMinTemplateLiterals is the floor a template must clear to be
 // worth naming as a shape. An access log mined down to
 // `<IP> - - <*> +<NUM>] <*> <*> HTTP/<NUM>.<NUM>" <NUM> <NUM>` keeps
@@ -159,6 +179,7 @@ func DefaultLogConfig() *LogConfig {
 		LearningPeriod:            5 * time.Minute,
 		RareThreshold:             3,
 		RareMinObservations:       500,
+		RareMaxInterval:           DefaultRareMaxInterval,
 		SpikeBucket:               time.Minute,
 		SpikeFactor:               3,
 		SpikeMinCount:             10,
@@ -458,12 +479,15 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 	if !learning && informative && changeType == "cluster_created" {
 		signals = append(signals, newSignal(SignalLogNewTemplate, 0.8,
 			fmt.Sprintf("new log template after learning period: %s", obs.Log.Template), nil))
-	} else if !learning && informative && stats.Count <= d.config.RareThreshold && state.Total >= d.config.RareMinObservations {
+	} else if !learning && informative && stats.Count <= d.config.RareThreshold && state.Total >= d.config.RareMinObservations && d.stillRare(stats) {
 		signals = append(signals, newSignal(SignalLogRareTemplate, 0.6,
 			fmt.Sprintf("rare log template (%d/%d observations): %s", stats.Count, state.Total, obs.Log.Template),
 			map[string]string{
 				"count": strconv.FormatInt(stats.Count, 10),
 				"total": strconv.FormatInt(state.Total, 10),
+				// The spacing that let it through, so a reader can see
+				// whether the shape is new or merely infrequent.
+				"mean_interval_s": strconv.FormatFloat(stats.MeanIntervalS, 'f', 1, 64),
 			}))
 	}
 
@@ -602,6 +626,19 @@ func (d *LogDetector) rollBucket(stats *templateStats, timestamp time.Time) {
 	stats.BucketStart = bucketStart
 	stats.BucketCount = 0
 	stats.SpikeSignaled = false
+}
+
+// stillRare tells a shape almost never seen from one that comes back on
+// a slow schedule. A template's own spacing is the only thing that can:
+// its count says how few, and its mean interval says how spread out.
+// A template seen once has no interval yet and stays rare.
+func (d *LogDetector) stillRare(stats *templateStats) bool {
+	maxInterval := d.config.RareMaxInterval
+	if maxInterval <= 0 || stats.MeanIntervalS <= 0 {
+		return true
+	}
+
+	return stats.MeanIntervalS <= maxInterval.Seconds()
 }
 
 func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, source string) []model.Signal {

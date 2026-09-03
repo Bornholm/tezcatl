@@ -575,3 +575,68 @@ func TestLogDetectorShortSilenceIsALull(t *testing.T) {
 		t.Error("the factor alone should still fire; the floor is what holds it back")
 	}
 }
+
+// TestLogDetectorSlowRecurrenceIsNotRare guards the rule that a rare
+// template is one almost never seen, not one seen on a slow schedule.
+// On the dogfooding instance, 22 of 49 rare signals in a day described
+// the same fact through different lines: a deployment had happened.
+func TestLogDetectorSlowRecurrenceIsNotRare(t *testing.T) {
+	// spacing feeds one template at a fixed interval, in a source busy
+	// enough for rarity to be judged at all, and returns the rare
+	// signals it produced after the first sighting.
+	spacing := func(t *testing.T, interval time.Duration, maxInterval time.Duration) int {
+		t.Helper()
+
+		config := DefaultLogConfig()
+		config.LearningPeriod = 0
+		config.RareMinObservations = 10
+		config.RareMaxInterval = maxInterval
+
+		detector := NewLogDetector(config)
+
+		start := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
+
+		// Enough traffic that the source clears RareMinObservations.
+		for i := range 20 {
+			detector.Detect(logObservation("dokku", "1", "request handled", "none", start.Add(time.Duration(i)*time.Second)))
+		}
+
+		rare := 0
+		timestamp := start.Add(time.Minute)
+
+		// Three sightings of the same line, RareThreshold apart.
+		for i := range 3 {
+			change := "none"
+			if i == 0 {
+				change = "cluster_created"
+			}
+
+			signals := detector.Detect(logObservation("dokku", "2", "-----> Renaming containers", change, timestamp))
+			if hasSignal(signals, SignalLogRareTemplate) {
+				rare++
+			}
+
+			timestamp = timestamp.Add(interval)
+		}
+
+		return rare
+	}
+
+	// A deployment line coming back every few hours: the first sighting
+	// is a new template, the ones after it are not news.
+	if got := spacing(t, 4*time.Hour, DefaultRareMaxInterval); got != 0 {
+		t.Errorf("a line recurring every four hours produced %d rare signals, want 0", got)
+	}
+
+	// Without the gate the same line is reported at every sighting,
+	// which is what the instance was doing.
+	if got := spacing(t, 4*time.Hour, 0); got == 0 {
+		t.Error("with no maximum interval the slow recurrence should still be reported")
+	}
+
+	// The same line three times in ten minutes is an episode, and that
+	// is what the detector is for.
+	if got := spacing(t, 5*time.Minute, DefaultRareMaxInterval); got == 0 {
+		t.Error("a burst of an almost-unseen template must still be reported")
+	}
+}
