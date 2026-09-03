@@ -101,12 +101,14 @@ type LogDetection struct {
 	LearningPeriod            Duration                  `yaml:"learning_period"`
 	RareThreshold             int64                     `yaml:"rare_threshold"`
 	RareMinObservations       int64                     `yaml:"rare_min_observations"`
+	RareMaxInterval           Duration                  `yaml:"rare_max_interval"`
 	SpikeBucket               Duration                  `yaml:"spike_bucket"`
 	SpikeFactor               float64                   `yaml:"spike_factor"`
 	SpikeMinCount             int64                     `yaml:"spike_min_count"`
 	DisappearanceFactor       float64                   `yaml:"disappearance_factor"`
 	DisappearanceMinCount     int64                     `yaml:"disappearance_min_count"`
 	DisappearanceScanInterval Duration                  `yaml:"disappearance_scan_interval"`
+	DisappearanceMinSilence   Duration                  `yaml:"disappearance_min_silence"`
 	DisappearanceMaxCV        float64                   `yaml:"disappearance_max_cv"`
 	MinTemplateLiterals       int                       `yaml:"min_template_literals"`
 	MaxPlaceholderRatio       float64                   `yaml:"max_placeholder_ratio"`
@@ -274,12 +276,14 @@ func Default() *Config {
 				LearningPeriod:            Duration(5 * time.Minute),
 				RareThreshold:             3,
 				RareMinObservations:       500,
+				RareMaxInterval:           Duration(detect.DefaultRareMaxInterval),
 				SpikeBucket:               Duration(time.Minute),
 				SpikeFactor:               3,
 				SpikeMinCount:             10,
 				DisappearanceFactor:       3,
 				DisappearanceMinCount:     10,
 				DisappearanceScanInterval: Duration(30 * time.Second),
+				DisappearanceMinSilence:   Duration(detect.DefaultDisappearanceMinSilence),
 				DisappearanceMaxCV:        detect.DefaultDisappearanceMaxCV,
 				MinTemplateLiterals:       detect.DefaultMinTemplateLiterals,
 				MaxPlaceholderRatio:       detect.DefaultMaxPlaceholderRatio,
@@ -465,12 +469,14 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		LearningPeriod:            detection.LearningPeriod.AsDuration(),
 		RareThreshold:             detection.RareThreshold,
 		RareMinObservations:       detection.RareMinObservations,
+		RareMaxInterval:           detection.RareMaxInterval.AsDuration(),
 		SpikeBucket:               detection.SpikeBucket.AsDuration(),
 		SpikeFactor:               detection.SpikeFactor,
 		SpikeMinCount:             detection.SpikeMinCount,
 		DisappearanceFactor:       detection.DisappearanceFactor,
 		DisappearanceMinCount:     detection.DisappearanceMinCount,
 		DisappearanceScanInterval: detection.DisappearanceScanInterval.AsDuration(),
+		DisappearanceMinSilence:   detection.DisappearanceMinSilence.AsDuration(),
 		DisappearanceMaxCV:        detection.DisappearanceMaxCV,
 		MinTemplateLiterals:       detection.MinTemplateLiterals,
 		MaxPlaceholderRatio:       detection.MaxPlaceholderRatio,
