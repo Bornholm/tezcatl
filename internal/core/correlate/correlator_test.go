@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bornholm/tezcatl/internal/core/detect"
 	"github.com/bornholm/tezcatl/internal/core/model"
 )
 
@@ -255,4 +256,184 @@ func TestCorrelatorForceFlush(t *testing.T) {
 	if events[0].Kind != "anomaly.log.new_template" {
 		t.Errorf("expected single-signal kind, got %q", events[0].Kind)
 	}
+}
+
+func changeOn(source string, at time.Time) *model.Observation {
+	return &model.Observation{
+		ID:          "change-" + source,
+		Source:      source,
+		Service:     source,
+		Environment: "production",
+		Modality:    model.ModalityChange,
+		Timestamp:   at,
+		Change:      &model.ChangeRecord{Type: "deployment", Version: source + ":abc"},
+	}
+}
+
+func spikeOn(source string, at time.Time) (*model.Observation, []model.Signal) {
+	obs := &model.Observation{ID: "spike-" + source, Source: source, Modality: model.ModalityLog, Timestamp: at}
+
+	return obs, []model.Signal{{
+		Kind:       "log.frequency_spike",
+		Modality:   model.ModalityLog,
+		Source:     source,
+		Timestamp:  at,
+		Score:      0.7,
+		Summary:    "frequency spike on " + source,
+		Attributes: map[string]string{"template_id": "1"},
+	}}
+}
+
+// TestCorrelatorFoldsTheWakeOfAChange: a deploy on one service makes the
+// kernel, udev and the host's load all speak at once. Those are one
+// event on the deployed service, not three warnings on three sources.
+// The deployed service itself, and anything a person asked about,
+// keep their own events.
+func TestCorrelatorFoldsTheWakeOfAChange(t *testing.T) {
+	config := DefaultConfig()
+	config.EchoWindow = 10 * time.Minute
+
+	correlator := NewCorrelator(config)
+
+	now := time.Date(2026, 9, 6, 6, 51, 58, 0, time.UTC)
+	correlator.now = func() time.Time { return now }
+
+	correlator.Observe(changeOn("automata", now))
+
+	for _, source := range []string{"kernel", "systemd-udevd"} {
+		obs, signals := spikeOn(source, now.Add(30*time.Second))
+		correlator.Observe(obs)
+		correlator.Add(obs, signals)
+	}
+
+	// The host reacts twice: a load the deploy explains, and a
+	// threshold someone set, which the deploy does not excuse.
+	host := &model.Observation{ID: "host", Source: "host", Modality: model.ModalityMetric, Timestamp: now.Add(40 * time.Second)}
+	correlator.Observe(host)
+	correlator.Add(host, []model.Signal{
+		{Kind: "metric.zscore", Modality: model.ModalityMetric, Source: "host", Timestamp: host.Timestamp, Score: 0.95, Attributes: map[string]string{"metric": "system.load1"}},
+		{Kind: detect.SignalMetricThreshold, Modality: model.ModalityMetric, Source: "host", Timestamp: host.Timestamp, Score: 0.9, Attributes: map[string]string{"metric": "disk.used_percent"}},
+	})
+
+	// The deployed service's own anomaly stays its own, change attached.
+	own, ownSignals := spikeOn("automata", now.Add(50*time.Second))
+	correlator.Observe(own)
+	correlator.Add(own, ownSignals)
+
+	events := map[string]model.Event{}
+	collect := func(evt model.Event) { events[evt.Kind+"@"+evt.Source] = evt }
+
+	now = now.Add(time.Minute)
+	correlator.Flush(false, collect)
+
+	if len(events) != 2 {
+		t.Fatalf("expected the service's own event and the host threshold after the window, got %d: %v", len(events), keysOf(events))
+	}
+
+	if evt, ok := events["anomaly.log.frequency_spike@automata"]; !ok || len(evt.RelatedChanges) != 1 {
+		t.Fatalf("expected the deployed service to keep its own event with the change attached, got %+v", evt)
+	}
+
+	if evt, ok := events["anomaly.metric.threshold@host"]; !ok || evt.Severity != model.SeverityCritical {
+		t.Fatalf("expected the threshold to stay a critical event of its own, got %+v", evt)
+	}
+
+	now = now.Add(10 * time.Minute)
+	correlator.Flush(false, collect)
+
+	echo, ok := events["anomaly.change_echo@automata"]
+	if !ok {
+		t.Fatalf("expected the wake to be emitted once the echo window closed, got %v", keysOf(events))
+	}
+
+	if got := echo.Attributes["sources"]; got != "host,kernel,systemd-udevd" {
+		t.Errorf("expected the echo to name its sources, got %q", got)
+	}
+
+	if len(echo.Signals) != 3 {
+		t.Errorf("expected three folded signals, got %d", len(echo.Signals))
+	}
+
+	if echo.Severity != model.SeverityWarning {
+		t.Errorf("an echo must not outrank a warning, got %q", echo.Severity)
+	}
+
+	if len(echo.RelatedChanges) != 1 || echo.RelatedChanges[0].Change.Version != "automata:abc" {
+		t.Errorf("expected the change that caused the wake attached, got %+v", echo.RelatedChanges)
+	}
+
+	if echo.Service != "automata" || echo.Environment != "production" {
+		t.Errorf("expected the echo to carry the deployed service's identity, got %q/%q", echo.Service, echo.Environment)
+	}
+}
+
+// TestCorrelatorEchoEndsWithItsWindow: a spike eleven minutes after the
+// deploy is nobody's echo, and a deployment on the event clock folds
+// exactly the way a live one would.
+func TestCorrelatorEchoEndsWithItsWindow(t *testing.T) {
+	config := DefaultConfig()
+	config.Clock = ClockEvent
+	config.EchoWindow = 10 * time.Minute
+
+	correlator := NewCorrelator(config)
+
+	start := time.Date(2026, 9, 6, 6, 51, 58, 0, time.UTC)
+	correlator.Observe(changeOn("automata", start))
+
+	inside, insideSignals := spikeOn("kernel", start.Add(2*time.Minute))
+	correlator.Observe(inside)
+	correlator.Add(inside, insideSignals)
+
+	outside, outsideSignals := spikeOn("systemd-networkd", start.Add(11*time.Minute))
+	correlator.Observe(outside)
+	correlator.Add(outside, outsideSignals)
+
+	// Push the watermark past every window.
+	correlator.Observe(&model.Observation{ID: "later", Source: "host", Modality: model.ModalityMetric, Timestamp: start.Add(30 * time.Minute)})
+
+	events := map[string]model.Event{}
+	correlator.Flush(false, func(evt model.Event) { events[evt.Kind+"@"+evt.Source] = evt })
+
+	if _, ok := events["anomaly.change_echo@automata"]; !ok {
+		t.Errorf("expected the kernel spike folded into the echo, got %v", keysOf(events))
+	}
+
+	if _, ok := events["anomaly.log.frequency_spike@systemd-networkd"]; !ok {
+		t.Errorf("expected the late spike to stand on its own, got %v", keysOf(events))
+	}
+}
+
+// TestCorrelatorEchoDisabled: with no echo window every source keeps
+// its own event, the way it always did.
+func TestCorrelatorEchoDisabled(t *testing.T) {
+	config := DefaultConfig()
+	config.EchoWindow = 0
+
+	correlator := NewCorrelator(config)
+
+	now := time.Date(2026, 9, 6, 6, 51, 58, 0, time.UTC)
+	correlator.now = func() time.Time { return now }
+
+	correlator.Observe(changeOn("automata", now))
+
+	obs, signals := spikeOn("kernel", now.Add(30*time.Second))
+	correlator.Observe(obs)
+	correlator.Add(obs, signals)
+
+	events := []model.Event{}
+	now = now.Add(time.Minute)
+	correlator.Flush(false, func(evt model.Event) { events = append(events, evt) })
+
+	if len(events) != 1 || events[0].Source != "kernel" {
+		t.Fatalf("expected the kernel spike as its own event, got %+v", events)
+	}
+}
+
+func keysOf(events map[string]model.Event) []string {
+	keys := make([]string, 0, len(events))
+	for key := range events {
+		keys = append(keys, key)
+	}
+
+	return keys
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,7 +39,17 @@ type Config struct {
 	// ChangeHorizon is how far back changes are still attached to an
 	// event as related changes.
 	ChangeHorizon time.Duration `yaml:"change_horizon"`
+	// EchoWindow is how long after a change the signals of every other
+	// source are folded into one event attached to that change, rather
+	// than one event per source. Zero disables the fold.
+	EchoWindow time.Duration `yaml:"echo_window"`
 }
+
+// DefaultEchoWindow covers a deployment from the moment it is declared
+// to the moment the host settles. Measured on the dogfooding instance:
+// the longest deploy, build included, took seven minutes from the first
+// build line to the last restarted unit.
+const DefaultEchoWindow = 10 * time.Minute
 
 func DefaultConfig() *Config {
 	return &Config{
@@ -47,6 +58,7 @@ func DefaultConfig() *Config {
 		ContextAfter:  10,
 		Clock:         ClockWall,
 		ChangeHorizon: 15 * time.Minute,
+		EchoWindow:    DefaultEchoWindow,
 	}
 }
 
@@ -61,6 +73,9 @@ type Correlator struct {
 	mu        sync.Mutex
 	watermark time.Time
 	sources   map[string]*sourceState
+	// echoes holds, per source that declared a change, the signals the
+	// rest of the host produced in its wake.
+	echoes map[string]*echoState
 }
 
 type sourceState struct {
@@ -84,6 +99,27 @@ type aggregatedSignal struct {
 	count  int64
 }
 
+// echoState is the event a change leaves behind on the other sources.
+//
+// A deployment does not stay inside the service it deploys: the kernel
+// logs the veth coming and going, udev the interface, networkd the lost
+// carrier, systemd the scopes that succeeded, docker the restart, and
+// the host's load climbs. Each of those is a frequency spike on a
+// source with no change of its own, so each became its own event. On
+// the dogfooding instance, 42 of 99 events in three days were that
+// wake, up to 20 for a single deploy. They are one fact, and the fact
+// is the deploy.
+type echoState struct {
+	changes        []model.Observation
+	service        string
+	environment    string
+	lastChangeAt   time.Time
+	lastReceivedAt time.Time
+	firstSignalAt  time.Time
+	signals        map[string]*aggregatedSignal
+	sources        map[string]int64
+}
+
 func NewCorrelator(config *Config) *Correlator {
 	if config == nil {
 		config = DefaultConfig()
@@ -93,6 +129,7 @@ func NewCorrelator(config *Config) *Correlator {
 		config:  config,
 		now:     time.Now,
 		sources: map[string]*sourceState{},
+		echoes:  map[string]*echoState{},
 	}
 }
 
@@ -113,6 +150,7 @@ func (c *Correlator) Observe(obs *model.Observation) {
 	if obs.Modality == model.ModalityChange {
 		state.changes = append(state.changes, *obs)
 		state.pruneChanges(c.watermark, c.config.ChangeHorizon)
+		c.openEcho(obs)
 	}
 
 	if state.pending != nil && len(state.pending.after) < c.config.ContextAfter {
@@ -132,6 +170,69 @@ func (s *sourceState) pruneChanges(watermark time.Time, horizon time.Duration) {
 	}
 }
 
+// openEcho starts, or extends, the echo of a change. A second change
+// on the same source while its echo is open (Dokku declares the build
+// and then the deploy) keeps the same echo and pushes its end back.
+func (c *Correlator) openEcho(change *model.Observation) {
+	if c.config.EchoWindow <= 0 || change.Change == nil {
+		return
+	}
+
+	echo, exists := c.echoes[change.Source]
+	if !exists {
+		echo = &echoState{
+			service:     change.Service,
+			environment: change.Environment,
+			signals:     map[string]*aggregatedSignal{},
+			sources:     map[string]int64{},
+		}
+		c.echoes[change.Source] = echo
+	}
+
+	echo.changes = append(echo.changes, *change)
+	if excess := len(echo.changes) - maxTrackedChanges; excess > 0 {
+		echo.changes = echo.changes[excess:]
+	}
+
+	echo.lastChangeAt = change.Timestamp
+	echo.lastReceivedAt = c.now()
+}
+
+// echoFor finds the change whose wake a signal belongs to: the latest
+// one declared within the echo window, on a source other than the
+// signal's own. A source that declared its own change is the subject
+// of that change, not its echo, and keeps its own event with the
+// change attached.
+func (c *Correlator) echoFor(state *sourceState, source string, at time.Time) *echoState {
+	if c.config.EchoWindow <= 0 || len(c.echoes) == 0 {
+		return nil
+	}
+
+	state.pruneChanges(c.watermark, c.config.ChangeHorizon)
+	if len(state.changes) > 0 {
+		return nil
+	}
+
+	var found *echoState
+
+	for changed, echo := range c.echoes {
+		if changed == source {
+			continue
+		}
+
+		offset := at.Sub(echo.lastChangeAt)
+		if offset < 0 || offset > c.config.EchoWindow {
+			continue
+		}
+
+		if found == nil || echo.lastChangeAt.After(found.lastChangeAt) {
+			found = echo
+		}
+	}
+
+	return found
+}
+
 // Add merges the signals produced for an observation into the pending
 // event of its source, creating it if needed.
 func (c *Correlator) Add(obs *model.Observation, signals []model.Signal) {
@@ -143,6 +244,34 @@ func (c *Correlator) Add(obs *model.Observation, signals []model.Signal) {
 	defer c.mu.Unlock()
 
 	state := c.source(obs.Source)
+
+	if echo := c.echoFor(state, obs.Source, signals[0].Timestamp); echo != nil {
+		// What a person asked to hear about is never folded: a
+		// threshold crossed or a symptom seen during someone else's
+		// deploy is still that threshold, that symptom.
+		own := make([]model.Signal, 0, len(signals))
+
+		for _, signal := range signals {
+			if intended(signal) {
+				own = append(own, signal)
+				continue
+			}
+
+			if echo.firstSignalAt.IsZero() || signal.Timestamp.Before(echo.firstSignalAt) {
+				echo.firstSignalAt = signal.Timestamp
+			}
+
+			// Two sources spiking on their own template "1" are two
+			// facts, so the echo keys by source as well.
+			echo.sources[obs.Source]++
+			merge(echo.signals, obs.Source+"\x00"+signalKey(signal), signal)
+		}
+
+		signals = own
+		if len(signals) == 0 {
+			return
+		}
+	}
 
 	if state.pending == nil {
 		state.pending = &pendingEvent{
@@ -156,18 +285,22 @@ func (c *Correlator) Add(obs *model.Observation, signals []model.Signal) {
 	}
 
 	for _, signal := range signals {
-		key := signalKey(signal)
+		merge(state.pending.signals, signalKey(signal), signal)
+	}
+}
 
-		aggregated, exists := state.pending.signals[key]
-		if !exists {
-			state.pending.signals[key] = &aggregatedSignal{signal: signal, count: 1}
-			continue
-		}
+// merge folds a signal into an aggregate, keeping the strongest
+// instance of each key and counting the rest.
+func merge(into map[string]*aggregatedSignal, key string, signal model.Signal) {
+	aggregated, exists := into[key]
+	if !exists {
+		into[key] = &aggregatedSignal{signal: signal, count: 1}
+		return
+	}
 
-		aggregated.count++
-		if signal.Score > aggregated.signal.Score {
-			aggregated.signal = signal
-		}
+	aggregated.count++
+	if signal.Score > aggregated.signal.Score {
+		aggregated.signal = signal
 	}
 }
 
@@ -191,6 +324,26 @@ func (c *Correlator) Flush(force bool, emit func(evt model.Event)) {
 		emit(c.build(source, state))
 		state.pending = nil
 	}
+
+	for source, echo := range c.echoes {
+		if !force && !c.echoExpired(echo, now) {
+			continue
+		}
+
+		if len(echo.signals) > 0 {
+			emit(c.buildEcho(source, echo))
+		}
+
+		delete(c.echoes, source)
+	}
+}
+
+func (c *Correlator) echoExpired(echo *echoState, now time.Time) bool {
+	if c.config.Clock == ClockEvent {
+		return c.watermark.Sub(echo.lastChangeAt) >= c.config.EchoWindow
+	}
+
+	return now.Sub(echo.lastReceivedAt) >= c.config.EchoWindow
 }
 
 func (c *Correlator) expired(pending *pendingEvent, now time.Time) bool {
@@ -213,10 +366,18 @@ func (c *Correlator) source(name string) *sourceState {
 	return state
 }
 
-func (c *Correlator) build(source string, state *sourceState) model.Event {
-	pending := state.pending
+// combined is what a set of aggregated signals says together: the
+// signals strongest first, the confidence they add up to, whether two
+// modalities agree, and how many instances they stand for.
+type combined struct {
+	signals    []model.Signal
+	confidence float64
+	multimodal bool
+	instances  int64
+}
 
-	signals := make([]model.Signal, 0, len(pending.signals))
+func combine(aggregated map[string]*aggregatedSignal) combined {
+	signals := make([]model.Signal, 0, len(aggregated))
 
 	var (
 		confidenceInverse = 1.0
@@ -224,7 +385,7 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 		totalCount        int64
 	)
 
-	for _, aggregated := range pending.signals {
+	for _, aggregated := range aggregated {
 		signal := aggregated.signal
 
 		if signal.Attributes == nil {
@@ -247,11 +408,73 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 		return signals[i].Kind < signals[j].Kind
 	})
 
+	return combined{
+		signals:    signals,
+		confidence: min(1-confidenceInverse, 0.99),
+		multimodal: modalities[model.ModalityLog] && modalities[model.ModalityMetric],
+		instances:  totalCount,
+	}
+}
+
+// buildEcho emits the wake of a change as one event on the source that
+// declared it. It stops at warning by construction: the change is what
+// explains these signals, so it cannot also be what corroborates them.
+// Anything a person asked to hear about never reached the echo.
+func (c *Correlator) buildEcho(source string, echo *echoState) model.Event {
+	all := combine(echo.signals)
+
+	sources := make([]string, 0, len(echo.sources))
+	for name := range echo.sources {
+		sources = append(sources, name)
+	}
+	sort.Strings(sources)
+
+	latest := echo.changes[len(echo.changes)-1]
+
+	related := make([]model.RelatedChange, 0, len(echo.changes))
+	for _, change := range echo.changes {
+		related = append(related, model.RelatedChange{
+			Source:        change.Source,
+			Change:        *change.Change,
+			Timestamp:     change.Timestamp,
+			OffsetSeconds: change.Timestamp.Sub(echo.firstSignalAt).Seconds(),
+		})
+	}
+
+	subject := echo.service
+	if subject == "" {
+		subject = source
+	}
+
+	return model.Event{
+		ID:          model.NewID(),
+		Kind:        "anomaly.change_echo",
+		Source:      source,
+		Service:     echo.service,
+		Environment: echo.environment,
+		Timestamp:   echo.firstSignalAt,
+		Severity:    severityOf(all.confidence, all.signals, false, false),
+		Confidence:  all.confidence,
+		Summary: fmt.Sprintf("%d signals from %d sources in the wake of %s %s: %s",
+			len(all.signals), len(sources), latest.Change.Type, subject, strings.Join(sources, ", ")),
+		Signals:        all.signals,
+		RelatedChanges: related,
+		Attributes: map[string]string{
+			"signal_count":     strconv.Itoa(len(all.signals)),
+			"signal_instances": strconv.FormatInt(all.instances, 10),
+			"multimodal":       strconv.FormatBool(all.multimodal),
+			"sources":          strings.Join(sources, ","),
+		},
+	}
+}
+
+func (c *Correlator) build(source string, state *sourceState) model.Event {
+	pending := state.pending
+
+	all := combine(pending.signals)
+	signals, confidence, multimodal, totalCount := all.signals, all.confidence, all.multimodal, all.instances
+
 	dominant := signals[0]
-
-	confidence := min(1-confidenceInverse, 0.99)
-
-	multimodal := modalities[model.ModalityLog] && modalities[model.ModalityMetric]
 
 	kind := "anomaly." + dominant.Kind
 	if len(signals) > 1 {
@@ -300,11 +523,19 @@ func (c *Correlator) build(source string, state *sourceState) model.Event {
 //
 // So critical also asks for corroboration, something a lone number
 // cannot fake: two modalities agreeing on the same service, a change
-// declared right before, or an operator's own judgement already
-// recorded: a symptomatic template, a threshold they set, a heartbeat
-// they asked to be told about.
+// declared right before a symptom in the logs, or an operator's own
+// judgement already recorded: a symptomatic template, a threshold
+// they set, a heartbeat they asked to be told about.
 // Without it the strongest deviation stops at warning, which is
 // exactly what it deserves: worth reading, not worth waking up for.
+//
+// A change corroborates a log, not a metric. A new error template
+// seconds after a deploy is the deploy talking, and that is worth a
+// wake-up. A container's CPU climbing seconds after its own restart,
+// or two containers running while the old one hands over, is the
+// restart itself: the change explains the number rather than
+// aggravating it. On the dogfooding instance, three of four critical
+// events near a deploy were of that second kind.
 //
 // A site that only collects metrics therefore has one way to reach
 // critical: say which values matter, with a threshold. That is the
@@ -318,29 +549,32 @@ func severityOf(confidence float64, signals []model.Signal, multimodal bool, nea
 		return model.SeverityWarning
 	}
 
-	intended := false
+	asked, logged := false, false
 	for _, signal := range signals {
-		// Each of these carries a human decision rather than a
-		// measurement: a template someone called a symptom, a bound
-		// someone set, and a heartbeat someone asked to be told about
-		// when it stops.
-		switch {
-		case signal.Kind == detect.SignalLogSymptomatic,
-			signal.Kind == detect.SignalMetricThreshold,
-			signal.Kind == detect.SignalLogMissingTemplate && signal.Attributes["marking"] == string(detect.MarkingHeartbeat):
-			intended = true
-		}
-
-		if intended {
-			break
-		}
+		asked = asked || intended(signal)
+		logged = logged || signal.Modality == model.ModalityLog
 	}
 
-	if multimodal || nearChange || intended {
+	if multimodal || (nearChange && logged) || asked {
 		return model.SeverityCritical
 	}
 
 	return model.SeverityWarning
+}
+
+// intended tells a signal that carries a human decision from one that
+// carries a measurement: a template someone called a symptom, a bound
+// someone set, a heartbeat someone asked to be told about when it
+// stops.
+func intended(signal model.Signal) bool {
+	switch signal.Kind {
+	case detect.SignalLogSymptomatic, detect.SignalMetricThreshold:
+		return true
+	case detect.SignalLogMissingTemplate:
+		return signal.Attributes["marking"] == string(detect.MarkingHeartbeat)
+	}
+
+	return false
 }
 
 // relatedChanges surfaces the changes observed shortly before the event

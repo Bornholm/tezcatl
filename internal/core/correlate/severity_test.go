@@ -31,8 +31,17 @@ func TestSeverityAsksForCorroboration(t *testing.T) {
 		"the same z-score with a log agreeing": {
 			confidence: 0.99, signals: lone, multimodal: true, want: model.SeverityCritical,
 		},
+		// A container's CPU climbing right after its own restart is the
+		// restart: the change explains the number, it does not
+		// aggravate it.
 		"the same z-score right after a deployment": {
-			confidence: 0.99, signals: lone, nearChange: true, want: model.SeverityCritical,
+			confidence: 0.99, signals: lone, nearChange: true, want: model.SeverityWarning,
+		},
+		"a new template right after a deployment": {
+			confidence: 0.99,
+			signals:    []model.Signal{signal("log.new_template", model.ModalityLog)},
+			nearChange: true,
+			want:       model.SeverityCritical,
 		},
 		"a threshold an operator set": {
 			confidence: 0.9,
