@@ -55,6 +55,15 @@ type MetricConfig struct {
 	// matching floor applies. Beware that path.Match gives "." no
 	// special meaning: "*.percent" misses "memory.used_percent".
 	MinDeltas map[string]float64 `yaml:"min_deltas"`
+	// Seasonality is "daily" to hold back a deviation that recurs at
+	// the same time of day, "none" to report every one.
+	Seasonality string `yaml:"seasonality"`
+	// SeasonalTolerance is how close to the same time of day two
+	// deviations must fall to count as the same recurrence.
+	SeasonalTolerance time.Duration `yaml:"seasonal_tolerance"`
+	// SeasonalDays is how many consecutive days, today included, a
+	// deviation must recur before it is held back.
+	SeasonalDays int `yaml:"seasonal_days"`
 	// MaxSeries caps how many series a detector keeps. Sources create
 	// series without ever retiring them: a container name, a pod name
 	// or a request path that carries an identifier all mint a key that
@@ -69,16 +78,42 @@ type MetricConfig struct {
 // that a runaway source hits a wall instead of the machine's memory.
 const DefaultMaxSeries = 10000
 
+// A metric that deviates at the same minute three days running is a
+// schedule, not an incident. The dogfooding host ran four plugin
+// updates from cron at noon: 44%, 45%, then 46% of CPU at 12:00:26 on
+// three consecutive days, with z-scores from 93 to 154, and a baseline
+// that would never learn it because the rest of the day is quiet. The
+// log detector already knows the hour of day; this is the metric side
+// of the same idea, kept deliberately smaller: a memory of when each
+// series deviated, and a rule that the third day in a row is not news.
+const (
+	MetricSeasonalityNone  = "none"
+	MetricSeasonalityDaily = "daily"
+
+	// DefaultSeasonalTolerance absorbs the drift of a cron that starts
+	// on the minute and a sampler that does not.
+	DefaultSeasonalTolerance = 5 * time.Minute
+	// DefaultSeasonalDays: twice is a coincidence, three times is a
+	// schedule.
+	DefaultSeasonalDays = 3
+	// maxDeviations bounds the memory per series. A series that
+	// deviates more often than that is not seasonal, it is noisy.
+	maxDeviations = 32
+)
+
 func DefaultMetricConfig() *MetricConfig {
 	return &MetricConfig{
-		WarmupSamples:  30,
-		Alpha:          0.05,
-		ZThreshold:     3,
-		TrendFastAlpha: 0.3,
-		TrendSlowAlpha: 0.05,
-		TrendThreshold: 0.5,
-		MinDeltas:      DefaultMinDeltas(),
-		MaxSeries:      DefaultMaxSeries,
+		WarmupSamples:     30,
+		Alpha:             0.05,
+		ZThreshold:        3,
+		TrendFastAlpha:    0.3,
+		TrendSlowAlpha:    0.05,
+		TrendThreshold:    0.5,
+		MinDeltas:         DefaultMinDeltas(),
+		MaxSeries:         DefaultMaxSeries,
+		Seasonality:       MetricSeasonalityDaily,
+		SeasonalTolerance: DefaultSeasonalTolerance,
+		SeasonalDays:      DefaultSeasonalDays,
 	}
 }
 
@@ -150,6 +185,22 @@ type metricStats struct {
 	// snapshots written before the cap existed, which leaves those
 	// series first in line: they are the stale ones anyway.
 	LastSeen time.Time `json:"last_seen,omitzero"`
+	// Deviations remembers when the series last deviated, held back or
+	// not, one entry per tolerance span, so a recurrence survives a
+	// restart: three days is longer than most deployments stay up.
+	Deviations []time.Time `json:"deviations,omitempty"`
+}
+
+// deviatedNear tells whether the series deviated within tolerance of a
+// given instant.
+func (s *metricStats) deviatedNear(at time.Time, tolerance time.Duration) bool {
+	for _, past := range s.Deviations {
+		if past.Sub(at).Abs() <= tolerance {
+			return true
+		}
+	}
+
+	return false
 }
 
 func NewMetricDetector(config *MetricConfig) *MetricDetector {
@@ -368,6 +419,7 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 	// Statistical signals compare the sample to the baseline learned
 	// from previous samples, then fold it in.
 	if stats.Count >= d.config.WarmupSamples {
+		statistical := len(signals)
 		minDelta := d.config.minDelta(obs.Metric.Name)
 
 		stddev := math.Sqrt(stats.Variance)
@@ -404,11 +456,65 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 		} else {
 			stats.DriftSignaled = false
 		}
+
+		if len(signals) > statistical {
+			recurring, days := d.recordDeviation(stats, obs.Timestamp)
+
+			switch {
+			case recurring:
+				// The third day in a row: a schedule. The memory is
+				// kept, so the day it stops recurring it is news
+				// again.
+				signals = signals[:statistical]
+			case days > 0:
+				for i := statistical; i < len(signals); i++ {
+					signals[i].Attributes["recurring_days"] = strconv.Itoa(days)
+				}
+			}
+		}
 	}
 
 	d.update(stats, value)
 
 	return signals
+}
+
+// recordDeviation remembers that a series deviated now and reports
+// whether it also did at this time of day on each of the previous
+// days the seasonality asks for, plus how many of them it matched.
+func (d *MetricDetector) recordDeviation(stats *metricStats, at time.Time) (bool, int) {
+	days := d.recurringDays(stats, at)
+	recurring := d.config.Seasonality == MetricSeasonalityDaily && d.config.SeasonalDays > 1 && days >= d.config.SeasonalDays-1
+
+	tolerance := d.config.SeasonalTolerance
+	if n := len(stats.Deviations); n == 0 || at.Sub(stats.Deviations[n-1]).Abs() > tolerance {
+		stats.Deviations = append(stats.Deviations, at)
+		if len(stats.Deviations) > maxDeviations {
+			stats.Deviations = stats.Deviations[len(stats.Deviations)-maxDeviations:]
+		}
+	}
+
+	return recurring, days
+}
+
+// recurringDays counts, from yesterday backwards, the consecutive days
+// on which the series deviated at this time of day. It stops at the
+// first day that did not: two days out of three is not a schedule.
+func (d *MetricDetector) recurringDays(stats *metricStats, at time.Time) int {
+	if d.config.Seasonality != MetricSeasonalityDaily || d.config.SeasonalDays < 2 {
+		return 0
+	}
+
+	days := 0
+	for day := 1; day < d.config.SeasonalDays; day++ {
+		if !stats.deviatedNear(at.Add(-time.Duration(day)*24*time.Hour), d.config.SeasonalTolerance) {
+			break
+		}
+
+		days++
+	}
+
+	return days
 }
 
 func (d *MetricDetector) update(stats *metricStats, value float64) {

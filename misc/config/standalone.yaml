@@ -309,6 +309,19 @@ metrics:
     trend_fast_alpha: 0.3
     trend_slow_alpha: 0.05
     trend_threshold: 0.5
+    # Saisonnalité journalière. Une métrique qui s'écarte à la même
+    # minute trois jours de suite suit un horaire, pas un incident : sur
+    # l'instance de dogfooding, quatre mises à jour de plugins lancées
+    # par cron à midi portaient le CPU de 1,5 % à 45 % à 12:00:26 trois
+    # jours d'affilée, z-scores de 93 à 154, et la baseline ne pouvait
+    # pas l'apprendre parce que le reste de la journée est calme. Chaque
+    # série se souvient de ses heures d'écart (persisté avec la série) ;
+    # au bout de seasonal_days jours consécutifs à seasonal_tolerance
+    # près, l'écart n'est plus remonté. Le jour où il cesse de revenir,
+    # il redevient une nouvelle. none : tout remonter.
+    seasonality: daily
+    seasonal_tolerance: 5m
+    seasonal_days: 3
     # Seuils statiques par métrique (nom logique) : signal fort dès le
     # franchissement. min et max sont chacun optionnels.
     # thresholds:

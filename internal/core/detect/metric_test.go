@@ -494,3 +494,104 @@ func TestMetricDetectorRestoreLegacySnapshot(t *testing.T) {
 		t.Fatalf("expected the legacy series to be restored, got %+v", series)
 	}
 }
+
+// TestMetricSeasonalityHoldsBackADailySchedule: the dogfooding host runs
+// four plugin updates from cron at noon, and its CPU went from 1.5% to
+// 45% at 12:00:26 three days running with z-scores past 90. The first
+// two are worth a line; the third is a schedule. The same jump at
+// three in the morning is not.
+func TestMetricSeasonalityHoldsBackADailySchedule(t *testing.T) {
+	newDetector := func(seasonality string) *MetricDetector {
+		config := DefaultMetricConfig()
+		config.Seasonality = seasonality
+
+		return NewMetricDetector(config)
+	}
+
+	day := time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC)
+
+	// A quiet baseline: 60 samples an hour at 1.5%, a spike at noon.
+	feedDay := func(detector *MetricDetector, d int, spikeAt time.Duration) []model.Signal {
+		var spiked []model.Signal
+
+		for minute := range 24 * 60 {
+			at := day.AddDate(0, 0, d).Add(time.Duration(minute) * time.Minute)
+			value := 1.5 + float64(minute%3)*0.1
+
+			if at.Sub(day.AddDate(0, 0, d)) == spikeAt {
+				value = 45
+			}
+
+			signals := detector.Detect(metricObservation("host", "system.cpu.percent", value, at))
+			if value == 45 {
+				spiked = signals
+			}
+		}
+
+		return spiked
+	}
+
+	// Sampled on the minute; the real cron fired at 12:00:26, inside the
+	// tolerance either way.
+	noon := 12 * time.Hour
+
+	t.Run("daily", func(t *testing.T) {
+		detector := newDetector(MetricSeasonalityDaily)
+
+		if signals := feedDay(detector, 0, noon); !hasSignal(signals, SignalMetricZScore) {
+			t.Fatalf("day 1: the first noon spike is news, got %+v", signals)
+		}
+
+		signals := feedDay(detector, 1, noon)
+		if !hasSignal(signals, SignalMetricZScore) {
+			t.Fatalf("day 2: twice is a coincidence, still reported, got %+v", signals)
+		}
+
+		if got := signals[0].Attributes["recurring_days"]; got != "1" {
+			t.Errorf("day 2: expected the signal to say it recurred once, got %q", got)
+		}
+
+		if signals := feedDay(detector, 2, noon); len(signals) != 0 {
+			t.Fatalf("day 3: three days running is a schedule, got %+v", signals)
+		}
+
+		if signals := feedDay(detector, 3, noon); len(signals) != 0 {
+			t.Fatalf("day 4: still a schedule, got %+v", signals)
+		}
+
+		// The schedule shifted: three in the morning is news again.
+		if signals := feedDay(detector, 4, 3*time.Hour); !hasSignal(signals, SignalMetricZScore) {
+			t.Fatalf("day 5: a spike at another hour is not the schedule, got %+v", signals)
+		}
+	})
+
+	t.Run("none", func(t *testing.T) {
+		detector := newDetector(MetricSeasonalityNone)
+
+		for d := range 3 {
+			if signals := feedDay(detector, d, noon); !hasSignal(signals, SignalMetricZScore) {
+				t.Fatalf("day %d: with seasonality off every spike is reported, got %+v", d+1, signals)
+			}
+		}
+	})
+
+	t.Run("survives a restart", func(t *testing.T) {
+		detector := newDetector(MetricSeasonalityDaily)
+		feedDay(detector, 0, noon)
+		feedDay(detector, 1, noon)
+
+		data, err := detector.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		restored := newDetector(MetricSeasonalityDaily)
+		if err := restored.Restore(data); err != nil {
+			t.Fatal(err)
+		}
+
+		if signals := feedDay(restored, 2, noon); len(signals) != 0 {
+			t.Fatalf("day 3 after a restart: the memory of the schedule must persist, got %+v", signals)
+		}
+	})
+}

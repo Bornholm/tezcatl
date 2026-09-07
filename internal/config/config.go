@@ -151,6 +151,12 @@ type MetricDetection struct {
 	TrendThreshold float64                `yaml:"trend_threshold"`
 	Thresholds     []detect.ThresholdRule `yaml:"thresholds"`
 	MaxSeries      int                    `yaml:"max_series"`
+	// Seasonality is "daily" to hold back a deviation recurring at the
+	// same time of day for seasonal_days consecutive days, "none" to
+	// report every one.
+	Seasonality       string   `yaml:"seasonality"`
+	SeasonalTolerance Duration `yaml:"seasonal_tolerance"`
+	SeasonalDays      int      `yaml:"seasonal_days"`
 }
 
 // Dampening keeps a detector from repeating itself. It applies to
@@ -300,15 +306,18 @@ func Default() *Config {
 		},
 		Metrics: Metrics{
 			Detection: MetricDetection{
-				Enabled:        &enabled,
-				WarmupSamples:  30,
-				Alpha:          0.05,
-				ZThreshold:     3,
-				MinDeltas:      detect.DefaultMinDeltas(),
-				TrendFastAlpha: 0.3,
-				TrendSlowAlpha: 0.05,
-				TrendThreshold: 0.5,
-				MaxSeries:      detect.DefaultMaxSeries,
+				Enabled:           &enabled,
+				WarmupSamples:     30,
+				Alpha:             0.05,
+				ZThreshold:        3,
+				MinDeltas:         detect.DefaultMinDeltas(),
+				TrendFastAlpha:    0.3,
+				TrendSlowAlpha:    0.05,
+				TrendThreshold:    0.5,
+				MaxSeries:         detect.DefaultMaxSeries,
+				Seasonality:       detect.MetricSeasonalityDaily,
+				SeasonalTolerance: Duration(detect.DefaultSeasonalTolerance),
+				SeasonalDays:      detect.DefaultSeasonalDays,
 			},
 		},
 		Dampening: Dampening{
@@ -466,6 +475,16 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	switch c.Metrics.Detection.Seasonality {
+	case detect.MetricSeasonalityNone, detect.MetricSeasonalityDaily:
+	default:
+		return errors.Errorf("unsupported metrics.detection.seasonality %q (expected none or daily)", c.Metrics.Detection.Seasonality)
+	}
+
+	if c.Metrics.Detection.SeasonalTolerance < 0 || c.Metrics.Detection.SeasonalDays < 0 {
+		return errors.New("metrics.detection.seasonal_tolerance and seasonal_days must not be negative")
+	}
+
 	if c.Metrics.Detection.MaxSeries < 0 {
 		return errors.New("metrics.detection.max_series cannot be negative (0 removes the cap)")
 	}
@@ -509,15 +528,18 @@ func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
 	detection := c.Metrics.Detection
 
 	return &detect.MetricConfig{
-		WarmupSamples:  detection.WarmupSamples,
-		Alpha:          detection.Alpha,
-		ZThreshold:     detection.ZThreshold,
-		MinDeltas:      detection.MinDeltas,
-		TrendFastAlpha: detection.TrendFastAlpha,
-		TrendSlowAlpha: detection.TrendSlowAlpha,
-		TrendThreshold: detection.TrendThreshold,
-		Thresholds:     detection.Thresholds,
-		MaxSeries:      detection.MaxSeries,
+		WarmupSamples:     detection.WarmupSamples,
+		Alpha:             detection.Alpha,
+		ZThreshold:        detection.ZThreshold,
+		MinDeltas:         detection.MinDeltas,
+		TrendFastAlpha:    detection.TrendFastAlpha,
+		TrendSlowAlpha:    detection.TrendSlowAlpha,
+		TrendThreshold:    detection.TrendThreshold,
+		Thresholds:        detection.Thresholds,
+		MaxSeries:         detection.MaxSeries,
+		Seasonality:       detection.Seasonality,
+		SeasonalTolerance: detection.SeasonalTolerance.AsDuration(),
+		SeasonalDays:      detection.SeasonalDays,
 	}
 }
 
