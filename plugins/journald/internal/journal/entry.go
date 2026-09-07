@@ -28,6 +28,16 @@ type Entry struct {
 
 // Service names the emitter the way a person would: the unit without
 // its type suffix, else the syslog identifier, else the command.
+//
+// The fallbacks are lowercased. journald names the unit by reading the
+// cgroup of the process that logged, and a short-lived child (a cron
+// job, a shell spawned by a daemon) is often gone before it looks:
+// the entry then arrives with no unit, only the identifier, which cron
+// writes as "CRON". Without the fold, one stream splits in two sources
+// by the luck of a race, each seeing gaps the other filled. Measured
+// on a real host: 111 of 465 sysstat cron lines over three days lost
+// their unit, and a heartbeat marked on that template fired three
+// times for jobs that had run.
 func (e Entry) Service() string {
 	if e.Unit != "" {
 		name := e.Unit
@@ -46,10 +56,10 @@ func (e Entry) Service() string {
 	}
 
 	if e.Identifier != "" {
-		return e.Identifier
+		return strings.ToLower(e.Identifier)
 	}
 
-	return e.Comm
+	return strings.ToLower(e.Comm)
 }
 
 // raw mirrors the journalctl JSON export. Every value is a string, or

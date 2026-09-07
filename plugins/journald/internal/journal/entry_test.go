@@ -106,6 +106,12 @@ func TestServiceNaming(t *testing.T) {
 		{Entry{Unit: "tezcatl-ingest@blog.service"}, "tezcatl-ingest@blog"},
 		{Entry{Identifier: "gsconnect", Comm: "gjs"}, "gsconnect"},
 		{Entry{Comm: "gjs"}, "gjs"},
+		// A cron child that exited before journald read its cgroup
+		// arrives without a unit; its identifier must land in the
+		// same source as the lines that kept theirs.
+		{Entry{Unit: "cron.service", Identifier: "CRON"}, "cron"},
+		{Entry{Identifier: "CRON"}, "cron"},
+		{Entry{Comm: "Xorg"}, "xorg"},
 		{Entry{}, ""},
 	}
 
