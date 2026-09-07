@@ -415,6 +415,9 @@ nfpms:
       - src: misc/packaging/dokku/post-deploy
         dst: /var/lib/dokku/plugins/available/tezcatl/post-deploy
         file_info: { mode: 0755 }
+      - src: misc/packaging/dokku/pre-build
+        dst: /var/lib/dokku/plugins/available/tezcatl/pre-build
+        file_info: { mode: 0755 }
     scripts:
       postinstall: misc/packaging/dokku-postinstall.sh
       preremove: misc/packaging/dokku-preremove.sh

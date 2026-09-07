@@ -512,6 +512,17 @@ correlation:
   # Ancienneté maximale d'un changement (déploiement…) encore rattaché à
   # un événement (related_changes, avec offset en secondes).
   change_horizon: 15m
+  # Sillage d'un changement. Un déploiement ne reste pas dans le service
+  # déployé : le noyau, udev, networkd, systemd, docker et la charge de
+  # l'hôte réagissent chacun de leur côté, et chacun faisait son propre
+  # événement (42 des 99 événements de trois jours sur l'instance de
+  # dogfooding, jusqu'à 20 pour un seul déploiement). Pendant cette durée
+  # après un changement, les signaux des autres sources sont repliés dans
+  # UN événement anomaly.change_echo porté par le service qui a changé,
+  # plafonné à warning, avec la liste des sources. Le service déployé
+  # garde ses propres événements, et un seuil ou un template symptomatic
+  # n'est jamais replié. 0 désactive.
+  echo_window: 10m
 
 # --- Persistance de l'état appris ----------------------------------------
 state:

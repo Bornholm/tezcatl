@@ -72,6 +72,7 @@ correlation:
   context_after: 10
   clock: wall
   change_horizon: 15m
+  echo_window: 10m
 
 state:
   dir: /var/lib/tezcatl/state

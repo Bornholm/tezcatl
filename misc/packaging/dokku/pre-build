@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Déclenché par Dokku avant la construction de l'image : déclare le début
+# du déploiement comme changement. Le corrélateur ouvre alors la fenêtre
+# d'écho au bon moment, c'est-à-dire avant que le build, le noyau et
+# systemd se mettent à parler, et non après le post-deploy, quand le plus
+# gros du sillage est déjà passé. Ne doit jamais faire échouer un build.
+set -u
+
+# Dokku appelle pre-build avec BUILDER_TYPE APP SOURCECODE_WORK_DIR.
+APP="${2:-}"
+[ -n "$APP" ] || exit 0
+
+TEZCATL_TARGET="unix:///run/tezcatl/tezcatl.sock"
+TEZCATL_ENVIRONMENT="production"
+[ -f /etc/tezcatl/ingest.env ] && . /etc/tezcatl/ingest.env
+
+SHA="$(dokku git:report "$APP" --git-sha 2>/dev/null || true)"
+
+timeout 20 tezcatl ingest change \
+    --target "$TEZCATL_TARGET" \
+    --service "$APP" \
+    --environment "$TEZCATL_ENVIRONMENT" \
+    --type deployment \
+    --change-version "$APP:${SHA:-unknown}" \
+    --summary "dokku build started" \
+    --timeout 10s || true
+
+exit 0

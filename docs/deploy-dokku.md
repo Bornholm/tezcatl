@@ -92,11 +92,18 @@ Notes :
 ## 3. Signaler les déploiements
 
 `tezcatl-dokku` installe aussi un plugin Dokku (activé automatiquement à
-l'installation) dont le trigger `post-deploy` déclare chaque déploiement
-comme *changement* : les anomalies qui suivent un `git push dokku`
-sortiront avec le déploiement attaché (`related_changes`, offset en
-secondes). Le hook utilise la même cible que les unités d'ingestion et
-ne peut jamais faire échouer un déploiement.
+l'installation) avec deux triggers. `pre-build` déclare le début du
+déploiement comme *changement*, `post-deploy` sa fin. Les anomalies qui
+suivent un `git push dokku` sortiront avec le déploiement attaché
+(`related_changes`, offset en secondes), et tout ce que le reste de la
+machine dit pendant le build (noyau, udev, systemd, charge de l'hôte)
+est replié dans un seul événement `anomaly.change_echo` porté par
+l'application, au lieu d'un événement par source. Déclarer le début et
+non seulement la fin compte : mesuré sur trois jours de l'instance de
+dogfooding, le seul `post-deploy` repliait 7 événements, parce que le
+plus gros du sillage précède la fin du déploiement ; avec le début
+déclaré, 21. Les deux hooks utilisent la même cible que les unités
+d'ingestion et ne peuvent jamais faire échouer un déploiement.
 
 ```bash
 dokku plugin:list   # doit lister « tezcatl »

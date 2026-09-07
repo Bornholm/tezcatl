@@ -178,6 +178,10 @@ type Correlation struct {
 	Clock string `yaml:"clock"`
 	// ChangeHorizon is how far back changes are attached to events.
 	ChangeHorizon Duration `yaml:"change_horizon"`
+	// EchoWindow is how long after a change the signals of the other
+	// sources are folded into one event on the changed source. Zero
+	// disables the fold.
+	EchoWindow Duration `yaml:"echo_window"`
 }
 
 type State struct {
@@ -319,6 +323,7 @@ func Default() *Config {
 			ContextAfter:  10,
 			Clock:         string(correlate.ClockWall),
 			ChangeHorizon: Duration(15 * time.Minute),
+			EchoWindow:    Duration(correlate.DefaultEchoWindow),
 		},
 		State: State{
 			SaveInterval: Duration(30 * time.Second),
@@ -395,6 +400,10 @@ func (c *Config) Validate() error {
 
 	if c.Correlation.ContextBefore < 0 || c.Correlation.ContextAfter < 0 {
 		return errors.New("correlation context sizes must not be negative")
+	}
+
+	if c.Correlation.EchoWindow < 0 {
+		return errors.New("correlation.echo_window must not be negative")
 	}
 
 	switch correlate.Clock(c.Correlation.Clock) {
@@ -529,5 +538,6 @@ func (c *Config) CorrelationConfig() *correlate.Config {
 		ContextAfter:  c.Correlation.ContextAfter,
 		Clock:         correlate.Clock(c.Correlation.Clock),
 		ChangeHorizon: c.Correlation.ChangeHorizon.AsDuration(),
+		EchoWindow:    c.Correlation.EchoWindow.AsDuration(),
 	}
 }
