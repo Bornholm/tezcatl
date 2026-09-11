@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	tezcatlv1 "github.com/bornholm/tezcatl/gen/tezcatl/v1"
 	"github.com/bornholm/tezcatl/internal/adapter/grpc"
@@ -17,7 +18,7 @@ func NewForgetCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "forget",
 		Usage:     "Drop what was learned about one or more partitions (templates, baselines)",
-		ArgsUsage: "<partition or glob, e.g. production/session-*>",
+		ArgsUsage: "[--dry-run] <partition or glob, e.g. production/session-*>",
 		Description: `Learning is normally worth keeping, and tezcatl never drops it on
 its own. Some learning is worth nothing though: units that will never
 come back under the same name, or lines ingested by mistake, leave
@@ -27,8 +28,8 @@ Markings survive: silencing a template is a decision, not something
 learned, and forgetting must not undo it.
 
 The partition is the "<environment>/<service>" shown by
-'tezcatl templates'. Run with --dry-run first: this cannot be undone
-except by learning it all over again.`,
+'tezcatl templates'. Run with --dry-run first, before the pattern:
+this cannot be undone except by learning it all over again.`,
 		Flags: append(adminTargetFlags(),
 			&cli.BoolFlag{
 				Name:  "dry-run",
@@ -39,6 +40,17 @@ except by learning it all over again.`,
 			pattern := ctx.Args().First()
 			if pattern == "" {
 				return errors.New("missing partition pattern (see 'tezcatl templates' for the names)")
+			}
+
+			// Flag parsing stops at the first positional argument, so
+			// "forget <pattern> --dry-run" reads the flag as a second
+			// argument and drops the learning it was asked to preview.
+			// Refusing is the only safe reading: this command cannot be
+			// undone, and the one flag it has exists to avoid that.
+			for _, argument := range ctx.Args().Tail() {
+				if strings.HasPrefix(argument, "-") {
+					return errors.Errorf("%s must come before the pattern: tezcatl forget %s %s", argument, argument, pattern)
+				}
 			}
 
 			if _, err := path.Match(pattern, ""); err != nil {
