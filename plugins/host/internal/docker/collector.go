@@ -217,10 +217,12 @@ var transientDeployContainers = []*regexp.Regexp{
 // during the overlap, which teaches the baseline a startup burst that
 // belongs to neither.
 //
-// Nothing worth watching is lost. A container that lives forty seconds
-// never earns a baseline, and the signal that matters when a deployment
-// leaves one behind is the running count of the service, which still
-// counts it.
+// The name is the problem, not the lifetime: whether the container
+// lives forty seconds or, as one did on the dogfooding host, three
+// months, the next deployment mints a different one and the series is
+// abandoned either way. What makes a deployment left behind visible is
+// the running count of the service, two instances where there should
+// be one, and that still counts it.
 func transientContainer(name string) bool {
 	for _, pattern := range transientDeployContainers {
 		if pattern.MatchString(name) {
