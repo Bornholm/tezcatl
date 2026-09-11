@@ -261,6 +261,9 @@ logs:
     # autres. Un motif traverse ces regroupements. Seul « * » est
     # spécial et remplace n'importe quelle suite de caractères ; le
     # motif le plus long l'emporte, un marquage exact prime sur tous.
+    # Comme un marquage exact, un motif porte sur le texte et vaut donc
+    # pour toutes les partitions : vérifiez ce qu'il couvre dans
+    # `tezcatl templates` avant de l'élargir.
     # marking_patterns:
     #   "Received disconnect from <IP> port*": ignore
 
