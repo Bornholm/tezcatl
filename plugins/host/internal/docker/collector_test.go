@@ -136,3 +136,77 @@ func TestCollector(t *testing.T) {
 		t.Errorf("unexpected environment: %q", running.Environment)
 	}
 }
+
+func TestTransientContainer(t *testing.T) {
+	cases := map[string]bool{
+		"webos.web.1.upcoming-31911": true,
+		"webos.web.1":                false,
+		"app.web.1.upcoming-":        false,
+		"upcoming-31911":             false,
+		"standalone-container":       false,
+	}
+
+	for name, expected := range cases {
+		if got := transientContainer(name); got != expected {
+			t.Errorf("transientContainer(%q) = %v, expected %v", name, got, expected)
+		}
+	}
+}
+
+func TestCollectorCountsADeployContainerWithoutMeasuringIt(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+	t.Cleanup(func() { listener.Close() })
+
+	mux := http.NewServeMux()
+
+	// A deployment in flight: the new image runs beside the old one.
+	mux.HandleFunc("/containers/json", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[
+			{"Id": "aaa111", "Names": ["/webos.web.1"], "Labels": {"com.dokku.app-name": "webos"}},
+			{"Id": "bbb222", "Names": ["/webos.web.1.upcoming-31911"], "Labels": {"com.dokku.app-name": "webos"}}
+		]`)
+	})
+
+	mux.HandleFunc("/containers/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, statsFixture(1000, 10000))
+	})
+
+	server := &http.Server{Handler: mux}
+	go server.Serve(listener)
+	t.Cleanup(func() { server.Close() })
+
+	collector, err := NewCollector(&Options{Socket: socket, Environment: "production"})
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	out := make(chan model.Observation, 64)
+	if err := collector.poll(context.Background(), out); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	close(out)
+
+	running := 0.0
+
+	for obs := range out {
+		if obs.Metric.Labels["container"] == "webos.web.1.upcoming-31911" {
+			t.Fatalf("expected no series for the deploy container, got %s", obs.Metric.Name)
+		}
+
+		if obs.Metric.Name == MetricContainersRunning {
+			running = obs.Metric.Value
+		}
+	}
+
+	// The deploy container still counts: two instances where there
+	// should be one is the signal a stuck deployment leaves behind.
+	if running != 2 {
+		t.Fatalf("expected 2 running containers, got %v", running)
+	}
+}

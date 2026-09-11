@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -137,6 +138,12 @@ func (c *Collector) poll(ctx context.Context, out chan<- model.Observation) erro
 		service := c.service(ctr, name)
 		runningPerService[service]++
 
+		// A container the scheduler names for one deployment is counted
+		// but not measured: see transientContainer.
+		if transientContainer(name) {
+			continue
+		}
+
 		stats := containerStats{}
 		if err := c.get(ctx, fmt.Sprintf("/containers/%s/stats?stream=false&one-shot=true", ctr.ID), &stats); err != nil {
 			slog.WarnContext(ctx, "could not read container stats", slog.String("container", name), slog.Any("error", err))
@@ -189,6 +196,39 @@ func (c *Collector) get(ctx context.Context, path string, into any) error {
 	}
 
 	return nil
+}
+
+// transientDeployContainers are the names a scheduler gives a container
+// that exists for the length of one deployment. Dokku starts the new
+// image as "app.web.1.upcoming-31911", checks it, then renames it to
+// "app.web.1" once the old one is gone.
+var transientDeployContainers = []*regexp.Regexp{
+	regexp.MustCompile(`\.upcoming-[0-9]+$`),
+}
+
+// transientContainer reports whether a container's name belongs to one
+// deployment rather than to the application.
+//
+// Measuring it opens a metric series keyed on a name that will never
+// come back: on the dogfooding instance, 32 of 122 series were such
+// leftovers, each holding the single sample it was polled for and
+// waiting forever to warm up. Collapsing the name instead would make
+// the new container and the one it replaces write to the same series
+// during the overlap, which teaches the baseline a startup burst that
+// belongs to neither.
+//
+// Nothing worth watching is lost. A container that lives forty seconds
+// never earns a baseline, and the signal that matters when a deployment
+// leaves one behind is the running count of the service, which still
+// counts it.
+func transientContainer(name string) bool {
+	for _, pattern := range transientDeployContainers {
+		if pattern.MatchString(name) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func containerName(ctr container) string {
