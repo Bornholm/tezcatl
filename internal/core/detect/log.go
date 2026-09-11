@@ -115,6 +115,9 @@ type LogConfig struct {
 	SeasonalMinObservations int64 `yaml:"seasonal_min_observations"`
 	// Markings overrides the behavior of specific templates.
 	Markings map[string]Marking `yaml:"markings"`
+	// MarkingPatterns overrides the behavior of every template matching
+	// a glob, where "*" stands for any run of characters.
+	MarkingPatterns map[string]Marking `yaml:"marking_patterns"`
 	// MaxTemplates caps the per-source template statistics; past it,
 	// the template seen longest ago is dropped. The cap is deliberately
 	// generous: an evicted template seen again counts as new, and may
@@ -223,12 +226,15 @@ func DefaultLogConfig() *LogConfig {
 //
 // Markings are dynamic: they are seeded from the configuration, can be
 // updated at runtime (SetMarking) and are persisted with the detector
-// state.
+// state. A marking names an exact template; a marking pattern names a
+// glob over template text, for the cases where the exact text is not
+// something to rely on. See markingFor.
 type LogDetector struct {
 	config *LogConfig
 
 	mu       sync.Mutex
 	markings map[string]Marking
+	patterns map[string]Marking
 	sources  map[string]*logSourceState
 }
 
@@ -322,9 +328,13 @@ func NewLogDetector(config *LogConfig) *LogDetector {
 	markings := map[string]Marking{}
 	maps.Copy(markings, config.Markings)
 
+	patterns := map[string]Marking{}
+	maps.Copy(patterns, config.MarkingPatterns)
+
 	return &LogDetector{
 		config:   config,
 		markings: markings,
+		patterns: patterns,
 		sources:  map[string]*logSourceState{},
 	}
 }
@@ -360,6 +370,111 @@ func (d *LogDetector) SetMarking(template string, marking Marking) error {
 	return nil
 }
 
+// SetMarkingPattern overrides the behavior of every template matching a
+// glob. An empty marking clears the pattern.
+func (d *LogDetector) SetMarkingPattern(pattern string, marking Marking) error {
+	if marking != "" && !ValidMarking(marking) {
+		return errors.Errorf("unsupported marking %q", marking)
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if marking == "" {
+		delete(d.patterns, pattern)
+
+		return nil
+	}
+
+	d.patterns[pattern] = marking
+
+	return nil
+}
+
+// MarkingFor resolves the marking that applies to a template.
+func (d *LogDetector) MarkingFor(template string) Marking {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.markingFor(template)
+}
+
+// markingFor resolves the marking of a template: an exact marking
+// wins, then the longest matching pattern. The caller holds the lock.
+//
+// A marking is indexed by template text, and that text is itself
+// something Drain learned: one family of lines generalizes differently
+// depending on how much of it a partition has seen. On the dogfooding
+// instance "Received disconnect from <IP> port <NUM>:<NUM>:" ended up
+// as three clusters in production/ssh and a fourth in production/sshd,
+// and the ignore posted on one of them said nothing about the others.
+// A pattern survives that re-generalization; an exact marking cannot.
+func (d *LogDetector) markingFor(template string) Marking {
+	if marking, exists := d.markings[template]; exists {
+		return marking
+	}
+
+	var (
+		best    string
+		marking Marking
+		found   bool
+	)
+
+	for pattern, candidate := range d.patterns {
+		if !globMatch(pattern, template) {
+			continue
+		}
+
+		// The longest pattern is the most specific one. A tie is broken
+		// on the text, so the answer never depends on map order.
+		if !found || len(pattern) > len(best) || (len(pattern) == len(best) && pattern < best) {
+			best, marking, found = pattern, candidate, true
+		}
+	}
+
+	return marking
+}
+
+// globMatch reports whether value matches pattern, where "*" stands for
+// any run of characters and every other byte is literal.
+//
+// path.Match is the obvious choice and is wrong here twice over. A
+// template is full of "<*>" placeholders and "[preauth]" suffixes,
+// which path.Match reads as a wildcard and as a character class, so an
+// exact template reused as a pattern would quietly match its
+// neighbours. And its "*" refuses to cross a "/", which half the cron
+// templates contain.
+func globMatch(pattern, value string) bool {
+	var (
+		p, v       int
+		star       = -1
+		resumeFrom int
+	)
+
+	for v < len(value) {
+		switch {
+		case p < len(pattern) && pattern[p] == '*':
+			star, resumeFrom = p, v
+			p++
+		case p < len(pattern) && pattern[p] == value[v]:
+			p++
+			v++
+		case star >= 0:
+			// Backtrack: let the last star swallow one more byte.
+			resumeFrom++
+			p, v = star+1, resumeFrom
+		default:
+			return false
+		}
+	}
+
+	for p < len(pattern) && pattern[p] == '*' {
+		p++
+	}
+
+	return p == len(pattern)
+}
+
 // Markings returns a copy of the current markings.
 // Forget drops everything learned about the sources matching a
 // path.Match pattern: template statistics, baselines, intervals.
@@ -393,6 +508,17 @@ func (d *LogDetector) Markings() map[string]Marking {
 	maps.Copy(markings, d.markings)
 
 	return markings
+}
+
+// MarkingPatterns returns a copy of the current marking patterns.
+func (d *LogDetector) MarkingPatterns() map[string]Marking {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	patterns := make(map[string]Marking, len(d.patterns))
+	maps.Copy(patterns, d.patterns)
+
+	return patterns
 }
 
 func (d *LogDetector) Name() string {
@@ -461,7 +587,7 @@ func (d *LogDetector) Detect(obs *model.Observation) []model.Signal {
 	learning := timestamp.Sub(state.FirstSeen) < d.config.LearningPeriod
 	changeType := obs.Attributes[model.AttrTemplateChangeType]
 
-	marking := d.markings[obs.Log.Template]
+	marking := d.markingFor(obs.Log.Template)
 	if marking == MarkingIgnore || marking == MarkingNormal {
 		return nil
 	}
@@ -682,7 +808,7 @@ func (d *LogDetector) scanMissing(state *logSourceState, timestamp time.Time, so
 			continue
 		}
 
-		marking := d.markings[stats.Template]
+		marking := d.markingFor(stats.Template)
 		if marking == MarkingIgnore || marking == MarkingNormal {
 			continue
 		}
@@ -764,8 +890,9 @@ func (d *LogDetector) SnapshotKey() string {
 }
 
 type logSnapshot struct {
-	Sources  map[string]*logSourceState `json:"sources"`
-	Markings map[string]Marking         `json:"markings,omitempty"`
+	Sources         map[string]*logSourceState `json:"sources"`
+	Markings        map[string]Marking         `json:"markings,omitempty"`
+	MarkingPatterns map[string]Marking         `json:"marking_patterns,omitempty"`
 }
 
 func (d *LogDetector) Snapshot() ([]byte, error) {
@@ -773,8 +900,9 @@ func (d *LogDetector) Snapshot() ([]byte, error) {
 	defer d.mu.Unlock()
 
 	data, err := json.Marshal(logSnapshot{
-		Sources:  d.sources,
-		Markings: d.markings,
+		Sources:         d.sources,
+		Markings:        d.markings,
+		MarkingPatterns: d.patterns,
 	})
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -812,6 +940,11 @@ func (d *LogDetector) Restore(data []byte) error {
 	maps.Copy(markings, d.config.Markings)
 	maps.Copy(markings, snapshot.Markings)
 	d.markings = markings
+
+	patterns := map[string]Marking{}
+	maps.Copy(patterns, d.config.MarkingPatterns)
+	maps.Copy(patterns, snapshot.MarkingPatterns)
+	d.patterns = patterns
 
 	return nil
 }

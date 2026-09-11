@@ -56,6 +56,10 @@ func NewMarkCommand() *cli.Command {
 				Usage: "exact template string, as shown by 'tezcatl templates'",
 			},
 			&cli.StringFlag{
+				Name:  "template-pattern",
+				Usage: "glob over template text, where '*' stands for any run of characters; marks every template it matches, now and later",
+			},
+			&cli.StringFlag{
 				Name:  "metric",
 				Usage: "series key as shown by 'tezcatl metrics', a metric name, or a glob over either",
 			},
@@ -69,9 +73,17 @@ func NewMarkCommand() *cli.Command {
 			},
 		),
 		Action: func(ctx *cli.Context) error {
-			template, metric := ctx.String("template"), ctx.String("metric")
-			if (template == "") == (metric == "") {
-				return errors.New("exactly one of --template or --metric is required")
+			template, pattern, metric := ctx.String("template"), ctx.String("template-pattern"), ctx.String("metric")
+
+			given := 0
+			for _, value := range []string{template, pattern, metric} {
+				if value != "" {
+					given++
+				}
+			}
+
+			if given != 1 {
+				return errors.New("exactly one of --template, --template-pattern or --metric is required")
 			}
 
 			marking := detect.Marking(ctx.String("as"))
@@ -91,14 +103,22 @@ func NewMarkCommand() *cli.Command {
 					return markMetricOffline(ctx.Context, ctx.String("config"), stateDir, metric, marking == detect.MarkingIgnore)
 				}
 
-				return markOffline(ctx.Context, ctx.String("config"), stateDir, template, marking)
+				if pattern != "" {
+					return markOffline(ctx.Context, ctx.String("config"), stateDir, pattern, marking, true)
+				}
+
+				return markOffline(ctx.Context, ctx.String("config"), stateDir, template, marking, false)
 			}
 
 			if metric != "" {
 				return markMetricRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), metric, marking == detect.MarkingIgnore)
 			}
 
-			return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), template, marking)
+			if pattern != "" {
+				return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), pattern, marking, true)
+			}
+
+			return markRemote(ctx.Context, ctx.String("target"), ctx.String("tls-ca"), template, marking, false)
 		},
 	}
 }
@@ -281,7 +301,7 @@ func markMetricOffline(ctx context.Context, configPath string, stateDir string, 
 	return nil
 }
 
-func markRemote(ctx context.Context, target string, caFile string, template string, marking detect.Marking) error {
+func markRemote(ctx context.Context, target string, caFile string, template string, marking detect.Marking, pattern bool) error {
 	conn, err := grpc.Dial(target, caFile)
 	if err != nil {
 		return errors.WithStack(err)
@@ -293,6 +313,7 @@ func markRemote(ctx context.Context, target string, caFile string, template stri
 	if _, err := client.MarkTemplate(ctx, &tezcatlv1.MarkTemplateRequest{
 		Template: template,
 		Marking:  string(marking),
+		Pattern:  pattern,
 	}); err != nil {
 		return errors.WithStack(err)
 	}
@@ -401,14 +422,19 @@ func openOffline(ctx context.Context, configPath string, stateDir string) (*offl
 	}, nil
 }
 
-func markOffline(ctx context.Context, configPath string, stateDir string, template string, marking detect.Marking) error {
+func markOffline(ctx context.Context, configPath string, stateDir string, template string, marking detect.Marking, pattern bool) error {
 	service, detector, _, store, err := offlineService(ctx, configPath, stateDir)
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	defer store.Close()
 
-	if err := service.MarkTemplate(template, marking); err != nil {
+	mark := service.MarkTemplate
+	if pattern {
+		mark = service.MarkTemplatePattern
+	}
+
+	if err := mark(template, marking); err != nil {
 		return errors.WithStack(err)
 	}
 

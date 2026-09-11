@@ -711,3 +711,115 @@ func TestLogDetectorOnlyAHeartbeatIsMissed(t *testing.T) {
 		}
 	}
 }
+
+func TestGlobMatch(t *testing.T) {
+	cases := []struct {
+		pattern  string
+		value    string
+		expected bool
+	}{
+		{"Received disconnect from <IP> port*", "Received disconnect from <IP> port <NUM>:<NUM>: <*> <*> <*>", true},
+		{"Received disconnect from <IP> port*", "Received disconnect from <IP> port <NUM>:<NUM>: Bye Bye [preauth]", true},
+		{"Received disconnect from <IP> port*", "Disconnected from <IP> port <NUM>", false},
+		// A "*" in the value is a literal, not a wildcard of its own.
+		{"Connection <*> by <*> user*", "Connection <*> by <*> user <*> <IP> port <NUM> [preauth]", true},
+		{"Connection <*> by <*> user*", "Connection closed by invalid user <IP> port <NUM>", false},
+		// The bracket suffix that path.Match would read as a character
+		// class, and the slash its "*" refuses to cross.
+		{"*[preauth]", "Disconnected from authenticating user <*> <IP> port <NUM> [preauth]", true},
+		{"(root) CMD*", "(root) CMD ( cd / && run-parts --report /etc/cron.hourly)", true},
+		{"", "", true},
+		{"", "anything", false},
+		{"*", "anything", true},
+		{"a*b*c", "azzbzzc", true},
+		{"a*b*c", "azzbzz", false},
+	}
+
+	for _, tc := range cases {
+		if got := globMatch(tc.pattern, tc.value); got != tc.expected {
+			t.Errorf("globMatch(%q, %q) = %v, expected %v", tc.pattern, tc.value, got, tc.expected)
+		}
+	}
+}
+
+func TestLogDetectorMarkingPatterns(t *testing.T) {
+	config := DefaultLogConfig()
+	config.LearningPeriod = 0
+	config.MarkingPatterns = map[string]Marking{
+		"Received disconnect from <IP> port*": MarkingIgnore,
+	}
+
+	detector := NewLogDetector(config)
+
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+
+	// The three generalizations Drain produced for one family of lines
+	// must all fall under the one pattern.
+	for i, template := range []string{
+		"Received disconnect from <IP> port <NUM>:<NUM>: <*> <*> <*>",
+		"Received disconnect from <IP> port <NUM>:<NUM>: Bye Bye [preauth]",
+		"Received disconnect from <IP> port <NUM>:<NUM>: [preauth]",
+	} {
+		obs := logObservation("production/ssh", fmt.Sprintf("%d", i), template, "cluster_created", start.Add(time.Duration(i)*time.Second))
+		if signals := detector.Detect(obs); len(signals) != 0 {
+			t.Fatalf("expected %q to be ignored, got %+v", template, signals)
+		}
+	}
+
+	// A neighbour the pattern does not cover still speaks.
+	obs := logObservation("production/ssh", "4", "Disconnected from <IP> port <NUM>", "cluster_created", start.Add(time.Minute))
+	if signals := detector.Detect(obs); len(signals) == 0 {
+		t.Fatal("expected an unmatched template to still produce a signal")
+	}
+}
+
+func TestLogDetectorExactMarkingWinsOverPattern(t *testing.T) {
+	config := DefaultLogConfig()
+	config.LearningPeriod = 0
+	config.MarkingPatterns = map[string]Marking{
+		"disk *":      MarkingIgnore,
+		"disk failure": MarkingIgnore,
+	}
+	config.Markings = map[string]Marking{"disk failure on <*>": MarkingSymptomatic}
+
+	detector := NewLogDetector(config)
+
+	if marking := detector.MarkingFor("disk failure on <*>"); marking != MarkingSymptomatic {
+		t.Fatalf("expected the exact marking to win, got %q", marking)
+	}
+
+	// Among patterns, the longest one is the most specific.
+	config.MarkingPatterns["disk failure*"] = MarkingSymptomatic
+
+	detector = NewLogDetector(config)
+	if marking := detector.MarkingFor("disk failure on sda"); marking != MarkingSymptomatic {
+		t.Fatalf("expected the longest pattern to win, got %q", marking)
+	}
+}
+
+func TestLogDetectorMarkingPatternsPersistence(t *testing.T) {
+	config := DefaultLogConfig()
+	config.LearningPeriod = 0
+	config.MarkingPatterns = map[string]Marking{"from config*": MarkingNormal}
+
+	detector := NewLogDetector(config)
+
+	if err := detector.SetMarkingPattern("at runtime*", MarkingIgnore); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	snapshot, err := detector.Snapshot()
+	if err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	restored := NewLogDetector(config)
+	if err := restored.Restore(snapshot); err != nil {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+
+	patterns := restored.MarkingPatterns()
+	if patterns["at runtime*"] != MarkingIgnore || patterns["from config*"] != MarkingNormal {
+		t.Fatalf("unexpected restored patterns: %+v", patterns)
+	}
+}

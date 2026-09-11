@@ -252,6 +252,18 @@ logs:
     #   "connection reset by peer": ignore
     #   "disk failure on <*>": symptomatic
 
+    # Un marquage désigne un template exact, et ce texte est lui-même
+    # appris : une même famille de lignes se généralise différemment
+    # selon la quantité qu'une partition en a vue. Sur l'instance de
+    # dogfooding, « Received disconnect from <IP> port <NUM>:<NUM>: »
+    # a donné trois clusters dans production/ssh et un quatrième dans
+    # production/sshd, et l'ignore posé sur l'un ne disait rien des
+    # autres. Un motif traverse ces regroupements. Seul « * » est
+    # spécial et remplace n'importe quelle suite de caractères ; le
+    # motif le plus long l'emporte, un marquage exact prime sur tous.
+    # marking_patterns:
+    #   "Received disconnect from <IP> port*": ignore
+
 # --- Métriques -----------------------------------------------------------
 # L'interrogation périodique de l'API Prometheus est assurée par le
 # plugin « prometheus » (voir plugins.sources plus bas).

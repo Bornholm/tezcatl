@@ -169,6 +169,24 @@ func (s *Service) MarkTemplate(template string, marking detect.Marking) error {
 	return nil
 }
 
+// MarkTemplatePattern overrides the behavior of every template matching
+// a glob. An empty marking clears the pattern.
+func (s *Service) MarkTemplatePattern(pattern string, marking detect.Marking) error {
+	if s.logDetector == nil {
+		return errors.New("log detection is disabled")
+	}
+
+	if pattern == "" {
+		return errors.New("missing pattern")
+	}
+
+	if err := s.logDetector.SetMarkingPattern(pattern, marking); err != nil {
+		return errors.WithStack(err)
+	}
+
+	return nil
+}
+
 // ForgetResult reports what a Forget dropped, so an operator sees the
 // size of what they just did.
 type ForgetResult struct {
@@ -240,9 +258,9 @@ func (s *Service) Templates() []TemplateInfo {
 		return nil
 	}
 
-	markings := map[string]detect.Marking{}
+	marking := func(string) detect.Marking { return "" }
 	if s.logDetector != nil {
-		markings = s.logDetector.Markings()
+		marking = s.logDetector.MarkingFor
 	}
 
 	templates := []TemplateInfo{}
@@ -261,7 +279,7 @@ func (s *Service) Templates() []TemplateInfo {
 				ID:        cluster.ID,
 				Template:  template,
 				Size:      cluster.Size,
-				Marking:   markings[template],
+				Marking:   marking(template),
 			})
 		}
 	}

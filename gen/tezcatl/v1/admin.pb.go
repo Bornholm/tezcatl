@@ -25,7 +25,10 @@ type MarkTemplateRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Template string                 `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
 	// One of normal, ignore, symptomatic; empty clears the marking.
-	Marking       string `protobuf:"bytes,2,opt,name=marking,proto3" json:"marking,omitempty"`
+	Marking string `protobuf:"bytes,2,opt,name=marking,proto3" json:"marking,omitempty"`
+	// When true, template is a glob over template text rather than an
+	// exact template: "*" stands for any run of characters.
+	Pattern       bool `protobuf:"varint,3,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -72,6 +75,13 @@ func (x *MarkTemplateRequest) GetMarking() string {
 		return x.Marking
 	}
 	return ""
+}
+
+func (x *MarkTemplateRequest) GetPattern() bool {
+	if x != nil {
+		return x.Pattern
+	}
+	return false
 }
 
 type MarkTemplateResponse struct {
@@ -861,10 +871,11 @@ var File_tezcatl_v1_admin_proto protoreflect.FileDescriptor
 const file_tezcatl_v1_admin_proto_rawDesc = "" +
 	"\n" +
 	"\x16tezcatl/v1/admin.proto\x12\n" +
-	"tezcatl.v1\"K\n" +
+	"tezcatl.v1\"e\n" +
 	"\x13MarkTemplateRequest\x12\x1a\n" +
 	"\btemplate\x18\x01 \x01(\tR\btemplate\x12\x18\n" +
-	"\amarking\x18\x02 \x01(\tR\amarking\"\x16\n" +
+	"\amarking\x18\x02 \x01(\tR\amarking\x12\x18\n" +
+	"\apattern\x18\x03 \x01(\bR\apattern\"\x16\n" +
 	"\x14MarkTemplateResponse\"\x16\n" +
 	"\x14ListTemplatesRequest\"\x86\x01\n" +
 	"\fTemplateInfo\x12\x1c\n" +

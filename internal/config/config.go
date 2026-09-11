@@ -116,6 +116,7 @@ type LogDetection struct {
 	Seasonality               string                    `yaml:"seasonality"`
 	SeasonalMinObservations   int64                     `yaml:"seasonal_min_observations"`
 	Markings                  map[string]detect.Marking `yaml:"markings"`
+	MarkingPatterns           map[string]detect.Marking `yaml:"marking_patterns"`
 	MaxTemplates              int                       `yaml:"max_templates"`
 }
 
@@ -439,6 +440,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for pattern, marking := range c.Logs.Detection.MarkingPatterns {
+		if !detect.ValidMarking(marking) {
+			return errors.Errorf("unsupported marking %q for pattern %q", marking, pattern)
+		}
+	}
+
 	if c.Sinks.Postgres.Enabled && c.Sinks.Postgres.DSN == "" {
 		return errors.New("sinks.postgres.dsn is required when the postgres sink is enabled")
 	}
@@ -520,6 +527,7 @@ func (c *Config) LogDetectionConfig() *detect.LogConfig {
 		Seasonality:               detection.Seasonality,
 		SeasonalMinObservations:   detection.SeasonalMinObservations,
 		Markings:                  detection.Markings,
+		MarkingPatterns:           detection.MarkingPatterns,
 		MaxTemplates:              detection.MaxTemplates,
 	}
 }

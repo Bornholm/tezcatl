@@ -136,7 +136,12 @@ func parseEventBound(raw string) (time.Time, error) {
 }
 
 func (s *AdminServer) MarkTemplate(ctx context.Context, req *tezcatlv1.MarkTemplateRequest) (*tezcatlv1.MarkTemplateResponse, error) {
-	if err := s.service.MarkTemplate(req.GetTemplate(), detect.Marking(req.GetMarking())); err != nil {
+	mark := s.service.MarkTemplate
+	if req.GetPattern() {
+		mark = s.service.MarkTemplatePattern
+	}
+
+	if err := mark(req.GetTemplate(), detect.Marking(req.GetMarking())); err != nil {
 		return nil, errors.WithStack(err)
 	}
 

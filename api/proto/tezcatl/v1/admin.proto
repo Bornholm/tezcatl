@@ -8,6 +8,9 @@ message MarkTemplateRequest {
   string template = 1;
   // One of normal, ignore, symptomatic; empty clears the marking.
   string marking = 2;
+  // When true, template is a glob over template text rather than an
+  // exact template: "*" stands for any run of characters.
+  bool pattern = 3;
 }
 
 message MarkTemplateResponse {}
