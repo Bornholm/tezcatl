@@ -19,6 +19,8 @@
 //	  "priority": 6,               // keep entries at or below this severity, -1 for all
 //	  "since": "",                 // journalctl --since; empty starts at the tail
 //	  "cursor_file": "",           // resume exactly where the last run stopped
+//	                               // (units.json, next to it, remembers
+//	                               // which unit an identifier belongs to)
 //	  "user": false,               // read the user journal
 //	  "environment": "production",
 //	  "service": "",               // overrides the unit-derived identity
@@ -135,6 +137,13 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 
 	cursors := newCursorWriter(cfg.CursorFile)
 
+	collapse := func(service string) string { return service }
+	if cfg.CollapseTransient == nil || *cfg.CollapseTransient {
+		collapse = collapseTransient
+	}
+
+	units := newUnitResolver(identityFile(cfg.CursorFile))
+
 	routes, err := compileRoutes(cfg.Routes)
 	if err != nil {
 		return errors.WithStack(err)
@@ -166,11 +175,7 @@ func stream(ctx context.Context, rawConfig []byte, emit sdk.EmitFunc) error {
 
 		service := cfg.Service
 		if service == "" {
-			service = entry.Service()
-
-			if cfg.CollapseTransient == nil || *cfg.CollapseTransient {
-				service = collapseTransient(service)
-			}
+			service = units.resolve(entry, collapse)
 		}
 
 		service = routeMessage(routes, service, entry.Message)
