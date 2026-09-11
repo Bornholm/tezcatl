@@ -71,6 +71,14 @@ type MetricConfig struct {
 	// seen longest ago is dropped to make room. 0 removes the cap, at
 	// the price of memory growing with the churn of the environment.
 	MaxSeries int `yaml:"max_series"`
+	// SeriesTTL drops a series that has gone without a sample for this
+	// long. The cap alone only bites under memory pressure, so a key
+	// minted once sits in the state until something else needs the
+	// room, and shows up in "tezcatl metrics" forever as a series
+	// warming up. A metric is polled on a clock: silence means the
+	// emitter is gone, not that it is quiet. 0 keeps every series until
+	// the cap evicts it.
+	SeriesTTL time.Duration `yaml:"series_ttl"`
 }
 
 // DefaultMaxSeries is high enough to hold every real series of a busy
@@ -114,8 +122,21 @@ func DefaultMetricConfig() *MetricConfig {
 		Seasonality:       MetricSeasonalityDaily,
 		SeasonalTolerance: DefaultSeasonalTolerance,
 		SeasonalDays:      DefaultSeasonalDays,
+		SeriesTTL:         DefaultSeriesTTL,
 	}
 }
+
+// DefaultSeriesTTL is a week: long enough that a collector stopped for
+// a weekend of maintenance keeps its baselines, short enough that the
+// containers of a deployment do not accumulate for a quarter. On the
+// dogfooding host, 32 of 122 series were names that had been polled
+// once, months apart, and none of them would ever be fed again.
+const DefaultSeriesTTL = 7 * 24 * time.Hour
+
+// seriesSweepInterval is how often the detector looks for series to
+// expire. Walking every series on every sample would cost more than the
+// expiry saves; an hour is fine for something measured in days.
+const seriesSweepInterval = time.Hour
 
 // DefaultMinDeltas floors the one unit whose scale is known without
 // knowing the metric: a percentage runs from 0 to 100 whoever emits it.
@@ -165,6 +186,11 @@ type MetricDetector struct {
 	mu      sync.Mutex
 	series  map[string]*metricStats
 	evicted int64
+	expired int64
+	// lastSweep is the observation time of the last expiry pass. It is
+	// deliberately not persisted: a restart sweeps on the first sample
+	// it sees, which is when a stale series is most worth dropping.
+	lastSweep time.Time
 	// ignored silences the statistical signals of matching series at
 	// runtime, the metric side of the template marking loop. Keys are
 	// exact series keys ("source/metric{labels}"), exact metric names,
@@ -333,6 +359,50 @@ func (d *MetricDetector) makeRoom() {
 	}
 }
 
+// sweep drops every series that has gone silent for longer than the
+// TTL. The caller holds the lock.
+func (d *MetricDetector) sweep(now time.Time) {
+	if d.config.SeriesTTL <= 0 {
+		return
+	}
+
+	if !d.lastSweep.IsZero() && now.Sub(d.lastSweep) < seriesSweepInterval {
+		return
+	}
+
+	d.lastSweep = now
+
+	dropped := 0
+
+	for key, stats := range d.series {
+		// A series restored from a snapshot written before LastSeen
+		// existed has no date. Giving it this pass to prove itself
+		// beats dropping baselines that may well be current.
+		if stats.LastSeen.IsZero() {
+			stats.LastSeen = now
+
+			continue
+		}
+
+		if now.Sub(stats.LastSeen) > d.config.SeriesTTL {
+			delete(d.series, key)
+
+			dropped++
+		}
+	}
+
+	if dropped == 0 {
+		return
+	}
+
+	d.expired += int64(dropped)
+
+	slog.Info("dropped series that stopped reporting",
+		slog.Int("dropped", dropped),
+		slog.Duration("series_ttl", d.config.SeriesTTL),
+		slog.Int64("expired_total", d.expired))
+}
+
 func isPowerOfTen(value int64) bool {
 	for value >= 10 && value%10 == 0 {
 		value /= 10
@@ -348,6 +418,8 @@ func (d *MetricDetector) Detect(obs *model.Observation) []model.Signal {
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	d.sweep(obs.Timestamp)
 
 	key := seriesKey(obs.Source, obs.Metric)
 

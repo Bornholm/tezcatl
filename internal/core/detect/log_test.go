@@ -777,7 +777,7 @@ func TestLogDetectorExactMarkingWinsOverPattern(t *testing.T) {
 	config := DefaultLogConfig()
 	config.LearningPeriod = 0
 	config.MarkingPatterns = map[string]Marking{
-		"disk *":      MarkingIgnore,
+		"disk *":       MarkingIgnore,
 		"disk failure": MarkingIgnore,
 	}
 	config.Markings = map[string]Marking{"disk failure on <*>": MarkingSymptomatic}

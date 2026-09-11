@@ -158,6 +158,7 @@ type MetricDetection struct {
 	Seasonality       string   `yaml:"seasonality"`
 	SeasonalTolerance Duration `yaml:"seasonal_tolerance"`
 	SeasonalDays      int      `yaml:"seasonal_days"`
+	SeriesTTL         Duration `yaml:"series_ttl"`
 }
 
 // Dampening keeps a detector from repeating itself. It applies to
@@ -319,6 +320,7 @@ func Default() *Config {
 				Seasonality:       detect.MetricSeasonalityDaily,
 				SeasonalTolerance: Duration(detect.DefaultSeasonalTolerance),
 				SeasonalDays:      detect.DefaultSeasonalDays,
+				SeriesTTL:         Duration(detect.DefaultSeriesTTL),
 			},
 		},
 		Dampening: Dampening{
@@ -548,6 +550,7 @@ func (c *Config) MetricDetectionConfig() *detect.MetricConfig {
 		Seasonality:       detection.Seasonality,
 		SeasonalTolerance: detection.SeasonalTolerance.AsDuration(),
 		SeasonalDays:      detection.SeasonalDays,
+		SeriesTTL:         detection.SeriesTTL.AsDuration(),
 	}
 }
 

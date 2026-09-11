@@ -316,6 +316,15 @@ metrics:
     # abandonnée. 0 retire le plafond, au prix d'une mémoire qui croît
     # avec le renouvellement de l'environnement.
     max_series: 10000
+    # Durée de silence au bout de laquelle une série est abandonnée. Le
+    # plafond seul ne mord que sous pression mémoire : une clé écrite
+    # une fois reste dans l'état jusqu'à ce que la place manque, et
+    # traîne dans `tezcatl metrics` en « warming up » pour toujours. Sur
+    # l'instance de dogfooding, 32 séries sur 122 étaient des conteneurs
+    # de déploiement sondés une seule fois. Une métrique est relevée à
+    # intervalle régulier : son silence signifie que l'émetteur a
+    # disparu, pas qu'il se tait. 0 conserve tout jusqu'à l'éviction.
+    series_ttl: 168h
     # Dérive de tendance : deux EWMA (rapide/lente) ; un écart relatif
     # supérieur à trend_threshold signale une dérive soutenue.
     trend_fast_alpha: 0.3

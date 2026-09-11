@@ -595,3 +595,54 @@ func TestMetricSeasonalityHoldsBackADailySchedule(t *testing.T) {
 		}
 	})
 }
+
+func TestMetricDetectorExpiresASeriesThatStoppedReporting(t *testing.T) {
+	config := DefaultMetricConfig()
+	config.SeriesTTL = 24 * time.Hour
+
+	detector := NewMetricDetector(config)
+
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+
+	// A container that existed for one poll of a deployment.
+	gone := metricObservation("production/webos", "docker.cpu.percent", 4, start)
+	gone.Metric.Labels = map[string]string{"container": "webos.web.1.upcoming-31911"}
+	detector.Detect(gone)
+
+	// The application itself, still reporting three days later.
+	for i := range 3 {
+		obs := metricObservation("production/webos", "docker.cpu.percent", 1, start.Add(time.Duration(i*24)*time.Hour))
+		obs.Metric.Labels = map[string]string{"container": "webos.web.1"}
+		detector.Detect(obs)
+	}
+
+	keys := []string{}
+	for _, info := range detector.Series() {
+		keys = append(keys, info.Key)
+	}
+
+	if len(keys) != 1 || !strings.Contains(keys[0], "container=webos.web.1}") {
+		t.Fatalf("expected only the live series to remain, got %+v", keys)
+	}
+}
+
+func TestMetricDetectorKeepsSeriesWhenTheTTLIsOff(t *testing.T) {
+	config := DefaultMetricConfig()
+	config.SeriesTTL = 0
+
+	detector := NewMetricDetector(config)
+
+	start := time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC)
+
+	old := metricObservation("production/webos", "docker.cpu.percent", 4, start)
+	old.Metric.Labels = map[string]string{"container": "webos.web.1.upcoming-31911"}
+	detector.Detect(old)
+
+	recent := metricObservation("production/webos", "docker.cpu.percent", 1, start.Add(30*24*time.Hour))
+	recent.Metric.Labels = map[string]string{"container": "webos.web.1"}
+	detector.Detect(recent)
+
+	if series := detector.Series(); len(series) != 2 {
+		t.Fatalf("expected both series to survive without a TTL, got %+v", series)
+	}
+}
